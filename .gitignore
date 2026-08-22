@@ -13,7 +13,7 @@ khaali-live/_srv.log
 
 # working backups and superseded prototypes
 *.bak
-*.bak[0-9]
+*.bak[0-9]*
 Khaali Rail Booking.html
 Khaali Rail Prototype.dc.html
 Khaali Rail v2.dc.html
