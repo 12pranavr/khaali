@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · payment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">khaali<span>.</span><small>payment</small></div>
+    <div class="spacer"></div>
+    <span class="who" id="who">…</span>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <div class="card" style="margin:16px 0" id="panel">
+    <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px">
+      Berths locked for you
+    </div>
+    <div class="timer" id="timer" style="margin:8px 0 2px">5:00</div>
+    <div class="muted" id="timerNote">Nobody else can take these berths until the timer runs out.</div>
+
+    <div id="detail" style="margin:16px 0"></div>
+
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div class="qr" id="qr"></div>
+        <div class="muted" style="margin-top:8px;max-width:220px">
+          Scan with another phone to open this same payment on that device.
+          <code id="qrUrl" style="display:block;margin-top:5px;font-size:10.5px;word-break:break-all"></code>
+        </div>
+      </div>
+      <div style="flex:1;min-width:220px">
+        <div class="note" style="margin-bottom:12px">
+          <b>Simulated payment.</b> This QR opens a page on this local server. It is not a UPI
+          code and no real money can move. Anyone who opens it marks this booking as paid.
+        </div>
+        <button class="btn" id="payNow">Pay ₹<span id="amt">0</span> now</button>
+        <button class="btn ghost" id="cancel" style="margin-top:10px">Cancel and release berths</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="msg"></div>
+</main>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const api = (p, o) => fetch(p, o).then(async r => {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || j.reason || r.statusText), { status: r.status, body: j });
+  return j;
+});
+const applyTheme = on => document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+applyTheme(localStorage.getItem('khaali-theme')
+  ? localStorage.getItem('khaali-theme') === 'dark'
+  : matchMedia('(prefers-color-scheme:dark)').matches);
+$('#who').textContent = localStorage.getItem('khaali-who') || 'guest';
+
+const holdId = location.pathname.split('/').filter(Boolean).pop();
+let hold = null, ticker = null;
+
+const banner = (cls, html) => { $('#msg').innerHTML = `<div class="banner ${cls}">${html}</div>`; };
+const stop = () => { clearInterval(ticker); ticker = null; };
+
+function renderTimer(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  $('#timer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  $('#timer').classList.toggle('warn', s <= 60);
+}
+
+function expired() {
+  stop();
+  $('#panel').innerHTML = `<div class="banner err">Time is up. The berths have been released
+    back to everyone else.</div><a class="btn" href="/" style="display:block;text-align:center;
+    margin-top:12px;text-decoration:none">Start again</a>`;
+}
+
+async function load() {
+  try { hold = await api('/api/hold/' + holdId); }
+  catch { return expired(); }
+
+  if (hold.status === 'paid') return done(hold.pnr);
+  if (hold.status !== 'pending' || hold.msLeft <= 0) return expired();
+
+  const meta = await api('/api/meta');
+  const st = meta.stations;
+  $('#amt').textContent = hold.amount;
+  const rows = hold.berths.map(b => `
+    <div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
+      <b style="flex:none;width:64px">${b.coach}/${b.no}</b>
+      <span style="flex:1" class="muted">${b.partial
+        ? `covers ${b.km} of ${hold.journeyKm} km — you are not ticketed for the other ${b.gapKm} km`
+        : `${b.type} · free your whole way`}</span>
+      <b style="flex:none">₹${b.price}</b>
+    </div>`).join('');
+  const saved = hold.fullPrice - hold.amount;
+  $('#detail').innerHTML = `
+    <div style="font-weight:700;font-size:16px">${hold.train} · ${st[hold.from].n} → ${st[hold.to].n}</div>
+    <div class="muted">${hold.pax} passenger${hold.pax > 1 ? 's' : ''} · ${hold.journeyKm} km</div>
+    <div style="margin-top:10px">${rows}</div>
+    ${hold.fees ? `<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
+      <span style="flex:1" class="muted">Reservation, GST &amp; charges</span><b style="flex:none">₹${hold.fees}</b></div>` : ''}
+    <div style="display:flex;gap:10px;padding:9px 0;border-top:2px solid var(--line);font-weight:700">
+      <span style="flex:1">Total</span><span>₹${hold.amount}</span></div>
+    ${saved > 0 ? `<div class="muted">₹${saved} less than ${hold.pax} full-journey berth${hold.pax > 1 ? 's' : ''} (₹${hold.fullPrice}) — partial berths are charged by distance.</div>` : ''}`;
+
+  // Point the QR at an address a phone can actually reach, even when this page
+  // is being shown on the laptop at localhost.
+  const payUrl = (meta.lanBase || location.origin) + '/pay/' + holdId;
+  $('#qr').innerHTML = await fetch('/api/qr?d=' + encodeURIComponent(payUrl)).then(r => r.text());
+  $('#qrUrl').textContent = payUrl;
+
+  renderTimer(hold.msLeft);
+  const endsAt = Date.now() + hold.msLeft;
+  ticker = setInterval(() => {
+    const left = endsAt - Date.now();
+    renderTimer(left);
+    if (left <= 0) expired();
+  }, 250);
+}
+
+function done(pnr) {
+  stop();
+  $('#panel').innerHTML = `<div class="banner ok">Payment received. Booking confirmed.</div>
+    <h2 style="margin:10px 0 4px">PNR ${pnr}</h2>
+    <div class="muted">These berths are now yours. Everyone else sees them as taken.</div>
+    <a class="btn" href="/?pnr=${pnr}" style="display:block;text-align:center;margin-top:14px;
+      text-decoration:none">Back to booking</a>`;
+}
+
+$('#payNow').onclick = async () => {
+  $('#payNow').disabled = true;
+  try {
+    const r = await api('/api/pay/' + holdId, { method: 'POST' });
+    done(r.booking.pnr);
+  } catch (e) {
+    $('#payNow').disabled = false;
+    if (e.status === 410) return expired();
+    banner('err', 'Payment failed: ' + e.message);
+  }
+};
+
+$('#cancel').onclick = async () => {
+  await api('/api/hold/' + holdId, { method: 'DELETE' }).catch(() => {});
+  location.href = '/';
+};
+
+// if the other phone pays, this one should notice
+const es = new EventSource('/api/events');
+es.onmessage = e => {
+  const m = JSON.parse(e.data);
+  if (m.type === 'booked' && m.pnr && hold && m.berthIdxs?.some(i => hold.berths.some(b => b.idx === i))) {
+    api('/api/hold/' + holdId).then(h => { if (h.status === 'paid') done(h.pnr); }).catch(() => {});
+  }
+};
+
+load();
+</script>
+</body>
+</html>

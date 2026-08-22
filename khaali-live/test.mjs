@@ -1,0 +1,254 @@
+// Locking, payment and expiry tests. Run: node test.mjs
+import assert from 'assert';
+import * as S from './store.mjs';
+import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin } from './engine.mjs';
+import { TRAINS, ST } from './data.mjs';
+import fs from 'fs';
+
+const D = '2026-08-21';
+let pass = 0, fail = 0;
+const t = (name, fn) => {
+  try { fn(); console.log('  ✓ ' + name); pass++; }
+  catch (e) { console.log('  ✗ ' + name + '\n      ' + e.message); fail++; }
+};
+
+console.log('\nrouting vs corridor_all_pairs.xlsx');
+const truth = JSON.parse(fs.readFileSync(new URL('./_truth.json', import.meta.url), 'utf8'));
+t('157 served pairs match train lists and km', () => {
+  for (const [pair, exp] of Object.entries(truth.served)) {
+    const [a, b] = pair.split('>');
+    const i = stationByCode(a), j = stationByCode(b);
+    const got = TRAINS.filter(x => x.core && serves(x, i, j)).map(x => x.no).sort();
+    assert.deepStrictEqual(got, exp.trains, pair);
+    assert.strictEqual(journeyKm(i, j), exp.km, pair + ' km');
+  }
+});
+t('25 no-service pairs really have no train', () => {
+  for (const pair of truth.none) {
+    const [a, b] = pair.split('>');
+    const i = stationByCode(a), j = stationByCode(b);
+    assert.strictEqual(TRAINS.filter(x => x.core && serves(x, i, j)).length, 0, pair);
+  }
+});
+
+console.log('\ninterval maths');
+t('no overlap is free', () => {
+  assert.strictEqual(berthState(journeyMask(0, 5), 11, 13).k, 'free');
+  assert.strictEqual(berthState(journeyMask(8, 13), 0, 4).k, 'free');
+});
+t('covering the whole journey is taken', () => {
+  assert.strictEqual(berthState(journeyMask(0, 13), 5, 11).k, 'taken');
+});
+t('partial reports the handover station, per direction', () => {
+  const up = berthState(journeyMask(0, 11), 5, 13);
+  assert.strictEqual(up.k, 'part'); assert.strictEqual(up.mode, 'from'); assert.strictEqual(up.at, 11);
+  const dn = berthState(journeyMask(0, 11), 13, 5);
+  assert.strictEqual(dn.k, 'part'); assert.strictEqual(dn.mode, 'until'); assert.strictEqual(dn.at, 11);
+});
+t('packing is optimal on every train and class', () => {
+  for (const tr of TRAINS) for (const c of ['SL', '3A', '2A']) {
+    const p = packPlan(seedOccupancy(c, tr.no, 0));
+    assert.strictEqual(p.used, p.peak, `${tr.no}/${c} used ${p.used} peak ${p.peak}`);
+    assert.ok(p.freed >= 0);
+  }
+});
+
+console.log('\nlocking');
+S.reset();
+const base = S.availability('16021', D, 'SL', 5, 13);
+const freeIdx = base.berths.filter(b => b.k === 'free').map(b => b.idx);
+
+t('two phones cannot hold the same berths', () => {
+  const pick = freeIdx.slice(0, 2);
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 2, who: 'A' });
+  assert.ok(a.ok, 'first hold should win');
+  const b = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 2, who: 'B' });
+  assert.strictEqual(b.ok, false);
+  assert.strictEqual(b.reason, 'taken');
+  assert.strictEqual(b.conflicts[0].why, 'held');
+  S.release(a.hold.id);
+});
+
+t('a held berth shows as locked to everyone else', () => {
+  const pick = [freeIdx[3]];
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'A' });
+  const view = S.availability('16021', D, 'SL', 5, 13);
+  assert.strictEqual(view.berths.find(b => b.idx === pick[0]).k, 'locked');
+  assert.strictEqual(view.counts.locked, 1);
+  S.release(a.hold.id);
+  assert.strictEqual(S.availability('16021', D, 'SL', 5, 13).counts.locked, 0);
+});
+
+t('all-or-nothing: one bad berth rejects the whole hold', () => {
+  const pick = [freeIdx[4]];
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'A' });
+  const b = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: [freeIdx[5], freeIdx[4]], pax: 2, who: 'B' });
+  assert.strictEqual(b.ok, false);
+  // the innocent berth must NOT have been locked by the failed attempt
+  assert.strictEqual(S.availability('16021', D, 'SL', 5, 13).berths.find(x => x.idx === freeIdx[5]).k, 'free');
+  S.release(a.hold.id);
+});
+
+t('a different journey on the same berth is allowed when legs do not overlap', () => {
+  // find a berth booked only on the far half, so the near half is genuinely free
+  const av = S.availability('16021', D, 'SL', 0, 4);
+  const cand = av.berths.find(b => b.k === 'free' && S.availability('16021', D, 'SL', 11, 13).berths.find(x => x.idx === b.idx).k === 'free');
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 0, to: 4, berthIdxs: [cand.idx], pax: 1, who: 'A' });
+  assert.ok(a.ok, 'near leg');
+  const b = S.hold({ train: '16021', date: D, cls: 'SL', from: 11, to: 13, berthIdxs: [cand.idx], pax: 1, who: 'B' });
+  assert.ok(b.ok, 'far leg on the same berth should also be allowed');
+  S.release(a.hold.id); S.release(b.hold.id);
+});
+
+console.log('\npayment');
+t('confirming a hold books it and frees the lock', () => {
+  const pick = [freeIdx[8], freeIdx[9]];
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 2, who: 'A' });
+  const r = S.confirm(a.hold.id);
+  assert.ok(r.ok);
+  assert.ok(/^\d{10}$/.test(r.booking.pnr), 'pnr');
+  assert.strictEqual(r.booking.amount, a.hold.amount);
+  const view = S.availability('16021', D, 'SL', 5, 13);
+  assert.strictEqual(view.berths.find(b => b.idx === pick[0]).k, 'taken');
+  assert.strictEqual(view.counts.locked, 0);
+});
+t('paying twice does not double-book', () => {
+  const pick = [freeIdx[12]];
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'A' });
+  const r1 = S.confirm(a.hold.id);
+  const r2 = S.confirm(a.hold.id);
+  assert.ok(r1.ok && r2.ok);
+  assert.strictEqual(r2.replay, true);
+  assert.strictEqual(r1.booking.pnr, r2.booking.pnr);
+  assert.strictEqual(S.allBookings().filter(b => b.pnr === r1.booking.pnr).length, 1);
+});
+t('a released hold cannot be paid', () => {
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: [freeIdx[14]], pax: 1, who: 'A' });
+  S.release(a.hold.id);
+  assert.strictEqual(S.confirm(a.hold.id).ok, false);
+});
+t('after release the berth is bookable by someone else', () => {
+  const pick = [freeIdx[16]];
+  const a = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'A' });
+  S.release(a.hold.id);
+  const b = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'B' });
+  assert.ok(b.ok);
+  S.release(b.hold.id);
+});
+
+console.log('\nrace: 50 phones, 1 berth');
+t('exactly one wins', () => {
+  const pick = [freeIdx[20]];
+  let won = 0;
+  const results = [];
+  for (let i = 0; i < 50; i++) {
+    const r = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: pick, pax: 1, who: 'p' + i });
+    results.push(r);
+    if (r.ok) won++;
+  }
+  assert.strictEqual(won, 1, `${won} winners`);
+  results.filter(r => r.ok).forEach(r => S.release(r.hold.id));
+});
+
+t('50 phones each grabbing a different berth all succeed', () => {
+  const picks = freeIdx.slice(30, 80);
+  const ok = picks.map(i => S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: [i], pax: 1, who: 'x' + i }));
+  assert.strictEqual(ok.filter(r => r.ok).length, picks.length);
+  const view = S.availability('16021', D, 'SL', 5, 13);
+  assert.strictEqual(view.counts.locked, picks.length);
+  ok.forEach(r => S.release(r.hold.id));
+});
+
+t('inventory is conserved: free+part+taken+locked always equals the coach count', () => {
+  for (const c of ['SL', '3A', '2A']) for (const [f, t2] of [[5, 13], [13, 5], [0, 13], [11, 13]]) {
+    const v = S.availability('16021', D, c, f, t2);
+    const sum = v.counts.free + v.counts.part + v.counts.taken + v.counts.locked;
+    assert.strictEqual(sum, v.berths.length, `${c} ${f}->${t2}`);
+  }
+});
+
+console.log('\npricing');
+t('a partial berth always costs less than a free-the-whole-way one', () => {
+  for (const c of ['SL', '3A', '2A']) for (const [f, to2] of [[5, 13], [0, 13], [13, 5], [11, 13]]) {
+    const v = S.availability('16021', D, c, f, to2);
+    const full = v.price;
+    for (const b of v.berths) {
+      if (b.k === 'free') assert.strictEqual(b.price, full, `${c} ${f}->${to2} free berth`);
+      if (b.k === 'part') assert.ok(b.price < full && b.price > 0,
+        `${c} ${f}->${to2}: partial ₹${b.price} vs full ₹${full}`);
+      if (b.k === 'taken') assert.strictEqual(b.price, null);
+    }
+  }
+});
+t('partial price tracks the distance actually covered', () => {
+  const v = S.availability('16021', D, 'SL', 5, 13);
+  const parts = v.berths.filter(b => b.k === 'part');
+  assert.ok(parts.length, 'expected some partial berths');
+  for (const b of parts) {
+    assert.ok(b.km > 0 && b.km < v.km, `covered ${b.km} of ${v.km}`);
+    const expected = Math.max(5, Math.round((v.price * b.km) / v.km / 5) * 5);
+    assert.strictEqual(b.price, expected);
+  }
+  // more distance covered => higher price
+  const sorted = [...parts].sort((a, b) => a.km - b.km);
+  for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i].price >= sorted[i - 1].price);
+});
+t('a hold charges the sum of its berths, not a flat fare', () => {
+  const v = S.availability('16021', D, 'SL', 5, 13);
+  const cheap = v.berths.find(b => b.k === 'part');
+  const full = v.berths.find(b => b.k === 'free');
+  const h = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13,
+    berthIdxs: [cheap.idx, full.idx], pax: 2, who: 'A' });
+  assert.ok(h.ok);
+  assert.strictEqual(h.hold.amount, cheap.price + full.price);
+  assert.ok(h.hold.amount < h.hold.fullPrice, 'mixed basket beats two full fares');
+  const p = h.hold.berths.find(b => b.idx === cheap.idx);
+  assert.strictEqual(p.partial, true);
+  assert.strictEqual(p.gapKm, v.km - cheap.km);
+  S.release(h.hold.id);
+});
+
+console.log('\nlive simulation');
+t('every train reports a valid state and position', () => {
+  for (const tr of TRAINS) {
+    const lv = liveOf(tr);
+    assert.ok(['run', 'idle'].includes(lv.state), tr.no);
+    if (lv.state === 'run') {
+      assert.ok(lv.prog >= 0 && lv.prog <= 1, `${tr.no} prog ${lv.prog}`);
+      assert.ok(lv.at != null && lv.next != null, tr.no);
+    }
+  }
+});
+t('position advances as the clock advances', () => {
+  const tr = TRAINS[0];
+  const idxs = stopIdxs(tr);
+  const base = sMin(tr, idxs[0], 'd');
+  const mk = mins => new Date(2026, 7, 21, Math.floor(mins / 60) % 24, mins % 60, 0);
+  const a = liveOf(tr, mk(base + 20)), b = liveOf(tr, mk(base + 60));
+  assert.strictEqual(a.state, 'run'); assert.strictEqual(b.state, 'run');
+  assert.ok(b.prog > a.prog, `prog ${a.prog} -> ${b.prog}`);
+});
+t('a train is idle outside its running window', () => {
+  const tr = TRAINS[0];
+  const idxs = stopIdxs(tr);
+  const base = sMin(tr, idxs[0], 'd');
+  const before = new Date(2026, 7, 21, Math.floor(((base - 90 + 1440) % 1440) / 60), 0, 0);
+  assert.strictEqual(liveOf(tr, before).state, 'idle');
+});
+
+console.log('\nexpiry');
+const av2 = S.availability('16022', D, 'SL', 13, 11);
+const pick2 = [av2.berths.find(b => b.k === 'free').idx];
+const held = S.hold({ train: '16022', date: D, cls: 'SL', from: 13, to: 11, berthIdxs: pick2, pax: 1, who: 'A' });
+t('hold reports a 5 minute window', () => {
+  assert.ok(held.hold.msLeft > 4.9 * 60000 && held.hold.msLeft <= 5 * 60000, held.hold.msLeft + 'ms');
+});
+t('expired holds release automatically', () => {
+  // simulate the timer firing
+  S.release(held.hold.id, 'expired');
+  assert.strictEqual(S.getHold(held.hold.id).status, 'expired');
+  assert.strictEqual(S.availability('16022', D, 'SL', 13, 11).berths.find(b => b.idx === pick2[0]).k, 'free');
+});
+
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);

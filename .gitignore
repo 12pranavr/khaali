@@ -1,0 +1,21 @@
+# secrets — never commit the Sarvam key
+khaali-live/.sarvam-key
+.env
+
+# dependencies & runtime junk
+node_modules/
+khaali-live/_srv.log
+
+# local editor / harness state
+.claude/
+.image-slots.state.json
+.thumbnail
+
+# working backups and superseded prototypes
+*.bak
+*.bak[0-9]
+Khaali Rail Booking.html
+Khaali Rail Prototype.dc.html
+Khaali Rail v2.dc.html
+Rail Booking Flow standalone.dc.html
+uploads/

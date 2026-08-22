@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · live booking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">khaali<span>.</span><small>live booking</small></div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="liveBtn" title="Live trains">◉</button>
+    <span class="who" id="who">…</span>
+    <button class="iconbtn" id="theme" title="Theme">☾</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1. search ------------------------------------------------------------ -->
+  <section id="pgSearch">
+    <div class="hero">
+      <div class="eyebrow">Bengaluru — Mysuru corridor</div>
+      <h1>Berths that are already empty</h1>
+      <p>A berth booked only as far as Bengaluru sits empty for the rest of the run. Pick your two stations and we count those.</p>
+      <div class="form">
+        <div><label>From</label><select id="from"></select></div>
+        <div><label>To</label><select id="to"></select></div>
+        <div><label>Class</label><select id="cls"></select></div>
+        <div><label>Passengers</label><select id="pax"></select></div>
+        <div class="full"><button class="btn" id="go">Search trains</button></div>
+      </div>
+    </div>
+    <div id="searchMsg"></div>
+  </section>
+
+  <!-- 2. results ----------------------------------------------------------- -->
+  <section id="pgTrains" class="hidden">
+    <div class="row"><button class="btn ghost" id="backSearch" style="width:auto">← Change stations</button></div>
+    <h2 id="trainsTitle"></h2>
+    <div class="muted" id="trainsSub"></div>
+    <div id="trainList" style="margin-top:12px"></div>
+  </section>
+
+  <!-- 3. berths ------------------------------------------------------------ -->
+  <section id="pgBerths" class="hidden">
+    <div class="row"><button class="btn ghost" id="backTrains" style="width:auto">← Trains</button></div>
+    <h2 id="berthTitle"></h2>
+    <div class="muted" id="berthSub"></div>
+    <div id="berthMsg"></div>
+    <div class="card" style="margin:12px 0">
+      <div class="legend" id="legend"></div>
+    </div>
+    <div id="coaches"></div>
+  </section>
+
+  <!-- live board ----------------------------------------------------------- -->
+  <section id="pgLive" class="hidden">
+    <div class="row"><button class="btn ghost" id="backFromLive" style="width:auto">← Back</button></div>
+    <h2 style="margin-bottom:2px">Live on the corridor</h2>
+    <div class="muted" id="liveClock"></div>
+    <div class="card" style="margin:12px 0;overflow-x:auto">
+      <div id="corridor"></div>
+    </div>
+    <div id="liveList"></div>
+  </section>
+
+  <!-- 4. confirmed --------------------------------------------------------- -->
+  <section id="pgDone" class="hidden">
+    <div class="card" style="margin:16px 0">
+      <div class="banner ok">Payment received · booking confirmed</div>
+      <h2 style="margin-top:6px">PNR <span id="dPnr"></span></h2>
+      <div id="dBody" class="muted"></div>
+      <div style="margin-top:16px"><button class="btn" id="again">Book another</button></div>
+    </div>
+  </section>
+</main>
+
+<!-- sticky action bar -->
+<div class="bar hidden" id="bar">
+  <div class="wrap">
+    <div class="grow">
+      <div id="barTitle" style="font-weight:700"></div>
+      <div class="muted" id="barSub"></div>
+    </div>
+    <button class="btn" id="pay">Hold &amp; pay</button>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

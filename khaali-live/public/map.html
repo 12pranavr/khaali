@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · live map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<style>
+:root{
+  --page:#f2f2f5; --surface:#fff; --ink:#14161a; --ink2:#40434a; --ink3:#8a8a84;
+  --line:#e6e5e0; --accent:#d8385a; --ok:#1f9d55;
+}
+:root[data-theme="dark"]{
+  --page:#0f1115; --surface:#171a21; --ink:#e9ebef; --ink2:#c3c8d2; --ink3:#949aa6;
+  --line:#2c313c; --accent:#e8496b; --ok:#35b86e;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--page);color:var(--ink);
+  font:400 14px/1.5 Manrope,system-ui,sans-serif;display:flex;flex-direction:column}
+.top{flex:none;background:var(--surface);border-bottom:1px solid var(--line);z-index:1001}
+.top .wrap{display:flex;align-items:center;gap:10px;padding:10px 14px;flex-wrap:wrap}
+.brand{font:800 20px/1 Manrope,sans-serif;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
+.brand span{color:var(--accent)}
+.brand small{display:block;font:500 7.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.16em;
+  color:var(--ink3);text-transform:uppercase}
+.clock{margin-left:auto;font:500 12px/1.35 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);display:flex;align-items:center;justify-content:center;
+  font-size:15px;cursor:pointer;flex:none}
+select{border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:8px;padding:8px 10px;font:600 12px/1 Manrope,sans-serif;max-width:150px}
+#map{flex:1;min-height:0}
+:root[data-theme="dark"] .leaflet-container{background:#0c0e12}
+
+/* ---- train badges -------------------------------------------------------- */
+/* Position updates glide; the transition is dropped while Leaflet zooms so
+   markers never fly across the screen from their old projection. */
+.leaflet-marker-icon.train-marker{transition:transform var(--glide,3.6s) linear}
+.zooming .leaflet-marker-icon.train-marker{transition:none}
+.tbadge{cursor:pointer}
+@keyframes chug{
+  0%{box-shadow:0 2px 8px rgba(0,0,0,.35),0 0 0 0 rgba(255,255,255,.45)}
+  70%{box-shadow:0 2px 8px rgba(0,0,0,.35),0 0 0 7px rgba(255,255,255,0)}
+  100%{box-shadow:0 2px 8px rgba(0,0,0,.35),0 0 0 0 rgba(255,255,255,0)}}
+.tbadge b{display:block;font:700 10px/1 Manrope,sans-serif;color:#fff;padding:4px 6px;
+  border-radius:5px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.35);
+  animation:chug 1.8s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.tbadge b{animation:none}
+  .rail-anim{animation:none!important}}
+/* the dashed casing crawls along the line: the corridor reads as alive */
+.rail-anim{animation:dashflow 1.1s linear infinite}
+@keyframes dashflow{to{stroke-dashoffset:-16}}
+/* trains waiting at a station for their departure time */
+.qchip{transform:translate(9px,7px);font:700 9px/1 Manrope,sans-serif;
+  background:var(--surface);color:var(--ink3);border:1px solid var(--line);
+  border-radius:9px;padding:3px 6px;white-space:nowrap;cursor:pointer}
+.z-out .qchip{display:none}
+/* opposite directions sit on opposite sides of the line, so head-on trains
+   can never overlap each other */
+.tbadge.up b{transform:translate(-50%,-150%)}
+.tbadge.down b{transform:translate(-50%,50%)}
+.tbadge.sel b{outline:2px solid #fff;outline-offset:1px}
+/* zoomed out: unselected badges collapse to coloured ticks, station codes hide */
+.z-out .tbadge:not(.sel) b{font-size:0;padding:3px;border-radius:3px}
+.z-out .stlabel{display:none}
+.stlabel{font:700 10px/1.2 'IBM Plex Mono',monospace;color:var(--ink2);
+  text-shadow:0 0 4px var(--page),0 0 4px var(--page)}
+.leaflet-tooltip.st-tip{background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  font:600 11px/1.3 Manrope,sans-serif}
+.leaflet-popup-content-wrapper{background:var(--surface);color:var(--ink);border-radius:10px}
+.leaflet-popup-tip{background:var(--surface)}
+.leaflet-popup-content{font:400 12.5px/1.5 Manrope,sans-serif;margin:12px 14px}
+.leaflet-popup-content b{font-size:13.5px}
+
+/* ---- panel --------------------------------------------------------------- */
+.panel{position:absolute;left:12px;bottom:12px;z-index:1000;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;max-width:340px;width:calc(100vw - 24px);
+  box-shadow:0 14px 40px rgba(0,0,0,.22)}
+.panel header{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer}
+.panel header b{font:700 13px/1 Manrope,sans-serif;flex:1}
+.panel header .muted{font-size:11px;color:var(--ink3)}
+.rows{max-height:36vh;overflow-y:auto;border-top:1px solid var(--line);padding:4px 6px 4px 0;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.row{display:flex;align-items:center;gap:9px;padding:8px 10px 8px 14px;cursor:pointer;border-radius:8px}
+.row:hover{background:rgba(128,128,128,.08)}
+.row.sel{background:rgba(128,128,128,.14)}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+.row .nm{flex:1;min-width:0}
+.row .nm b{font:700 12px/1.3 Manrope,sans-serif;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .nm span{font:500 10.5px/1.35 Manrope,sans-serif;color:var(--ink3);display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;font:700 8.5px/1 Manrope,sans-serif;letter-spacing:.07em;color:var(--ok);
+  border:1px solid var(--ok);border-radius:4px;padding:3px 4px;text-transform:uppercase}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--ink3)}
+.dot.run{background:var(--ok);box-shadow:0 0 0 3px rgba(53,184,110,.18)}
+.more{padding:8px 14px;font:600 11px/1.4 Manrope,sans-serif;color:var(--ink3)}
+.note{padding:9px 14px;border-top:1px solid var(--line);font:500 10.5px/1.5 Manrope,sans-serif;color:var(--ink3)}
+.collapsed .rows,.collapsed .note{display:none}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <a class="brand" href="/route-map">khaali<span>.</span><small>live map · simulated</small></a>
+  <div class="clock" id="clock">…</div>
+  <select id="timejump" title="Jump the simulation clock">
+    <option value="now">Real time</option>
+    <option value="1230">Evening · 8:30 PM</option>
+    <option value="45">Night · 12:45 AM</option>
+    <option value="260">Dawn · 4:20 AM</option>
+  </select>
+  <select id="speed" title="Simulation speed">
+    <option value="1">1× real time</option>
+    <option value="60">60× time-lapse</option>
+    <option value="240">240× whole day</option>
+  </select>
+  <button class="iconbtn" id="theme" title="Theme">☾</button>
+  <a class="iconbtn" href="/route-map" title="Back to app" style="text-decoration:none">←</a>
+</div></header>
+
+<div id="map"></div>
+
+<div class="panel" id="panel">
+  <header id="panelHead"><b>Trains on the corridor</b><span class="muted" id="runCount"></span><span id="chev">▾</span></header>
+  <div class="rows" id="rows"></div>
+  <div class="note">128 real trains from the public timetable (data.gov.in, Dec 2017), positions simulated —
+    this is not live railway data. Map © OpenStreetMap contributors, tiles © CARTO.</div>
+</div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+
+// ---- theme ------------------------------------------------------------------
+let dark=(localStorage.getItem('khaali-theme')||
+  (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))==='dark';
+const applyTheme=()=>{document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+  $('#theme').textContent=dark?'☀':'☾';};
+applyTheme();
+
+// ---- map --------------------------------------------------------------------
+const map=L.map('map',{zoomControl:true,attributionControl:false}).setView([12.72,77.38],9);
+const tiles={
+  light:L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:18}),
+  dark:L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18}),
+};
+let tileLayer=tiles[dark?'dark':'light'].addTo(map);
+L.control.attribution({prefix:false})
+  .addAttribution('© OpenStreetMap · © CARTO · simulated positions').addTo(map);
+
+const railColor=()=>dark?'#e8496b':'#c22743';
+const caseColor=()=>dark?'#0f1115':'#ffffff';
+const stFill=()=>dark?'#171a21':'#ffffff';
+let railLine=null,caseLine=null,stationDots=[];
+
+$('#theme').onclick=()=>{dark=!dark;
+  localStorage.setItem('khaali-theme',dark?'dark':'light');applyTheme();
+  map.removeLayer(tileLayer);tileLayer=tiles[dark?'dark':'light'].addTo(map);
+  if(railLine)railLine.setStyle({color:railColor()});
+  if(caseLine)caseLine.setStyle({color:caseColor()});
+  stationDots.forEach(d=>d.setStyle({color:railColor(),fillColor:stFill()}));
+  Object.entries(markers).forEach(([n,rec])=>{
+    const t=lastData&&lastData.trains.find(x=>x.no===n);
+    if(t){rec.col=trainColor(n);
+      rec.m.setIcon(L.divIcon({className:'train-marker',html:badgeHtml(t,rec.col),iconSize:[0,0]}));}
+  });};
+
+$('#panelHead').onclick=()=>{$('#panel').classList.toggle('collapsed');
+  $('#chev').textContent=$('#panel').classList.contains('collapsed')?'▴':'▾';};
+
+const mapEl=$('#map');
+map.on('zoomstart',()=>mapEl.classList.add('zooming'));
+map.on('zoomend',()=>{mapEl.classList.remove('zooming');
+  mapEl.classList.toggle('z-out',map.getZoom()<9);});
+
+// one distinct colour per train, stable across reloads: golden-angle hue walk
+const trainColor=no=>`hsl(${(((parseInt(no,10)||7)*137.508)%360).toFixed(0)},64%,${dark?56:44}%)`;
+
+let ST=[],corridorKm=208;
+const latlngAtKm=km=>{
+  km=Math.max(0,Math.min(corridorKm,km));
+  for(let i=0;i<ST.length-1;i++){
+    const a=ST[i],b=ST[i+1];
+    if(km>=a.km&&km<=b.km){
+      const f=b.km===a.km?0:(km-a.km)/(b.km-a.km);
+      return [a.lat+(b.lat-a.lat)*f, a.lng+(b.lng-a.lng)*f];
+    }
+  }
+  const e=ST[ST.length-1];return [e.lat,e.lng];
+};
+
+const markers={};            // train no -> {m, col}
+const qchips={};             // station idx -> {m, count}
+let selected=null;           // train no being followed
+let lastData=null;
+let pollMs=4000,pollTimer=null;
+const schedule=ms=>{if(ms===pollMs&&pollTimer)return;pollMs=ms;
+  clearInterval(pollTimer);pollTimer=setInterval(tick,pollMs);};
+
+function badgeHtml(t,col){
+  const glyph=t.dir===1?'▶':'◀';
+  const cls='tbadge '+(t.dir===1?'up':'down')+(selected===t.no?' sel':'');
+  return `<div class="${cls}"><b style="background:${col}">${glyph} ${t.no}</b></div>`;
+}
+function popupHtml(t){
+  const beyond=t.src&&t.dst&&!t.core;
+  const route=beyond
+    ?`${t.src} → ${t.dst} <span style="color:var(--ink3)">(via this corridor)</span>`
+    :`${t.originName} → ${t.destName}`;
+  return `<b>${t.name}</b><br><span style="font-family:'IBM Plex Mono',monospace">${t.no}</span> · ${route}`
+    +`<br>at km ${t.km} · left ${t.atName}`
+    +`<br>reaches <b>${t.nextName}</b> in ${t.nextEtaMin} min`
+    +`<br>${t.delay?`<span style="color:var(--accent)">running ${t.delay} min late</span>`
+                   :`<span style="color:var(--ok)">on time</span>`}`
+    +`<br><a href="/departures?from=${t.origin}&to=${t.dest}&cls=SL&train=${t.no}" style="color:var(--accent);font-weight:700">Book this train →</a>`;
+}
+
+function select(no){
+  selected=selected===no?null:no;
+  document.querySelectorAll('.row').forEach(el=>el.classList.toggle('sel',el.dataset.no===selected));
+  Object.entries(markers).forEach(([n,rec])=>{
+    const t=lastData&&lastData.trains.find(x=>x.no===n);
+    if(t)rec.m.setIcon(L.divIcon({className:'train-marker',html:badgeHtml(t,rec.col),iconSize:[0,0]}));
+  });
+  if(selected&&markers[selected]){
+    map.setView(markers[selected].m.getLatLng(),Math.max(map.getZoom(),10),{animate:true});
+    markers[selected].m.openPopup();
+  }
+}
+
+let corridorDrawn=false;
+async function boot(){
+  let geo;
+  try{
+    const c1=new AbortController();const k1=setTimeout(()=>c1.abort(),6000);
+    geo=await fetch('/api/geo',{signal:c1.signal}).then(r=>{if(!r.ok)throw 0;return r.json();}).finally(()=>clearTimeout(k1));
+  }catch(e){
+    $('#runCount').textContent='server unreachable — retrying…';
+    setTimeout(boot,2500);
+    return;
+  }
+  ST=geo.stations;corridorKm=geo.corridorKm;
+  if(corridorDrawn)return;      // a retry that raced a success
+  corridorDrawn=true;
+
+  const pts=ST.map(s=>[s.lat,s.lng]);
+  railLine=L.polyline(pts,{color:railColor(),weight:3,opacity:.9}).addTo(map);
+  caseLine=L.polyline(pts,{color:caseColor(),weight:2,opacity:.9,dashArray:'7 9',className:'rail-anim'}).addTo(map);
+
+  const MAJOR=new Set(['BWT','SBC','MYA','MYS']);
+  ST.forEach(s=>{
+    const major=MAJOR.has(s.c);
+    const dot=L.circleMarker([s.lat,s.lng],{radius:major?7:4.5,color:railColor(),weight:2,
+      fillColor:stFill(),fillOpacity:1}).addTo(map);
+    stationDots.push(dot);
+    dot.bindTooltip(`<b>${s.n}</b><br>${s.c} · ${s.km} km · ${s.pf} platform${s.pf>1?'s':''}`,
+      {className:'st-tip'});
+    if(major)L.marker([s.lat,s.lng],{interactive:false,icon:L.divIcon({className:'',
+      html:`<div class="stlabel" style="transform:translate(10px,-7px)">${s.c}</div>`,iconSize:[0,0]})}).addTo(map);
+  });
+  map.fitBounds(L.latLngBounds(pts).pad(0.12));
+  mapEl.classList.toggle('z-out',map.getZoom()<9);
+  await tick();
+  schedule(4000);
+  $('#speed').onchange=async e=>{
+    const v=+e.target.value;
+    await fetch('/api/sim',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({speed:v})});
+    mapEl.style.setProperty('--glide',v>1?'1.7s':'3.6s');
+    schedule(v>1?1800:4000);
+    tick();
+  };
+  $('#timejump').onchange=async e=>{
+    let shift=0;
+    if(e.target.value!=='now'){
+      const target=+e.target.value;
+      const now=new Date();const cur=now.getHours()*60+now.getMinutes();
+      shift=((target-cur)%1440+1440)%1440;
+    }
+    await fetch('/api/sim',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({shiftMin:shift})});
+    tick();
+  };
+}
+
+async function tick(){
+  let d;
+  try{
+    const c2=new AbortController();const k2=setTimeout(()=>c2.abort(),6000);
+    d=await fetch('/api/live',{signal:c2.signal}).then(r=>{if(!r.ok)throw 0;return r.json();}).finally(()=>clearTimeout(k2));
+  }catch(e){
+    $('#runCount').textContent='reconnecting…';
+    return;                      // keep the last good picture, try again next poll
+  }
+  lastData=d;
+  $('#clock').innerHTML=d.clock+((d.shiftMin||d.speed>1)
+    ?`<br><span style="color:var(--accent)">sim${d.speed>1?' · '+d.speed+'×':''}</span>`:'');
+  const running=d.trains.filter(t=>t.state==='run');
+  $('#runCount').textContent=running.length+' of '+d.trains.length+' moving';
+
+  const seen=new Set();
+  d.trains.forEach(t=>{
+    if(t.state!=='run')return;
+    seen.add(t.no);
+    const col=trainColor(t.no);
+    const pos=latlngAtKm(t.km);
+    if(!markers[t.no]){
+      const m=L.marker(pos,{icon:L.divIcon({className:'train-marker',html:badgeHtml(t,col),iconSize:[0,0]}),
+        zIndexOffset:t.bookable?1000:500}).addTo(map);
+      m.bindPopup('');
+      m.on('click',()=>select(t.no));
+      markers[t.no]={m,col};
+    }else{
+      markers[t.no].m.setLatLng(pos);      // icon untouched, so the glide survives
+      markers[t.no].col=col;               // tracks theme lightness
+    }
+    markers[t.no].m.setPopupContent(popupHtml(t));
+  });
+  // remove trains that reached their destination since the last tick
+  Object.keys(markers).forEach(no=>{if(!seen.has(no)){map.removeLayer(markers[no].m);delete markers[no];}});
+
+  if(selected&&!markers[selected])selected=null;
+  if(selected&&markers[selected])
+    map.panTo(markers[selected].m.getLatLng(),{animate:true});
+
+  // trains waiting at their first corridor station, shown as station chips
+  const waiting={};
+  d.trains.forEach(t=>{if(t.state!=='run')(waiting[t.origin]||(waiting[t.origin]=[])).push(t);});
+  ST.forEach(st=>{
+    const list=waiting[st.i]||[];
+    const cur=qchips[st.i];
+    if(!list.length){if(cur){map.removeLayer(cur.m);delete qchips[st.i];}return;}
+    const tip=list.slice(0,6).map(t=>`${t.no} · dep ${t.departs}`).join('<br>')
+      +(list.length>6?`<br>… ${list.length-6} more`:'');
+    if(!cur){
+      const m=L.marker([st.lat,st.lng],{zIndexOffset:200,
+        icon:L.divIcon({className:'',html:`<div class="qchip">${list.length} waiting</div>`,iconSize:[0,0]})}).addTo(map);
+      m.bindTooltip(tip,{className:'st-tip'});
+      qchips[st.i]={m,count:list.length};
+    }else if(cur.count!==list.length){
+      cur.m.setIcon(L.divIcon({className:'',html:`<div class="qchip">${list.length} waiting</div>`,iconSize:[0,0]}));
+      cur.m.setTooltipContent(tip);
+      cur.count=list.length;
+    }else cur.m.setTooltipContent(tip);
+  });
+
+  // panel: everything moving right now, each in its own colour
+  const idleCount=d.trains.length-running.length;
+  const row=(t,col)=>{
+    const run=t.state==='run';
+    return `<div class="row${selected===t.no?' sel':''}" data-no="${t.no}">
+      <span class="sw" style="background:${col}"></span>
+      <div class="nm"><b>${t.name} · ${t.no}</b>
+        <span>${run
+          ?`at km ${t.km} · ${t.nextName} in ${t.nextEtaMin}m`+(t.delay?` · +${t.delay}m late`:'')
+          :`departs ${t.departs} from ${t.originName}`}</span></div>
+      ${t.core?'<span class="tag">flagship</span>':''}
+      <span class="dot ${run?'run':''}"></span>
+    </div>`;};
+  $('#rows').innerHTML=
+    running.map(t=>row(t,trainColor(t.no))).join('')
+    +(idleCount>0?`<div class="more">+ ${idleCount} more trains waiting for their departure time — all bookable</div>`:'');
+  document.querySelectorAll('.row').forEach(el=>{el.onclick=()=>select(el.dataset.no);});
+}
+
+boot();
+</script>
+</body>
+</html>
