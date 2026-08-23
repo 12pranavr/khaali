@@ -191,6 +191,7 @@ export function seedOccupancy(clsKey, trainNo, dayIdx = 0, seed = 7) {
   const blockers = [
     [0, 13], [0, 11], [0, 9], [5, 13], [5, 11],
     [6, 12], [4, 9], [2, 13], [8, 13], [3, 12],
+    [0, 7], [7, 13], [9, 13], [0, 10],
   ];
 
   const spans = new Array(n);
@@ -239,6 +240,29 @@ export function cancelledOn(no, dateISO) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
   if (h % 100 >= 8) return null;
   return { reason: CX_REASONS[h % CX_REASONS.length] };
+}
+
+// ---------------------------------------------------------- waitlist odds --
+/**
+ * Will WL <n> confirm? Deterministic: a seeded demand factor for the
+ * train/class/date gives an expected number of pre-chart cancellations
+ * (longer lead time = more churn); a logistic on the WL position turns
+ * that into a percentage. Same numbers everywhere, explainable to anyone.
+ */
+export function oddsOf(no, dateISO, clsKey, wl) {
+  const C = classByKey(clsKey);
+  const cap = C.coaches.length * C.per;
+  let h = 2166136261 >>> 0;
+  const str = no + '|' + dateISO + '|' + clsKey;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  const df = 0.55 + (h % 1000) / 1000 * 0.8;
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const days = Math.max(0, Math.round((new Date(dateISO + 'T00:00:00').getTime() - t0.getTime()) / 864e5));
+  const churnWindow = Math.min(1.6, 0.55 + days / 18);
+  const expCancel = Math.max(2, Math.round(cap * 0.06 * churnWindow * (1.55 - df)));
+  const spread = expCancel * 0.45 + 1.5;
+  const p = 1 / (1 + Math.exp((wl - expCancel) / spread));
+  return { pct: Math.max(2, Math.min(98, Math.round(p * 100))), expCancel, days, cap };
 }
 
 // -------------------------------------------------------------- live train --

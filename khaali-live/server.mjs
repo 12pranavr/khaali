@@ -14,7 +14,7 @@ import { GEO } from './geo.mjs';
 const QRCode = createRequire(import.meta.url)('qrcode');
 import {
   serves, stopIdxs, sMin, hhmm, plat, liveOf, fare, journeyKm, stationByCode,
-  cancelledOn,
+  cancelledOn, oddsOf,
 } from './engine.mjs';
 import * as store from './store.mjs';
 
@@ -210,6 +210,7 @@ const SAARTHI_SYS = () => [
   'Today is ' + TODAY() + '. Bookings run from tomorrow up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
   'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it).',
   'CANCELLATION QUESTIONS (which trains are cancelled / is X cancelled / kya cancel hai / \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"cancellations","from":<index>,"to":<index>,"date":"YYYY-MM-DD"}} \u2014 from/to/date all OPTIONAL (omit for the whole corridor; date defaults to tomorrow; today is allowed).',
+  'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, \u0cb5\u0cc7\u0caf\u0ccd\u0c9f\u0cbf\u0c82\u0c97\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} \u2014 wl REQUIRED (their waitlist position), the rest optional.',
   'TICKET QUESTIONS (my ticket / meri booking / mera PNR / is my train ok / \u0ca8\u0ca8\u0ccd\u0ca8 \u0c9f\u0cbf\u0c95\u0cc6\u0c9f\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"mybookings"}} \u2014 the system reads the traveller\u2019s real tickets and checks each for cancellation.',
   'For anything else respond ONLY with JSON: {"say":"<your answer>","action":null}.',
   'Your "say" text may be READ ALOUD: write plain flowing sentences only \u2014 never bullet lists, dashes, "=" signs, slashes, brackets, tables or markdown of any kind.',
@@ -444,6 +445,13 @@ async function api(req, res, url) {
     return send(res, 200, svg, 'image/svg+xml');
   }
 
+  if (p === '/api/odds') {
+    const no = q.get('train'), date = q.get('date') || TODAY(), cls = q.get('cls') || 'SL';
+    const wl = Math.max(1, Math.min(200, +q.get('wl') || 10));
+    if (!no) return send(res, 400, { error: 'train required' });
+    return send(res, 200, { train: no, date, cls, wl, ...oddsOf(no, date, cls, wl) });
+  }
+
   if (p === '/api/bookings') return send(res, 200, { bookings: store.allBookings() });
 
   const mPnr = p.match(/^\/api\/booking\/(\d+)$/);
@@ -544,6 +552,8 @@ async function api(req, res, url) {
         { role: 'assistant', content: '{"say":"","action":{"type":"cancellations"}}' },
         { role: 'user', content: 'mera ticket check karo, meri train theek hai na?' },
         { role: 'assistant', content: '{"say":"","action":{"type":"mybookings"}}' },
+        { role: 'user', content: 'meri waiting WL 14 hai Bangalore se Mysore, confirm hogi kya?' },
+        { role: 'assistant', content: '{"say":"","action":{"type":"odds","wl":14,"from":5,"to":13,"cls":"SL"}}' },
         { role: 'user', content: 'yeh amber wali seat sasti kyun hai?' },
         { role: 'assistant', content: '{"say":"Kyunki woh berth aapke route ke sirf ek hisse mein khaali hai — aap sirf us khaali stretch ka daam dete ho, poore safar ka nahi. Isliye woh green (poora raasta khaali) berth se sasti hai.","action":null}' },
       ];
@@ -596,6 +606,44 @@ async function api(req, res, url) {
         if (sl) { try { sayC = (await translateTo(en, sl[1])) || en; } catch (e) {} }
         return send(res, 200, { say: sayC, lang: sl ? sl[1] : null,
           link: scoped ? '/trains?from=' + f + '&to=' + t2 + '&cls=SL' : null });
+      }
+
+      if (act && act.type === 'odds' && +act.wl > 0) {
+        const wl = Math.max(1, Math.min(200, Math.round(+act.wl)));
+        const clsO = ['SL', '3A', '2A'].includes(act.cls) ? act.cls : 'SL';
+        const t0o = new Date(); t0o.setHours(0, 0, 0, 0);
+        let dmsO = t0o.getTime() + 864e5;
+        if (act.date && /^\d{4}-\d{2}-\d{2}$/.test(act.date)) {
+          const p2 = new Date(act.date + 'T00:00:00').getTime();
+          if (p2 >= t0o.getTime() && p2 <= t0o.getTime() + 60 * 864e5) dmsO = p2;
+        }
+        const dO2 = new Date(dmsO);
+        const isoO = dO2.getFullYear() + '-' + String(dO2.getMonth() + 1).padStart(2, '0') + '-' + String(dO2.getDate()).padStart(2, '0');
+        const humanO = dO2.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+        const f = (act.from >= 0 && act.from < ST.length) ? +act.from : null;
+        const t3 = (act.to >= 0 && act.to < ST.length) ? +act.to : null;
+        let en;
+        let linkO = '/waitlist-odds';
+        if (f != null && t3 != null && f !== t3) {
+          const pool = TRAINS.filter(x => serves(x, f, t3) && !cancelledOn(x.no, isoO));
+          const rows = pool.map(x => ({ x, o: oddsOf(x.no, isoO, clsO, wl),
+            av: store.availability(x.no, isoO, clsO, f, t3).counts }))
+            .sort((a, b) => b.o.pct - a.o.pct).slice(0, 2);
+          if (!rows.length) en = 'No trains serve that pair on ' + humanO + '.';
+          else en = 'For WL ' + wl + ' on ' + humanO + ' from ' + ST[f].n + ' to ' + ST[t3].n + ': '
+            + rows.map(r => r.x.name + ' (' + r.x.no + ') confirms about ' + r.o.pct + '% of days, because around '
+              + r.o.expCancel + ' berths free up before the chart').join('; ') + '. '
+            + (rows[0].av.free > 0 ? 'Better: skip the waitlist \u2014 ' + rows[0].x.name + ' has ' + rows[0].av.free
+              + ' berths free your whole way right now' + (rows[0].av.part ? ', and ' + rows[0].av.part + ' cheaper ones open en route' : '') + '.' : '');
+          linkO = '/waitlist-odds?from=' + f + '&to=' + t3 + '&cls=' + clsO + '&wl=' + wl;
+        } else {
+          const o = oddsOf('16021', isoO, clsO, wl);
+          en = 'WL ' + wl + ' in ' + clsO + ' confirms about ' + o.pct + '% of days (around ' + o.expCancel
+            + ' berths usually free up before the chart). Tell me your two stations and I will check exact trains \u2014 and the berths that skip the waitlist entirely.';
+        }
+        let sayO = en;
+        if (sl) { try { sayO = (await translateTo(en, sl[1])) || en; } catch (e) {} }
+        return send(res, 200, { say: sayO, lang: sl ? sl[1] : null, link: linkO });
       }
 
       if (act && act.type === 'mybookings') {
@@ -753,7 +801,7 @@ const PARENT = path.resolve(DIR, '..');
 // so they all have to return the app itself rather than a 404.
 const APP_ROUTES = new Set([
   '/', '/index.html', '/trains', '/route-map', '/train',
-  '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites',
+  '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites', '/waitlist-odds', '/seat-hop',
 ]);
 
 function serveStatic(res, urlPath) {
