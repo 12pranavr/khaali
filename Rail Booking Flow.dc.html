@@ -1085,14 +1085,41 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 <div style="max-width:760px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">khaali wallet · instant refunds</div>
   <h1 style="margin:0 0 18px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Your money, back in seconds</h1>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:22px">
+  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px">
     <div>
       <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">Balance</div>
       <div style="font:700 44px/1 'Cormorant Garamond',Georgia,serif;color:var(--k-fg-14663a)">{{ walletBalBig }}</div>
     </div>
     <button onClick="{{ walletWithdraw }}" style="margin-left:auto;border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 13px/1 Manrope,sans-serif;padding:14px 20px;border-radius:7px;cursor:pointer;min-height:44px">Withdraw to bank · simulated</button>
   </div>
-  <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:12px">Ledger</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:26px">
+    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 16px">
+      <div style="font:700 12.5px/1.4 Manrope,sans-serif">Booked twice by mistake?</div>
+      <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">We spot it and ask — one tap refunds the extra ticket here.</div>
+    </div>
+    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 16px">
+      <div style="font:700 12.5px/1.4 Manrope,sans-serif">Train cancelled?</div>
+      <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">Full fare back instantly — or move the ticket to the next train.</div>
+    </div>
+    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 16px">
+      <div style="font:700 12.5px/1.4 Manrope,sans-serif">Running 3+ hours late?</div>
+      <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">The 3-hour rule: cancel with a full refund — before you leave home.</div>
+    </div>
+  </div>
+  <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-d8385a);text-transform:uppercase;margin-bottom:12px">Needs your attention</div>
+  <sc-for list="{{ walletCards }}" as="c" hint-placeholder-count="2">
+    <div style="background:var(--k-fff);border:1px solid var(--k-e2ccd3);border-radius:12px;padding:18px 20px;margin-bottom:10px">
+      <div style="font:700 10px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:{{ c.kindColor }};text-transform:uppercase;margin-bottom:8px">{{ c.kind }}</div>
+      <div style="font:700 15px/1.4 Manrope,sans-serif">{{ c.title }}</div>
+      <div style="font:500 12.5px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin:4px 0 14px">{{ c.sub }}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button onClick="{{ c.on1 }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">{{ c.act1 }}</button>
+        <button onClick="{{ c.on2 }}" style="border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">{{ c.act2 }}</button>
+      </div>
+    </div>
+  </sc-for>
+  <div style="{{ walletCalm }}">All clear — nothing needs you. Refunds land here on their own.</div>
+  <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin:26px 0 12px">Ledger</div>
   <sc-for list="{{ walletTx }}" as="t" hint-placeholder-count="3">
     <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
@@ -1756,7 +1783,7 @@ class Component extends DCLogic {
           from:5,to:11,cls:'SL',quota:'General',pax:1,total:110,names:['Arjun Nair'],
           picks:[{coach:'S1',no:30+i,k:'free',at:null,price:110}]}));
         if(adds.length&&!this.state.bookings.some(b=>b.pnr==='4500991177'))
-          this.setState({bookings:adds.concat(this.state.bookings)});
+          this.setState({bookings:this.bstatApply(adds).concat(this.state.bookings)});
         }
     }).catch(()=>{});
     this.syncAv();
@@ -1847,16 +1874,30 @@ class Component extends DCLogic {
     }
     return pairs;
   }
+  bstatSet(pnr,patch){
+    try{const m=JSON.parse(localStorage.getItem('khaali-bstat')||'{}');
+      m[pnr]=Object.assign(m[pnr]||{},patch);
+      localStorage.setItem('khaali-bstat',JSON.stringify(m));}catch(e){}
+  }
+  bstatApply(list){
+    let m={};try{m=JSON.parse(localStorage.getItem('khaali-bstat')||'{}');}catch(e){}
+    return list.map(b=>m[b.pnr]?Object.assign({},b,m[b.pnr]):b);
+  }
   refundBooking(pnr,why){
     const bs=(this.state.bookings||[]).map(b=>b.pnr===pnr?Object.assign({},b,{status:'refunded',refundWhy:why}):b);
     const bk=(this.state.bookings||[]).find(b=>b.pnr===pnr);
+    this.bstatSet(pnr,{status:'refunded',refundWhy:why});
     this.setState({bookings:bs,dupAsk:null});
     if(bk)this.walletCredit(bk.total||0,why,pnr);
   }
+  keepDupPair(a,b2){
+    this.bstatSet(a,{dupOk:true});this.bstatSet(b2,{dupOk:true});
+    const bs=(this.state.bookings||[]).map(b=>(b.pnr===a||b.pnr===b2)?Object.assign({},b,{dupOk:true}):b);
+    this.setState({bookings:bs,dupAsk:null});
+  }
   keepDup(){
     const d=this.state.dupAsk;if(!d)return this.setState({dupAsk:null});
-    const bs=(this.state.bookings||[]).map(b=>(b.pnr===d.a||b.pnr===d.b)?Object.assign({},b,{dupOk:true}):b);
-    this.setState({bookings:bs,dupAsk:null});
+    this.keepDupPair(d.a,d.b);
   }
   favs(){try{return JSON.parse(localStorage.getItem('khaali-favs')||'[]');}catch(e){return [];}}
   isFav(no){return this.favs().indexOf(no)>=0;}
@@ -2834,7 +2875,7 @@ class Component extends DCLogic {
       onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',
       // Berths is deliberately not here: the seat map only means anything once a
       // train and a journey are chosen, so it is reached through Departures.
-      nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Departures',p:'showtimes'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Favorites',p:'favorites'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
+      nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Departures',p:'showtimes'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
         onClick:()=>this.go(x.p)})),
@@ -3195,13 +3236,13 @@ class Component extends DCLogic {
           onClick:()=>{this.setState({bellOpen:false});this.go('wallet');}}));
         this.dupPairs().slice(0,2).forEach(p=>items.push({
           t:'Possible duplicate booking',
-          sub:p[0].pnr+' & '+p[1].pnr+' \u00b7 same train, day and journey \u2014 review',
-          onClick:()=>{this.setState({bellOpen:false});this.go('bookings');}}));
+          sub:p[0].pnr+' & '+p[1].pnr+' \u00b7 same train, day and journey \u2014 resolve in Wallet',
+          onClick:()=>{this.setState({bellOpen:false});this.go('wallet');}}));
         (S.bookings||[]).filter(b=>b.dayIdx>=0&&b.status!=='refunded'&&this.bigDelayOf(b.train,b.dayIdx)).slice(0,2).forEach(b=>{
           const dl=this.bigDelayOf(b.train,b.dayIdx);
           items.push({t:b.train+' delayed \u2248'+Math.floor(dl.min/60)+'h '+(dl.min%60)+'m',
-            sub:'Your PNR '+b.pnr+' \u00b7 3-hour rule: full instant refund available',
-            onClick:()=>{this.setState({bellOpen:false});this.go('bookings');}});
+            sub:'Your PNR '+b.pnr+' \u00b7 3-hour rule: refund it from your Wallet',
+            onClick:()=>{this.setState({bellOpen:false});this.go('wallet');}});
         });
         favNos.forEach(no=>{
           const x=this.TRAINS.find(t=>t.no===no);
@@ -3363,6 +3404,47 @@ class Component extends DCLogic {
             pnr:t2.pnr?('PNR '+t2.pnr):''})),
           walletEmpty:{display:w.tx.length?'none':'block',textAlign:'center',padding:'40px 20px',
             font:'600 13.5px/1.7 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+          ...(()=>{
+            const cards=[];
+            pairs.forEach(p=>{
+              const trD=this.TRAINS.find(x=>x.no===p[0].train);
+              const dD=new Date(Date.now()+(p[0].dayIdx+1)*864e5);
+              cards.push({kind:'DOUBLE BOOKING',kindColor:'var(--k-fg-c2870a)',
+                title:(trD?trD.name:p[0].train)+' \u00b7 '+ST[p[0].from].n+' \u2192 '+ST[p[0].to].n,
+                sub:dD.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+                  +' \u00b7 PNRs '+p[0].pnr+' & '+p[1].pnr+' \u00b7 booked twice \u2014 maybe a slow-site double-tap',
+                act1:'Refund one \u00b7 \u20b9'+money(p[1].total)+' to wallet',
+                on1:()=>this.refundBooking(p[1].pnr,'Duplicate booking refunded'),
+                act2:'Both are real \u2014 keep',
+                on2:()=>this.keepDupPair(p[0].pnr,p[1].pnr)});
+            });
+            (S.bookings||[]).filter(b=>b.dayIdx>=0&&b.status!=='refunded').forEach(b=>{
+              const dl=this.bigDelayOf(b.train,b.dayIdx);
+              const cxB=this.cxOf(b.train,b.dayIdx);
+              const trB=this.TRAINS.find(x=>x.no===b.train);
+              const dB=new Date(Date.now()+(b.dayIdx+1)*864e5);
+              const when=dB.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+              if(cxB)cards.push({kind:'TRAIN CANCELLED',kindColor:'var(--k-fg-d8385a)',
+                title:(trB?trB.name:b.train)+' \u00b7 '+ST[b.from].n+' \u2192 '+ST[b.to].n,
+                sub:when+' \u00b7 PNR '+b.pnr+' \u00b7 '+cxB.reason,
+                act1:'Refund \u20b9'+money(b.total)+' to wallet',
+                on1:()=>this.refundBooking(b.pnr,'Train cancelled \u2014 refund'),
+                act2:'Move ticket instead',
+                on2:()=>this.go('bookings')});
+              else if(dl)cards.push({kind:'DELAYED '+Math.floor(dl.min/60)+'H '+(dl.min%60)+'M',
+                kindColor:'var(--k-fg-8a4a12)',
+                title:(trB?trB.name:b.train)+' \u00b7 '+ST[b.from].n+' \u2192 '+ST[b.to].n,
+                sub:when+' \u00b7 PNR '+b.pnr+' \u00b7 over the 3-hour rule \u2014 full refund is yours on demand',
+                act1:'Cancel & refund \u20b9'+money(b.total),
+                on1:()=>this.refundBooking(b.pnr,'Delay over 3h \u2014 full refund'),
+                act2:'Keep the ticket',
+                on2:()=>{}});
+            });
+            return {walletCards:cards,
+              walletCalm:{display:cards.length?'none':'block',background:'var(--k-fff)',
+                border:'1px solid var(--k-e6e5e0)',borderRadius:10,padding:'16px 18px',
+                font:'600 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-14663a)'}};
+          })(),
           walletWithdraw:()=>{if(w.bal<=0)return;
             this.walletCredit(-0,'',null);
             try{const w2=this.wallet();w2.tx.unshift({id:'wd'+Date.now(),ts:Date.now(),amount:-w2.bal,note:'Withdrawn to bank (simulated)',pnr:null});w2.bal=0;localStorage.setItem('khaali-wallet',JSON.stringify(w2));}catch(e){}
