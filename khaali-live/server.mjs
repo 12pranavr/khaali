@@ -805,7 +805,7 @@ const PARENT = path.resolve(DIR, '..');
 // so they all have to return the app itself rather than a 404.
 const APP_ROUTES = new Set([
   '/', '/index.html', '/trains', '/route-map', '/train',
-  '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites', '/waitlist-odds', '/seat-hop',
+  '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites', '/waitlist-odds', '/seat-hop', '/wallet',
 ]);
 
 function serveStatic(res, urlPath) {

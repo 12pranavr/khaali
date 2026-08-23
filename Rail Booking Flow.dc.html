@@ -192,6 +192,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
     </div>
     <div class="k-hdrright" style="margin-left:auto;display:flex;align-items:center;gap:16px;flex:none">
+      <div onClick="{{ goWallet }}" title="khaali wallet" style="{{ walletChip }}">&#8377;{{ walletBal }}</div>
       <div style="position:relative;flex:none">
         <div onClick="{{ toggleBell }}" style="{{ bellBtn }}">&#128276;<span style="{{ bellBadge }}">{{ bellCount }}</span></div>
         <div style="{{ bellPanel }}">
@@ -1080,6 +1081,43 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 </div>
 </sc-if>
 
+<sc-if value="{{ onWallet }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:760px;margin:0 auto;padding:32px 22px 80px">
+  <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">khaali wallet · instant refunds</div>
+  <h1 style="margin:0 0 18px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Your money, back in seconds</h1>
+  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:22px">
+    <div>
+      <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">Balance</div>
+      <div style="font:700 44px/1 'Cormorant Garamond',Georgia,serif;color:var(--k-fg-14663a)">{{ walletBalBig }}</div>
+    </div>
+    <button onClick="{{ walletWithdraw }}" style="margin-left:auto;border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 13px/1 Manrope,sans-serif;padding:14px 20px;border-radius:7px;cursor:pointer;min-height:44px">Withdraw to bank · simulated</button>
+  </div>
+  <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:12px">Ledger</div>
+  <sc-for list="{{ walletTx }}" as="t" hint-placeholder-count="3">
+    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font:700 13.5px/1.4 Manrope,sans-serif">{{ t.note }}</div>
+        <div style="font:400 11px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ t.when }} {{ t.pnr }}</div>
+      </div>
+      <div style="font:700 16px/1 'IBM Plex Mono',monospace;color:var(--k-fg-14663a)">{{ t.amount }}</div>
+    </div>
+  </sc-for>
+  <div style="{{ walletEmpty }}">Nothing here yet.<br/>Refunds from duplicates, cancellations and 3-hour delays land here — instantly, not in 5–7 bank days.</div>
+</div>
+</sc-if>
+
+<div style="{{ dupWrap }}">
+  <div style="width:min(430px,92vw);background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+    <div style="font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;color:var(--k-fg-c2870a);text-transform:uppercase;margin-bottom:10px">Double booking?</div>
+    <div style="font:600 20px/1.3 'Cormorant Garamond',Georgia,serif;margin-bottom:8px">You just booked this journey twice</div>
+    <div style="font:500 13px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin-bottom:18px">{{ dupWhat }} — same train, same day, same stations. If the site felt slow and you tapped twice, take the refund. If it’s for a friend, keep both.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button onClick="{{ dupRefund }}" style="flex:1;min-width:180px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 13.5px/1 Manrope,sans-serif;padding:14px;border-radius:8px;cursor:pointer;min-height:46px">Refund duplicate · {{ dupAmt }} to wallet</button>
+      <button onClick="{{ dupKeep }}" style="flex:1;min-width:150px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 13.5px/1 Manrope,sans-serif;padding:14px;border-radius:8px;cursor:pointer;min-height:46px">It’s for a friend — keep both</button>
+    </div>
+  </div>
+</div>
+
 <sc-if value="{{ onFavorites }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:900px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:22px">
@@ -1118,6 +1156,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     </div>
   </div>
 
+  <div style="{{ dupBannerStyle }}">{{ dupBanner }}</div>
   <sc-for list="{{ bookingRows }}" as="b" hint-placeholder-count="2">
     <div style="{{ b.card }}">
       <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px">
@@ -1135,6 +1174,11 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <span style="flex:1;min-width:220px">{{ b.cxBand }}</span>
         <button onClick="{{ b.onMove }}" style="{{ b.moveStyle }}">{{ b.moveLabel }}</button>
       </div>
+      <div style="{{ b.dlBandStyle }}">
+        <span style="flex:1;min-width:220px">{{ b.dlBand }}</span>
+        <button onClick="{{ b.dlRefund }}" style="{{ b.dlStyle }}">{{ b.dlLabel }}</button>
+      </div>
+      <div style="{{ b.refNoteStyle }}">{{ b.refNote }}</div>
       <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid var(--k-f4f3ef);border-bottom:1px solid var(--k-f4f3ef);flex-wrap:wrap">
         <div>
           <div style="font:700 22px/1 Manrope,sans-serif;letter-spacing:-.02em">{{ b.fromCode }}</div>
@@ -1601,7 +1645,7 @@ class Component extends DCLogic {
   // One path per page, so back/forward work and any screen can be linked.
   ROUTES={home:'/',results:'/trains',map:'/route-map',train:'/train',
     showtimes:'/departures',seats:'/berths',confirm:'/confirm',ticket:'/ticket',
-    bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop'};
+    bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop',wallet:'/wallet'};
   // Pages whose meaning depends on which journey you picked.
   JOURNEY_PAGES=['results','train','showtimes','seats','confirm','ticket','odds','hop'];
   // Pages that need state a URL cannot carry (a live hold, a fresh booking).
@@ -1693,12 +1737,27 @@ class Component extends DCLogic {
       // Demo seed: one existing booking whose train got cancelled after
       // purchase, so the one-tap 'Move ticket' rescue is always showable.
       if(!this._cxDemo){this._cxDemo=true;
+        const adds=[];
         const victim=this.TRAINS.find(x=>this.cxOf(x.no,0)&&this.serves(x,0,5));
-        if(victim&&!this.state.bookings.some(b=>b.pnr==='4500991177')){
-          this.setState({bookings:[{pnr:'4500991177',train:victim.no,dayIdx:0,from:0,to:5,
-            cls:'SL',quota:'General',pax:1,total:135,names:['Ravi Kumar'],
-            picks:[{coach:'S2',no:18,k:'free',at:null,price:135}]}].concat(this.state.bookings)});
-        }}
+        if(victim)adds.push({pnr:'4500991177',train:victim.no,dayIdx:0,from:0,to:5,
+          cls:'SL',quota:'General',pax:1,total:135,names:['Ravi Kumar'],
+          picks:[{coach:'S2',no:18,k:'free',at:null,price:135}]});
+        // a booking whose train runs 3h+ late -> the delay-shield band
+        let lateT=null,lateD=0;
+        for(let d=0;d<4&&!lateT;d++)
+          lateT=this.TRAINS.find(x=>!this.cxOf(x.no,d)&&this.bigDelayOf(x.no,d)&&this.serves(x,5,13))&&(lateD=d,
+            this.TRAINS.find(x=>!this.cxOf(x.no,d)&&this.bigDelayOf(x.no,d)&&this.serves(x,5,13)));
+        if(lateT)adds.push({pnr:'4500880266',train:lateT.no,dayIdx:lateD,from:5,to:13,
+          cls:'SL',quota:'General',pax:1,total:135,names:['Meena Iyer'],
+          picks:[{coach:'S3',no:24,k:'free',at:null,price:135}]});
+        // an accidental duplicate pair -> the double-booking review flow
+        const dupT=this.TRAINS.find(x=>!this.cxOf(x.no,1)&&this.serves(x,5,11));
+        if(dupT)['4500770355','4500770356'].forEach((pnr,i)=>adds.push({pnr,train:dupT.no,dayIdx:1,
+          from:5,to:11,cls:'SL',quota:'General',pax:1,total:110,names:['Arjun Nair'],
+          picks:[{coach:'S1',no:30+i,k:'free',at:null,price:110}]}));
+        if(adds.length&&!this.state.bookings.some(b=>b.pnr==='4500991177'))
+          this.setState({bookings:adds.concat(this.state.bookings)});
+        }
     }).catch(()=>{});
     this.syncAv();
     try{this._es=new EventSource('/api/events');
@@ -1759,6 +1818,45 @@ class Component extends DCLogic {
     this._voiceReq=(this._voiceReq||0)+1;
     if(this._pgT){clearInterval(this._pgT);this._pgT=null;}
     this.setState({chatSpeak:false,chatPlayKey:null,chatLoadKey:null,chatPlayPct:0});
+  }
+  wallet(){try{return JSON.parse(localStorage.getItem('khaali-wallet')||'{"bal":0,"tx":[]}');}catch(e){return {bal:0,tx:[]};}}
+  walletCredit(amount,note,pnr){
+    const w=this.wallet();
+    w.bal+=amount;
+    w.tx.unshift({id:Date.now()+''+Math.floor(Math.random()*999),ts:Date.now(),amount,note,pnr:pnr||null});
+    w.tx=w.tx.slice(0,40);
+    try{localStorage.setItem('khaali-wallet',JSON.stringify(w));}catch(e){}
+    const ev=(this.state.walletEvents||[]).slice(0,9);
+    this.setState({walletEvents:[{note,amount,pnr,ts:Date.now()}].concat(ev),walletTick:(this.state.walletTick||0)+1});
+  }
+  bigDelayOf(no,dayIdx){
+    if(no==='16021')return null;
+    const iso=this.cxIso(dayIdx);
+    let h=2166136261>>>0;const s2='dly|'+no+'|'+iso;
+    for(let i=0;i<s2.length;i++){h^=s2.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+    if(h%100>=6)return null;
+    return {min:185+(h%7)*17};
+  }
+  dupPairs(){
+    const bs=(this.state.bookings||[]).filter(b=>b.dayIdx>=0&&b.status!=='refunded');
+    const seen={},pairs=[];
+    for(const b of bs){
+      const k=b.train+'|'+b.dayIdx+'|'+b.from+'|'+b.to+'|'+b.cls;
+      if(seen[k]&&!b.dupOk&&!seen[k].dupOk)pairs.push([seen[k],b]);
+      else seen[k]=b;
+    }
+    return pairs;
+  }
+  refundBooking(pnr,why){
+    const bs=(this.state.bookings||[]).map(b=>b.pnr===pnr?Object.assign({},b,{status:'refunded',refundWhy:why}):b);
+    const bk=(this.state.bookings||[]).find(b=>b.pnr===pnr);
+    this.setState({bookings:bs,dupAsk:null});
+    if(bk)this.walletCredit(bk.total||0,why,pnr);
+  }
+  keepDup(){
+    const d=this.state.dupAsk;if(!d)return this.setState({dupAsk:null});
+    const bs=(this.state.bookings||[]).map(b=>(b.pnr===d.a||b.pnr===d.b)?Object.assign({},b,{dupOk:true}):b);
+    this.setState({bookings:bs,dupAsk:null});
   }
   favs(){try{return JSON.parse(localStorage.getItem('khaali-favs')||'[]');}catch(e){return [];}}
   isFav(no){return this.favs().indexOf(no)>=0;}
@@ -2139,6 +2237,10 @@ class Component extends DCLogic {
     const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:S.pax,dayIdx:S.dayIdx,
       picks:picks,pnr:String(pnr),total:total,
       names:Array.from({length:S.pax},(_,i)=>['Ananya Rao','Vikram Shetty','Lakshmi Devi','Rahul Menon','Fatima Sheikh','Joseph Mathew'][i]||'Passenger '+(i+1))};
+    const dupOf=S.bookings.find(b=>b.status!=='refunded'&&!b.dupOk&&b.train===rec.train
+      &&b.dayIdx===rec.dayIdx&&b.from===rec.from&&b.to===rec.to&&b.cls===rec.cls);
+    if(dupOf)setTimeout(()=>this.setState({dupAsk:{a:dupOf.pnr,b:rec.pnr,total:rec.total,
+      what:this.TRAINS.find(t=>t.no===rec.train).name+' \u00b7 '+this.ST[rec.from].n+' \u2192 '+this.ST[rec.to].n}}),700);
     this.setState({bookings:[rec].concat(S.bookings),page:'ticket',picks:picks,viewPnr:rec.pnr,holdId:null,hold:null,holdErr:null,
       classModal:false,countModal:false,hov:null});
     window.scrollTo(0,0);this.syncAv();}
@@ -2729,7 +2831,7 @@ class Component extends DCLogic {
         else if(k==='Enter'){e.preventDefault();hitsTop[sel].act();}},
       onHome:S.page==='home',onResults:S.page==='results',onMap:S.page==='map',onTrain:S.page==='train',onShowtimes:S.page==='showtimes',onSeats:S.page==='seats',
       onConfirm:S.page==='confirm',onTicket:S.page==='ticket',onAbout:S.page==='about',
-      onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',
+      onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',
       // Berths is deliberately not here: the seat map only means anything once a
       // train and a journey are chosen, so it is reached through Departures.
       nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Departures',p:'showtimes'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Favorites',p:'favorites'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
@@ -3087,6 +3189,20 @@ class Component extends DCLogic {
       ...(()=>{
         const favNos=this.favs();
         const items=[];
+        (S.walletEvents||[]).slice(0,3).forEach(ev=>items.push({
+          t:'\u20b9'+ev.amount+' credited to your wallet',
+          sub:ev.note+(ev.pnr?' \u00b7 PNR '+ev.pnr:'')+' \u00b7 tap to open wallet',
+          onClick:()=>{this.setState({bellOpen:false});this.go('wallet');}}));
+        this.dupPairs().slice(0,2).forEach(p=>items.push({
+          t:'Possible duplicate booking',
+          sub:p[0].pnr+' & '+p[1].pnr+' \u00b7 same train, day and journey \u2014 review',
+          onClick:()=>{this.setState({bellOpen:false});this.go('bookings');}}));
+        (S.bookings||[]).filter(b=>b.dayIdx>=0&&b.status!=='refunded'&&this.bigDelayOf(b.train,b.dayIdx)).slice(0,2).forEach(b=>{
+          const dl=this.bigDelayOf(b.train,b.dayIdx);
+          items.push({t:b.train+' delayed \u2248'+Math.floor(dl.min/60)+'h '+(dl.min%60)+'m',
+            sub:'Your PNR '+b.pnr+' \u00b7 3-hour rule: full instant refund available',
+            onClick:()=>{this.setState({bellOpen:false});this.go('bookings');}});
+        });
         favNos.forEach(no=>{
           const x=this.TRAINS.find(t=>t.no===no);
           if(!x)return;
@@ -3229,6 +3345,40 @@ class Component extends DCLogic {
           hopCls:this.CLS.map(c=>({k:c.k,onClick:()=>{this._c={};this.setState({cls:c.k});},
             style:this.chip(S.cls===c.k,'9px 14px')})),
         };})(),
+      ...(()=>{
+        const w=this.wallet();
+        const pairs=this.dupPairs();
+        return {
+          goWallet:()=>this.go('wallet'),
+          walletBal:String(w.bal),
+          walletChip:{flex:'none',cursor:'pointer',font:"700 12.5px/1 'IBM Plex Mono',monospace",
+            border:'1px solid var(--k-e2e0da)',borderRadius:999,padding:'9px 13px',
+            color:w.bal>0?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)',
+            background:w.bal>0?'var(--k-e6f4ec)':'transparent'},
+          walletBalBig:'\u20b9'+w.bal,
+          walletTx:w.tx.map(t2=>({
+            note:t2.note,amount:'+ \u20b9'+t2.amount,
+            when:new Date(t2.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})
+              +' \u00b7 '+new Date(t2.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+            pnr:t2.pnr?('PNR '+t2.pnr):''})),
+          walletEmpty:{display:w.tx.length?'none':'block',textAlign:'center',padding:'40px 20px',
+            font:'600 13.5px/1.7 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+          walletWithdraw:()=>{if(w.bal<=0)return;
+            this.walletCredit(-0,'',null);
+            try{const w2=this.wallet();w2.tx.unshift({id:'wd'+Date.now(),ts:Date.now(),amount:-w2.bal,note:'Withdrawn to bank (simulated)',pnr:null});w2.bal=0;localStorage.setItem('khaali-wallet',JSON.stringify(w2));}catch(e){}
+            this.setState({walletTick:(S.walletTick||0)+1});},
+          dupAskOn:!!S.dupAsk,
+          dupWrap:{display:S.dupAsk?'flex':'none',position:'fixed',inset:0,zIndex:120,
+            background:'rgba(20,16,10,.55)',alignItems:'center',justifyContent:'center',padding:20},
+          dupWhat:S.dupAsk?S.dupAsk.what:'',
+          dupAmt:S.dupAsk?('\u20b9'+money(S.dupAsk.total)):'',
+          dupRefund:()=>{const d=S.dupAsk;if(d)this.refundBooking(d.b,'Duplicate booking refunded');},
+          dupKeep:()=>this.keepDup(),
+          dupBanner:pairs.length?('Possible duplicate: '+pairs.length+' pair'+(pairs.length>1?'s':'')+' of identical bookings \u2014 review below.'):'',
+          dupBannerStyle:{display:pairs.length?'block':'none',background:'var(--k-fdf0e3)',
+            border:'1px solid var(--k-e2ccd3)',borderRadius:8,padding:'12px 15px',margin:'0 0 16px',
+            font:'600 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
+        };})(),
       favRows:this.favs().map(no=>{
         const x=this.TRAINS.find(t=>t.no===no);
         if(!x)return null;
@@ -3271,6 +3421,8 @@ class Component extends DCLogic {
           const dM=this.sMin(bt,b.from,'d'),aM=this.sMin(bt,b.to,'a');
           const later=b.picks.filter(p=>p.k==='part'&&p.at>b.from).length;
           const bcx=up?this.cxOf(b.train,b.dayIdx):null;
+          const bdl=(up&&!bcx&&b.status!=='refunded')?this.bigDelayOf(b.train,b.dayIdx):null;
+          const refunded=b.status==='refunded';
           const moveTo=bcx?(()=>{
             const depOld=(this.sMin(bt,b.from,'d')||0)%1440;
             const cands=this.TRAINS.filter(x=>x.no!==b.train&&this.serves(x,b.from,b.to)
@@ -3279,10 +3431,23 @@ class Component extends DCLogic {
                           -((this.sMin(y,b.from,'d')%1440-depOld+1440)%1440));
             return cands[0]||null;})():null;
           return {pnr:b.pnr,
-            statusText:bcx?'Cancelled':(up?'Confirmed':'Journey completed'),
+            statusText:refunded?'Refunded':(bcx?'Cancelled':(bdl?'Delayed 3h+':(up?'Confirmed':'Journey completed'))),
             statusStyle:{font:'700 10px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
               background:bcx?'var(--k-fdf3f5)':(up?'var(--k-e6f4ec)':'var(--k-f1f1ee)'),
               color:bcx?'var(--k-fg-d8385a)':(up?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)'),padding:'6px 9px',borderRadius:4,flex:'none'},
+            dlBand:bdl?('\u23f1 '+bt.no+' is running \u2248'+Math.floor(bdl.min/60)+'h '+(bdl.min%60)+'m late on your date. 3-hour rule: cancel now for a FULL instant refund \u2014 before you leave home.'):'',
+            dlBandStyle:{display:bdl?'flex':'none',alignItems:'center',gap:14,flexWrap:'wrap',
+              background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',borderRadius:8,
+              padding:'11px 14px',margin:'12px 0 2px',font:'600 12.5px/1.5 Manrope,sans-serif',
+              color:'var(--k-fg-8a4a12)'},
+            dlRefund:bdl?()=>this.refundBooking(b.pnr,'Delay over 3h \u2014 full refund'):()=>{},
+            dlLabel:bdl?('Cancel & refund \u20b9'+money(b.total)+' to wallet'):'',
+            dlStyle:{display:bdl?'inline-flex':'none',border:'none',background:'var(--k-d8385a)',
+              color:'var(--k-fg-fff)',font:'700 12.5px/1 Manrope,sans-serif',padding:'11px 16px',
+              borderRadius:7,cursor:'pointer',minHeight:40,marginLeft:'auto'},
+            refNote:refunded?('\u20b9'+money(b.total)+' refunded to your wallet \u00b7 '+(b.refundWhy||'')):'',
+            refNoteStyle:{display:refunded?'block':'none',font:'600 12px/1.5 Manrope,sans-serif',
+              color:'var(--k-fg-14663a)',margin:'10px 0 2px'},
             cxBand:bcx?('\u26a0 '+bt.no+' is cancelled on this date \u2014 '+bcx.reason+'. Fare auto-refunds.'
               +(moveTo?'':' No alternative with '+b.pax+' free berths \u2014 try another date.')):'',
             cxBandStyle:{display:bcx?'flex':'none',alignItems:'center',gap:14,flexWrap:'wrap',
