@@ -31,8 +31,10 @@ function inv(key) {
     const [train, date, cls] = key.split('|');
     // Seed by how far in the future the travel date is, so day 30 does not
     // look identical to today. Further out = deterministic but emptier.
+    // Engine convention: dayIdx 0 = TOMORROW (the first bookable day), which
+    // is also what the client uses. Tomorrow's date therefore maps to 0.
     const dayIdx = Math.max(0, Math.round(
-      (new Date(date + 'T00:00:00') - new Date(new Date().toDateString())) / 864e5));
+      (new Date(date + 'T00:00:00') - new Date(new Date().toDateString())) / 864e5) - 1);
     const seeded = seedOccupancy(cls, train, dayIdx);
     v = {
       booked: Int32Array.from(seeded),

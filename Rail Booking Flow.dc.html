@@ -995,7 +995,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 <div style="max-width:980px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">Seat hop · the bargain route</div>
   <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Two half-empty berths. One cheap ticket.</h1>
-  <div style="font:500 13.5px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:44em;margin-bottom:14px">When no single berth is free your whole way, chain two that are each empty for part of it — same distance, same fare, one berth change. Both berths lock together as one ticket.</div>
+  <div style="font:500 13.5px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:44em;margin-bottom:14px">Each colour is ONE berth: ride the green berth first, walk to the amber berth at the change station, ride it to the end. Same train, same fare — both berths lock and pay together as one ticket.</div>
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:22px">
     <div style="font:600 13.5px/1.4 Manrope,sans-serif;color:var(--k-fg-5a5f6a)">{{ hopJourney }}</div>
     <div onClick="{{ hopChange }}" style="font:700 12.5px/1 Manrope,sans-serif;color:var(--k-fg-d8385a);cursor:pointer">Change</div>
@@ -1014,20 +1014,25 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <span style="background:var(--k-e6f4ec);color:var(--k-fg-14663a);font:800 10.5px/1 Manrope,sans-serif;padding:5px 9px;border-radius:999px">{{ r.save }}</span>
         </div>
       </div>
-      <div style="display:flex;gap:4px;align-items:center;margin:14px 0 6px">
-        <sc-for list="{{ r.segs }}" as="s" hint-placeholder-count="2"><div style="{{ s.barStyle }}"></div></sc-for>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:16px">
+        <div style="font:700 12px/1.4 Manrope,sans-serif">{{ r.boardName }} <span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.boardTime }}</span></div>
+        <div style="font:700 12px/1.4 Manrope,sans-serif;text-align:right">{{ r.endName }} <span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.endTime }}</span></div>
       </div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div style="display:flex;gap:0;align-items:center;margin:8px 0 10px">
+        <sc-for list="{{ r.barItems }}" as="s" hint-placeholder-count="3"><div style="{{ s.barStyle }}"></div><div style="{{ s.pillStyle }}">{{ s.pillText }}</div></sc-for>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;margin-bottom:6px">
         <sc-for list="{{ r.segs }}" as="s" hint-placeholder-count="2">
-          <div style="flex:1;min-width:180px">
-            <div style="font:700 12.5px/1.4 'IBM Plex Mono',monospace">{{ s.label }} · {{ s.price }}</div>
-            <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-5a5f6a)">{{ s.stretch }}</div>
-            <div style="font:600 11px/1.5 Manrope,sans-serif;color:var(--k-fg-c2870a)">{{ s.switchAt }}</div>
+          <div style="{{ s.labStyle }}">
+            <div style="display:flex;align-items:center"><span style="{{ s.ordChip }}">{{ s.ordNo }}</span><span style="{{ s.headStyle }}">{{ s.head }}</span></div>
+            <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin-left:24px">{{ s.stretch }}</div>
           </div>
         </sc-for>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:flex-end">
         <div style="flex:none;display:flex;flex-direction:column;gap:8px;align-items:flex-end;justify-content:flex-end">
           <div style="{{ r.directStyle }}">{{ r.directNote }}</div>
-          <button onClick="{{ r.onLock }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 13.5px/1 Manrope,sans-serif;padding:13px 22px;border-radius:7px;cursor:pointer;min-height:44px">Lock this plan</button>
+          <button onClick="{{ r.onLock }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 13.5px/1 Manrope,sans-serif;padding:13px 22px;border-radius:7px;cursor:pointer;min-height:44px">Lock both berths &amp; pay</button>
         </div>
       </div>
     </div>
@@ -3128,6 +3133,7 @@ class Component extends DCLogic {
         const jkm=Math.abs(ST[t].km-ST[f].km)||1;
         const fullFare=this.fare(S.cls,jkm);
         const segPrice=(a,b2)=>Math.max(5,Math.round(fullFare*(Math.abs(ST[b2].km-ST[a].km))/jkm/5)*5);
+        const segPrice2=(a,b2)=>'\u20b9'+segPrice(a,b2);
         const rows=this.TRAINS.filter(x=>this.serves(x,S.from,S.to)&&!this.cxOf(x.no,S.dayIdx))
           .sort((a,b)=>this.sMin(a,S.from,'d')%1440-this.sMin(b,S.from,'d')%1440)
           .map(x=>{
@@ -3135,13 +3141,35 @@ class Component extends DCLogic {
             if(!plan)return null;
             const price=plan.reduce((s2,g)=>s2+segPrice(g.from,g.to),0);
             const n=this.counts(S.cls,x.no);
+            const COLS=[['var(--k-1f9d55)','var(--k-fg-14663a)'],['var(--k-e0a419)','var(--k-fg-c2870a)'],['var(--k-2f5fd0)','var(--k-fg-1f3f8f)']];
+            const ORD=['1st','2nd','3rd'];
+            const barItems=[];
+            plan.forEach((g,i)=>{
+              barItems.push({isBar:true,
+                barStyle:{flex:(Math.abs(ST[g.to].km-ST[g.from].km)||1),height:10,borderRadius:5,
+                  background:COLS[i][0],minWidth:40},
+                pillStyle:{display:'none'},pillText:''});
+              if(i<plan.length-1)barItems.push({isBar:false,
+                barStyle:{display:'none'},
+                pillStyle:{flex:'none',display:'inline-flex',alignItems:'center',gap:6,
+                  background:'var(--k-fff)',border:'1.5px dashed var(--k-c2870a,#c2870a)',
+                  color:'var(--k-fg-c2870a)',font:'700 10.5px/1 Manrope,sans-serif',
+                  padding:'7px 11px',borderRadius:999,margin:'0 -4px',zIndex:2},
+                pillText:'\u21c4 change berth at '+ST[g.to].n});
+            });
             const segs=plan.map((g,i)=>({
-              label:g.coach+'/'+g.no,
+              flexKm:(Math.abs(ST[g.to].km-ST[g.from].km)||1),
+              ordChip:{display:'inline-flex',width:18,height:18,borderRadius:'50%',
+                background:COLS[i][0],color:'#fff',font:'800 10.5px/18px Manrope,sans-serif',
+                justifyContent:'center',marginRight:6,flex:'none'},
+              ordNo:String(i+1),
+              head:ORD[i]+' berth \u00b7 '+g.coach+'/'+g.no+' \u00b7 '+segPrice2(g.from,g.to),
+              headStyle:{font:'700 12.5px/1.4 Manrope,sans-serif',color:COLS[i][1]},
               stretch:ST[g.from].n+' \u2192 '+ST[g.to].n,
-              price:'\u20b9'+segPrice(g.from,g.to),
-              barStyle:{flex:(Math.abs(ST[g.to].km-ST[g.from].km)||1),height:8,borderRadius:4,
-                background:i%2?'var(--k-e0a419)':'var(--k-1f9d55)'},
-              switchAt:i<plan.length-1?('change berth at '+ST[g.to].n):''}));
+              labStyle:{flex:(Math.abs(ST[g.to].km-ST[g.from].km)||1),minWidth:150,
+                paddingRight:14}}));
+            const depS=this.toHHMM(this.sMin(x,S.from,'d'));
+            const arrS=this.sMin(x,S.to,'a');
             const lock=()=>{this._c={};
               const br2=this.berths(S.cls,x.no);
               const covered=b=>{let km=0;
@@ -3155,10 +3183,14 @@ class Component extends DCLogic {
                 return {key:b.coach+'-'+b.no,idx:b.idx,price:pr,no:b.no,coach:b.coach,
                   type:b.type,k:st.k,at:st.at};
               });
-              this.setState({train:x.no,page:'seats',picks,pax:Math.max(2,picks.length),routeOpen:true});
+              this.setState({train:x.no,page:'confirm',picks,pax:Math.max(2,picks.length),
+                routeOpen:true,classModal:false,countModal:false,hov:null},
+                ()=>this.startHold());
               window.scrollTo(0,0);};
             return {name:x.name,no:x.no,dep:this.toHHMM(this.sMin(x,S.from,'d')),
-              freeN:n.free,
+              freeN:n.free,barItems,
+              boardName:ST[S.from].n,boardTime:'board '+depS,
+              endName:ST[S.to].n,endTime:arrS==null?'':('arrive '+this.toHHMM(arrS)),
               segs,price:'\u20b9'+price,full:price<fullFare?('\u20b9'+fullFare):'',
               save:price<fullFare?('save \u20b9'+(fullFare-price)):((plan.length-1)+(plan.length>2?' changes':' change')+' \u00b7 same fare'),
               directNote:n.free>0?(n.free+' full-way berths also exist at \u20b9'+fullFare):'no full-way berth left \u2014 hop is the only seat',
