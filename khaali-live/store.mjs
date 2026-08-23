@@ -12,7 +12,7 @@
 // both win. This is a real compare-and-swap, not an approximation.
 import crypto from 'crypto';
 import {
-  SEGMENTS, journeyMask, berthState, seedOccupancy, berthLayout,
+  SEGMENTS, journeyMask, spanMask, berthState, seedOccupancy, berthLayout,
   packPlan, classByKey, fare, journeyKm, priceFor, coveredKm,
 } from './engine.mjs';
 
@@ -112,23 +112,34 @@ export function snapshot(train, date, cls) {
  * Try to lock `berthIdxs` for [from,to). All-or-nothing.
  * Returns { ok:true, hold } or { ok:false, reason, conflicts }.
  */
-export function hold({ train, date, cls, from, to, berthIdxs, pax, who, fees }) {
+export function hold({ train, date, cls, from, to, berthIdxs, pax, who, fees, segs, hop }) {
   const key = keyOf(train, date, cls);
   const v = inv(key);
   const j = journeyMask(from, to);
 
   if (!berthIdxs.length) return { ok: false, reason: 'no-berths' };
-  if (berthIdxs.length !== pax) return { ok: false, reason: 'berth-count-mismatch' };
+  // Hops: one traveller, several berths in sequence. segs pins each berth to
+  // its promised stretch; without segs, one berth per passenger as before.
+  if (segs && segs.length !== berthIdxs.length) return { ok: false, reason: 'bad-segs' };
+  if (!segs && berthIdxs.length !== pax) return { ok: false, reason: 'berth-count-mismatch' };
 
   // --- check (no await between here and the set below) ---
   // A berth may be free for only part of the journey. Lock exactly the legs it
   // can actually give you; reject only if it gives you nothing, or if someone
   // else already holds any of those legs.
   const conflicts = [], grants = [];
-  for (const i of berthIdxs) {
+  for (let k = 0; k < berthIdxs.length; k++) {
+    const i = berthIdxs[k];
     if (i < 0 || i >= v.layout.length) return { ok: false, reason: 'bad-berth' };
-    const grant = j & ~v.booked[i];
-    if (grant === 0) { conflicts.push({ idx: i, why: 'booked' }); continue; }
+    let grant;
+    if (segs && segs[k] && segs[k].to > segs[k].from) {
+      grant = spanMask(segs[k].from, segs[k].to) & j;      // exactly the promised stretch
+      if (grant === 0) return { ok: false, reason: 'bad-segs' };
+      if ((grant & v.booked[i]) !== 0) { conflicts.push({ idx: i, why: 'booked' }); continue; }
+    } else {
+      grant = j & ~v.booked[i];
+      if (grant === 0) { conflicts.push({ idx: i, why: 'booked' }); continue; }
+    }
     if ((v.held[i] & grant) !== 0) { conflicts.push({ idx: i, why: 'held' }); continue; }
     grants.push({ idx: i, mask: grant });
   }
@@ -157,7 +168,9 @@ export function hold({ train, date, cls, from, to, berthIdxs, pax, who, fees }) 
   const extra = Math.max(0, Math.min(2000, Math.floor(+fees || 0)));
   const amount = berths.reduce((a, b) => a + b.price, 0) + extra;
 
+  const hopFlag = !!(hop || segs);
   const h = {
+    hop: hopFlag,
     id, key, train, date, cls, from, to, berthIdxs, grants, mask: j, pax, who: who || 'guest',
     amount, fees: extra, fullPrice: fare(cls, jkm) * pax + extra, journeyKm: jkm,
     status: 'pending', createdAt: Date.now(), expiresAt, berths,
@@ -232,10 +245,16 @@ function publicHold(h) {
     pax: h.pax, amount: h.amount, fees: h.fees || 0, fullPrice: h.fullPrice, journeyKm: h.journeyKm,
     status: h.status, who: h.who, pnr: h.pnr || null,
     expiresAt: h.expiresAt, msLeft: Math.max(0, h.expiresAt - Date.now()),
-    berths: h.berths.map(b => ({
-      idx: b.idx, coach: b.coach, no: b.no, type: b.type,
-      price: b.price, km: b.km, partial: b.partial, gapKm: b.gapKm,
-    })),
+    hop: !!h.hop,
+    berths: h.berths.map(b => {
+      let lo = -1, hi = -1;
+      for (let l = 0; l < 13; l++) if (b.mask & (1 << l)) { if (lo < 0) lo = l; hi = l + 1; }
+      return {
+        idx: b.idx, coach: b.coach, no: b.no, type: b.type,
+        price: b.price, km: b.km, partial: b.partial, gapKm: b.gapKm,
+        segFrom: lo, segTo: hi,
+      };
+    }),
   };
 }
 

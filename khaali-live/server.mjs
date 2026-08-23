@@ -410,10 +410,14 @@ async function api(req, res, url) {
     const b = await readBody(req);
     const cxh = cancelledOn(String(b.train || ''), b.date || TODAY());
     if (cxh) return send(res, 409, { ok: false, error: 'This train is cancelled on that date \u2014 ' + cxh.reason + '.' });
+    const segsIn = Array.isArray(b.segs)
+      ? b.segs.map(g => (g && g.to > g.from && g.from >= 0 && g.to <= 13) ? { from: +g.from, to: +g.to } : null)
+      : undefined;
     const r = store.hold({
       train: b.train, date: b.date || TODAY(), cls: b.cls || 'SL',
       from: +b.from, to: +b.to, berthIdxs: (b.berthIdxs || []).map(Number),
       pax: +b.pax || (b.berthIdxs || []).length, who: b.who, fees: +b.fees || 0,
+      segs: segsIn, hop: !!b.hop,
     });
     return send(res, r.ok ? 200 : 409, r);
   }

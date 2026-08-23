@@ -832,7 +832,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     <sc-for list="{{ allotment }}" as="a" hint-placeholder-count="2">
       <div style="padding:12px 0;border-top:1px solid var(--k-f4f3ef);display:flex;gap:14px;align-items:flex-start">
         <div style="flex:1">
-          <div style="font:700 15px/1.3 Manrope,sans-serif">Passenger {{ a.n }}</div>
+          <div style="font:700 15px/1.3 Manrope,sans-serif">{{ a.title }}</div>
           <div style="{{ a.noteStyle }}">{{ a.note }}</div>
         </div>
         <div style="flex:none;text-align:right">
@@ -1012,6 +1012,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <span style="font:700 22px/1 'Cormorant Garamond',Georgia,serif;color:var(--k-fg-d8385a)">{{ r.price }}</span>
           <span style="font:500 12.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84);text-decoration:line-through">{{ r.full }}</span>
           <span style="background:var(--k-e6f4ec);color:var(--k-fg-14663a);font:800 10.5px/1 Manrope,sans-serif;padding:5px 9px;border-radius:999px">{{ r.save }}</span>
+          <span style="font:600 11px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ r.allIn }}</span>
         </div>
       </div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:16px">
@@ -2078,20 +2079,23 @@ class Component extends DCLogic {
     const S=this.state;
     if(S.holdId||S.holdBusy||!S.srvOn)return;
     const n=S.picks.length;
+    const hopMode=S.picks.some(p=>p.seg);
     if(!n)return this.setState({page:'seats',holdErr:'Pick a berth first.'});
-    if(n<S.pax)return this.setState({page:'seats',
+    if(!hopMode&&n<S.pax)return this.setState({page:'seats',
       holdErr:'Pick '+(S.pax-n)+' more berth'+(S.pax-n>1?'s':'')+' — one for each passenger.'});
     this.setState({holdBusy:true,holdErr:null});
     const km=Math.abs(this.ST[S.to].km-this.ST[S.from].km);
     const base=this.fare(S.cls,km);
     const berthSum=S.picks.reduce((a,p)=>a+(p.price!=null?p.price:base),0);
     const gst=S.cls==='SL'?0:Math.round(berthSum*.05);
-    const fees=20*n+(S.cls==='SL'?0:15*n)+gst+12;
+    const nTrav=hopMode?S.pax:n;                       // fees follow travellers, not berths
+    const fees=20*nTrav+(S.cls==='SL'?0:15*nTrav)+gst+12;
     let r,j;
     try{
       r=await this.tfetch('/api/hold',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({train:S.train,cls:S.cls,from:S.from,to:S.to,date:this.srvDate(),
-          berthIdxs:S.picks.map(p=>p.idx),pax:n,fees:fees,
+          berthIdxs:S.picks.map(p=>p.idx),pax:hopMode?S.pax:n,fees:fees,
+          segs:hopMode?S.picks.map(p=>p.seg||null):undefined,hop:hopMode||undefined,
           who:(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest'})},8000);
       j=await r.json();
     }catch(e){
@@ -2596,11 +2600,20 @@ class Component extends DCLogic {
       :(S.picks.length&&S.picks.every(p=>p.price!=null))?S.picks.reduce((a,p)=>a+p.price,0)
       :baseFare*nPax;
     const gst=S.cls==='SL'?0:Math.round(berthSum*.05);
-    const total=berthSum+20*nPax+(S.cls==='SL'?0:15*nPax)+gst+12;
-    const allotment=Array.from({length:nPax},(_,i)=>{
+    const nTravC=(S.picks.length&&S.picks.some(p=>p.seg))?S.pax:nPax;
+    const total=berthSum+20*nTravC+(S.cls==='SL'?0:15*nTravC)+gst+12;
+    const hopConf=S.picks.length>0&&S.picks.some(p=>p.seg);
+    const allotment=hopConf
+      ?S.picks.map((pk,i)=>({
+        title:i===0?'Passenger 1 · seat-hop ('+S.picks.length+' berths)':'',
+        berth:pk.coach+' / '+pk.no,type:this.typeName(pk.type),
+        note:'Berth '+(i+1)+': '+ST[pk.seg.from].n+' → '+ST[pk.seg.to].n
+          +(i<S.picks.length-1?' · then walk to your next berth here':' · ride to the end'),
+        noteStyle:{font:'600 12px/1.4 Manrope,sans-serif',color:i%2?'var(--k-fg-c2870a)':'var(--k-fg-14663a)',marginTop:5}}))
+      :Array.from({length:nPax},(_,i)=>{
       const pk=S.picks[i];
       const later=pk&&pk.k==='part'&&pk.at>S.from;
-      return {n:i+1,berth:pk?pk.coach+' / '+pk.no:'Not allotted',type:pk?this.typeName(pk.type):'—',
+      return {title:'Passenger '+(i+1),berth:pk?pk.coach+' / '+pk.no:'Not allotted',type:pk?this.typeName(pk.type):'—',
         note:later?'Yours from '+ST[pk.at].n+' onwards.':pk?'Yours for your whole journey.':'',
         noteStyle:{font:'600 12px/1.4 Manrope,sans-serif',color:later?'var(--k-fg-1f3f8f)':'var(--k-fg-8a8a84)',marginTop:5}};
     });
@@ -2883,9 +2896,10 @@ class Component extends DCLogic {
       payLabel:S.picks.length===S.pax?'Review booking →':'Pick '+(S.pax-S.picks.length)+' more',
 
       allotment,fareRows:[
-        {label:cls.label+' berth fare × '+nPax,value:'₹'+money(berthSum),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
-        {label:'Reservation charge',value:'₹'+money(20*nPax),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
-        {label:'Superfast charge',value:S.cls==='SL'?'—':'₹'+money(15*nPax),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
+        {label:hopConf?(cls.label+' · seat-hop · '+S.picks.length+' berths, '+nTravC+' passenger'+(nTravC>1?'s':'')):(cls.label+' berth fare × '+nPax),
+          value:'₹'+money(berthSum),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
+        {label:'Reservation charge',value:'₹'+money(20*nTravC),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
+        {label:'Superfast charge',value:S.cls==='SL'?'—':'₹'+money(15*nTravC),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         {label:'GST',value:gst?'₹'+money(gst):'—',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         {label:'Convenience fee',value:'₹12',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         {label:'Total payable',value:'₹'+money(total),k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}
@@ -2900,7 +2914,12 @@ class Component extends DCLogic {
         {label:'Coach',value:S.picks.length?S.picks[0].coach:cls.coaches[0]},
         {label:'Train',value:tr.no}
       ],
-      ticketPax:Array.from({length:nPax},(_,i)=>{
+      ticketPax:hopConf
+        ?[{name:'Ananya Rao',
+           berth:S.picks.map(p=>p.coach+'/'+p.no).join(' + '),type:'Seat-hop',
+           note:'Change berth at '+ST[S.picks[0].seg.to].n,
+           noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:'var(--k-fg-c2870a)'}}]
+        :Array.from({length:nPax},(_,i)=>{
         const nm=['Ananya Rao','Vikram Shetty','Lakshmi Devi','Rahul Menon','Fatima Sheikh','Joseph Mathew'][i]||'Passenger '+(i+1);
         const pk=S.picks[i];
         const later=pk&&pk.k==='part'&&pk.at>S.from;
@@ -3178,17 +3197,18 @@ class Component extends DCLogic {
               const picks=plan.map(g=>{
                 const b=br2[g.idx];
                 const st=this.stateOf(b,f,t);
-                const km=covered(b);
-                const pr=km>=jkm?fullFare:Math.max(5,Math.round(fullFare*km/jkm/5)*5);
-                return {key:b.coach+'-'+b.no,idx:b.idx,price:pr,no:b.no,coach:b.coach,
-                  type:b.type,k:st.k,at:st.at};
+                return {key:b.coach+'-'+b.no,idx:b.idx,price:segPrice(g.from,g.to),
+                  no:b.no,coach:b.coach,type:b.type,k:st.k,at:st.at,
+                  seg:{from:g.from,to:g.to}};
               });
-              this.setState({train:x.no,page:'confirm',picks,pax:Math.max(2,picks.length),
+              this.setState({train:x.no,page:'confirm',picks,pax:1,
                 routeOpen:true,classModal:false,countModal:false,hov:null},
                 ()=>this.startHold());
               window.scrollTo(0,0);};
             return {name:x.name,no:x.no,dep:this.toHHMM(this.sMin(x,S.from,'d')),
               freeN:n.free,barItems,
+              allIn:(()=>{const g2=S.cls==='SL'?0:Math.round(price*.05);
+                return '₹'+(price+20+(S.cls==='SL'?0:15)+g2+12)+' all-in with fees';})(),
               boardName:ST[S.from].n,boardTime:'board '+depS,
               endName:ST[S.to].n,endTime:arrS==null?'':('arrive '+this.toHHMM(arrS)),
               segs,price:'\u20b9'+price,full:price<fullFare?('\u20b9'+fullFare):'',
