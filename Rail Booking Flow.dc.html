@@ -436,6 +436,14 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         </sc-for>
       </div>
     </div>
+    <div style="flex:1;min-width:170px">
+      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Sort by</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <sc-for list="{{ resultSorts }}" as="o" hint-placeholder-count="3">
+          <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.l }}</div>
+        </sc-for>
+      </div>
+    </div>
     <div class="k-calwrap" style="position:relative">
       <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Date</div>
       <div onClick="{{ toggleCal }}" style="{{ dateBtnSmall }}"><span>{{ dateBtnText }}</span><span style="color:var(--k-fg-d8385a)">&#9662;</span></div>
@@ -1392,7 +1400,16 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </sc-for>
     </div>
     <div style="margin-top:16px;font-size:12.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ quotaNote }}</div>
-    <button onClick="{{ goShowtimes }}" style="width:100%;margin-top:20px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15px/1 Manrope,sans-serif;padding:16px;border-radius:6px;cursor:pointer;min-height:48px">Show departures</button>
+    <div style="margin:20px -22px 14px;background:var(--k-f4f4f2);padding:9px 22px;font:600 11.5px/1 Manrope,sans-serif;letter-spacing:.09em;color:var(--k-fg-6a6d75);text-transform:uppercase">Passengers</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <sc-for list="{{ countOpts }}" as="c" hint-placeholder-count="6">
+        <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.n }}</div>
+      </sc-for>
+    </div>
+    <div style="margin-top:12px;font-size:12.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ countNote }}</div>
+    <div style="margin-top:18px;padding:12px 14px;background:var(--k-f4f3ef);border-radius:8px;font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-40434a)">{{ modalTripLine }}</div>
+    <button onClick="{{ goSeats }}" style="width:100%;margin-top:14px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15px/1 Manrope,sans-serif;padding:16px;border-radius:6px;cursor:pointer;min-height:48px">{{ modalGoLabel }}</button>
+    <div onClick="{{ goShowtimes }}" style="margin-top:10px;text-align:center;font:600 12px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84);cursor:pointer">or see every boarding point for this train</div>
   </div>
 </div>
 </sc-if>
@@ -3129,6 +3146,9 @@ class Component extends DCLogic {
         background:n===S.pax?'var(--k-d8385a)':'transparent',color:n===S.pax?'var(--k-fg-fff)':'var(--k-fg-40434a)'},
         onClick:()=>this.setState({pax:n,picks:[]})})),
       modalTiers:tiers,
+      modalTripLine:tr.no+' \u00b7 '+fromS.n+' \u2192 '+toS.n+' \u00b7 '+dateLong
+        +' \u00b7 departs '+disp(depJ),
+      modalGoLabel:'Select berths for '+S.pax+' passenger'+(S.pax>1?'s':'')+' \u2192',
       chosenSlotLabel:tr.no+' '+tr.name,
       chosenSlotDate:dateLong+' '+dsel.getFullYear(),
       chosenSlotTimes:'Departs '+disp(depJ)+' from '+fromS.n+'  →  arrives '+disp(arrJ)+(arrJ>=1440&&depJ<1440?' (+1 day)':'')+' at '+toS.n+' · '+dur,
@@ -3748,8 +3768,17 @@ class Component extends DCLogic {
         font:'500 13.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
 
       resultsCount:this.TRAINS.filter(x=>this.serves(x,S.from,S.to)).length,
+      resultSorts:[{k:'time',l:'Departure time'},{k:'free',l:'Most berths free'},{k:'dur',l:'Fastest'}]
+        .map(o=>({l:o.l,onClick:()=>{this._c={};this.setState({fSort:o.k});},
+          style:this.chip(fSort===o.k,'8px 14px')})),
       resultGroups:(()=>{
-      const rows=this.TRAINS.filter(x=>this.serves(x,S.from,S.to)).sort((a,b)=>this.sMin(a,S.from,'d')%1440-this.sMin(b,S.from,'d')%1440).map(x=>{
+      const legOf=x=>{const d1=this.sMin(x,S.from,'d'),a1=this.sMin(x,S.to,'a');
+        return (d1==null||a1==null)?1e9:(((a1-d1)%1440)+1440)%1440;};
+      const byTimeR=(a,b)=>this.sMin(a,S.from,'d')%1440-this.sMin(b,S.from,'d')%1440;
+      const rows=this.TRAINS.filter(x=>this.serves(x,S.from,S.to)).sort((a,b)=>
+        fSort==='free'?(this.counts(S.cls,b.no).free-this.counts(S.cls,a.no).free)||byTimeR(a,b)
+        :fSort==='dur'?(legOf(a)-legOf(b))||byTimeR(a,b)
+        :byTimeR(a,b)).map(x=>{
         const lv=this.liveOf(x);
         const dM=this.sMin(x,S.from,'d'),aM=this.sMin(x,S.to,'a');
         const open=()=>{this.setState({train:x.no,page:'train',routeOpen:true});window.scrollTo(0,0);};
