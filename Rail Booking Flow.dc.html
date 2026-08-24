@@ -116,6 +116,8 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 .k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:90}
 @media (max-width:860px){.k-calpop3{position:fixed;top:110px;left:12px;right:12px;width:auto!important}}
 .k-stnrow:hover{background:var(--k-f4f3ef)}
+.k-msheet::-webkit-scrollbar{width:6px}
+.k-msheet::-webkit-scrollbar-thumb{background:var(--k-d4d3ce);border-radius:3px}
 @media (max-width:860px){.k-calpop{position:fixed;top:170px;left:12px;right:12px;width:auto!important}}
 @media (max-width:1024px){
   .k-restrain{flex:1 1 100%!important;width:100%!important}
@@ -1390,58 +1392,71 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 </sc-if>
 
 <sc-if value="{{ classModalOpen }}" hint-placeholder-val="{{ false }}">
-<div style="position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
-  <div onClick="{{ closeModals }}" style="position:absolute;inset:0;background:rgba(16,19,25,.55);animation:fadeIn .16s both"></div>
-  <div style="position:relative;width:430px;max-width:100%;margin:auto;background:var(--k-fff);border-radius:10px;padding:20px 22px 24px;animation:popIn .2s both;box-shadow:0 24px 60px rgba(0,0,0,.3)">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
-      <div>
-        <div style="font:700 11px/1.3 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--k-fg-d8385a);text-transform:uppercase;margin-bottom:7px">{{ modalEyebrow }}</div>
-        <div style="font:700 20px/1.25 Manrope,sans-serif">Select class and quota</div>
+<div style="position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div onClick="{{ closeModals }}" style="position:absolute;inset:0;background:rgba(16,19,25,.6);animation:fadeIn .16s both"></div>
+  <div style="position:relative;width:524px;max-width:100%;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:16px;overflow:hidden;animation:popIn .22s both;box-shadow:0 30px 80px rgba(0,0,0,.45)">
+
+    <div style="flex:none;display:flex;align-items:flex-start;gap:14px;padding:17px 22px 15px;border-bottom:1px solid var(--k-f0efeb)">
+      <div style="min-width:0;flex:1">
+        <div style="font:700 10.5px/1 Manrope,sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--k-fg-d8385a);margin-bottom:7px">{{ modalEyebrow }}</div>
+        <div style="font:800 19px/1.2 Manrope,sans-serif;letter-spacing:-.01em">Select class and quota</div>
       </div>
-      <div onClick="{{ closeModals }}" style="cursor:pointer;color:var(--k-fg-8a8a84);font-size:19px;line-height:1;flex:none">&#215;</div>
+      <div onClick="{{ closeModals }}" style="flex:none;width:36px;height:36px;margin:-6px -8px 0 0;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--k-fg-8a8a84);font-size:19px;line-height:1;cursor:pointer">&#215;</div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin:22px 0 12px">
-      <div style="flex:1;font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase">Class</div>
-      <div onClick="{{ modalAllClick }}" style="{{ modalAllStyle }}">{{ modalAllLabel }}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
-      <sc-for list="{{ modalClasses }}" as="c" hint-placeholder-count="4">
-        <div onClick="{{ c.onClick }}" style="{{ c.style }}">
-          <div style="{{ c.rowStyle }}"><span style="{{ c.labelStyle }}">{{ c.label }}</span><span style="{{ c.priceStyle }}">{{ c.price }}</span></div>
-          <div style="{{ c.subStyle }}">{{ c.sub }}</div>
+    <div class="k-msheet" style="flex:1;min-height:0;overflow-y:auto;padding:17px 22px 19px">
+
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px">
+        <div style="font:700 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Class</div>
+        <div onClick="{{ modalAllClick }}" style="{{ modalAllStyle }}">{{ modalAllLabel }}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <sc-for list="{{ modalClasses }}" as="c" hint-placeholder-count="4">
+          <div onClick="{{ c.onClick }}" style="{{ c.style }}">
+            <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+              <span style="{{ c.labelStyle }}">{{ c.label }}</span>
+              <span style="{{ c.priceStyle }}">{{ c.price }}</span>
+            </span>
+            <span style="{{ c.subStyle }}">{{ c.sub }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:9px;font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ classNote }}</div>
+
+      <div style="height:1px;background:var(--k-f0efeb);margin:17px 0"></div>
+
+      <div style="font:700 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:10px">Quota</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px">
+        <sc-for list="{{ modalQuotas }}" as="q" hint-placeholder-count="5">
+          <div onClick="{{ q.onClick }}" style="{{ q.style }}">{{ q.label }}</div>
+        </sc-for>
+      </div>
+      <div style="margin-top:9px;font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ quotaNote }}</div>
+
+      <div style="height:1px;background:var(--k-f0efeb);margin:17px 0"></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div style="min-width:0">
+          <div style="font:700 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">Passengers</div>
+          <div style="font:500 12px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">Up to 6 per booking</div>
         </div>
-      </sc-for>
-    </div>
-    <div style="margin-top:12px;font-size:12.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ classNote }}</div>
-
-    <div style="border-top:1px solid var(--k-f0efeb);margin:20px 0 0"></div>
-    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin:16px 0 11px">Quota</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <sc-for list="{{ modalQuotas }}" as="q" hint-placeholder-count="5">
-        <div onClick="{{ q.onClick }}" style="{{ q.style }}">{{ q.label }}</div>
-      </sc-for>
-    </div>
-    <div style="margin-top:12px;font-size:12.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ quotaNote }}</div>
-
-    <div style="border-top:1px solid var(--k-f0efeb);margin:20px 0 0"></div>
-    <div style="display:flex;align-items:center;gap:14px;margin-top:16px">
-      <div style="flex:1">
-        <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase">Passengers</div>
-        <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:5px">Up to 6 per booking</div>
+        <div style="flex:none;display:flex;align-items:center;gap:4px;background:var(--k-fafaf8);border:1px solid var(--k-e2e0da);border-radius:11px;padding:4px">
+          <div onClick="{{ paxMinus }}" style="{{ paxDecStyle }}">&#8722;</div>
+          <div style="min-width:42px;text-align:center;font:800 19px/1 Manrope,sans-serif">{{ paxNum }}</div>
+          <div onClick="{{ paxPlus }}" style="{{ paxIncStyle }}">+</div>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;background:var(--k-fafaf8);border:1px solid var(--k-e2e0da);border-radius:10px;padding:6px 10px">
-        <div onClick="{{ paxMinus }}" style="{{ paxBtn }}">&#8722;</div>
-        <div style="min-width:22px;text-align:center;font:700 17px/1 Manrope,sans-serif">{{ paxNum }}</div>
-        <div onClick="{{ paxPlus }}" style="{{ paxBtn }}">+</div>
-      </div>
-    </div>
-    <div style="margin-top:12px;font-size:12.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ countNote }}</div>
 
-    <div style="border-top:1px solid var(--k-f0efeb);margin:20px 0 0"></div>
-    <div style="margin-top:14px;font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ modalTripLine }}</div>
-    <button onClick="{{ goSeats }}" style="width:100%;margin-top:14px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15.5px/1 Manrope,sans-serif;padding:17px;border-radius:9px;cursor:pointer;min-height:50px">{{ modalGoLabel }}</button>
-    <div onClick="{{ goShowtimes }}" style="margin-top:12px;text-align:center;font:600 12px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84);cursor:pointer">See every boarding point for this train</div>
+    </div>
+
+    <div style="flex:none;padding:14px 22px 16px;border-top:1px solid var(--k-f0efeb);background:var(--k-fafaf8)">
+      <div style="font:500 11.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-bottom:10px">{{ modalTripLine }}</div>
+      <button onClick="{{ goSeats }}" style="width:100%;height:50px;border:none;border-radius:10px;background:var(--k-d8385a);color:var(--k-fg-fff);font:800 15.5px/1 Manrope,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px">
+        <span>{{ modalGoLabel }}</span><span style="font-size:17px;line-height:1">&#8594;</span>
+      </button>
+      <div onClick="{{ goShowtimes }}" style="margin-top:10px;text-align:center;font:600 12px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84);cursor:pointer">See every boarding point for this train</div>
+    </div>
+
   </div>
 </div>
 </sc-if>
@@ -3180,32 +3195,42 @@ class Component extends DCLogic {
         const on=!S.allCls&&c.k===S.cls&&!dead;
         return {label:c.label,price:'\u20b9'+money(this.fare(c.k,km)),
           sub:dead?'No berths free':(n.free+' free \u00b7 '+n.part+' partial'),
-          style:{padding:'13px 15px',borderRadius:9,cursor:dead?'default':'pointer',textAlign:'left',
+          style:{display:'flex',flexDirection:'column',gap:5,textAlign:'left',
+            padding:'11px 13px',borderRadius:11,cursor:dead?'default':'pointer',
             border:'1px solid '+(on?'var(--k-d8385a)':'var(--k-e2ccd3)'),
             background:on?'var(--k-d8385a)':(dead?'var(--k-fafaf8)':'var(--k-fff)'),
-            opacity:dead?.55:1},
-          rowStyle:{display:'flex',alignItems:'baseline',gap:10},
-          labelStyle:{flex:1,font:'700 14px/1.2 Manrope,sans-serif',
+            opacity:dead?.6:1},
+          labelStyle:{font:'700 14.5px/1.2 Manrope,sans-serif',
             color:on?'var(--k-fg-fff)':(dead?'var(--k-fg-a8a8a2)':'var(--k-fg-d8385a)')},
-          priceStyle:{font:'700 14px/1.2 Manrope,sans-serif',
+          priceStyle:{font:'800 14.5px/1.2 Manrope,sans-serif',
             color:on?'var(--k-fg-fff)':(dead?'var(--k-fg-a8a8a2)':'var(--k-fg-14161a)')},
-          subStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,
-            color:on?'rgba(255,255,255,.85)':(dead?'var(--k-fg-a8a8a2)':'var(--k-fg-14663a)')},
+          subStyle:{font:'600 11.5px/1.3 Manrope,sans-serif',
+            color:on?'rgba(255,255,255,.82)':(dead?'var(--k-fg-a8a8a2)':'var(--k-fg-14663a)')},
           onClick:dead?()=>{}:()=>{this._c={};this.setState({cls:c.k,allCls:false,picks:[]});}};}),
       modalAllLabel:(()=>{const t2=this.CLS.reduce((a,c)=>a+this.counts(c.k,S.train).free,0);
         return 'All classes \u00b7 '+t2+' free';})(),
-      modalAllStyle:{font:'600 11.5px/1 Manrope,sans-serif',padding:'8px 13px',borderRadius:999,
-        cursor:'pointer',border:'1px solid '+(S.allCls?'var(--k-d8385a)':'var(--k-e2ccd3)'),
-        background:S.allCls?'var(--k-d8385a)':'var(--k-fff)',
-        color:S.allCls?'var(--k-fg-fff)':'var(--k-fg-40434a)'},
-      modalAllClick:()=>{this._c={};this.setState({allCls:true,picks:[]});},
+      modalAllStyle:{height:28,padding:'0 11px',borderRadius:7,display:'inline-flex',
+        alignItems:'center',font:'700 11.5px/1 Manrope,sans-serif',cursor:'pointer',
+        border:'1px solid '+(S.allCls?'var(--k-d8385a)':'var(--k-e2ccd3)'),
+        background:S.allCls?'var(--k-fdf3f5)':'transparent',
+        color:S.allCls?'var(--k-fg-d8385a)':'var(--k-fg-8a8a84)'},
+      modalAllClick:()=>{this._c={};this.setState({allCls:!S.allCls,picks:[]});},
       paxMinus:()=>this.setState({pax:Math.max(1,(S.pax||1)-1),picks:[]}),
       paxPlus:()=>this.setState({pax:Math.min(6,(S.pax||1)+1),picks:[]}),
       paxNum:String(S.pax||1),
-      paxBtn:{width:34,height:34,borderRadius:8,border:'1px solid var(--k-d4d3ce)',
-        background:'var(--k-fff)',color:'var(--k-fg-14161a)',cursor:'pointer',
-        font:'700 17px/1 Manrope,sans-serif',display:'flex',alignItems:'center',justifyContent:'center'},
-      classNote:(()=>{
+      paxDecStyle:{width:38,height:38,borderRadius:8,border:'none',cursor:(S.pax||1)>1?'pointer':'default',
+        background:(S.pax||1)>1?'var(--k-e8e7e2)':'var(--k-f4f4f2)',
+        color:(S.pax||1)>1?'var(--k-fg-14161a)':'var(--k-fg-b8b8b2)',
+        font:'700 20px/1 Manrope,sans-serif',display:'flex',alignItems:'center',justifyContent:'center'},
+      paxIncStyle:{width:38,height:38,borderRadius:8,border:'none',cursor:(S.pax||1)<6?'pointer':'default',
+        background:(S.pax||1)<6?'var(--k-e8e7e2)':'var(--k-f4f4f2)',
+        color:(S.pax||1)<6?'var(--k-fg-14161a)':'var(--k-fg-b8b8b2)',
+        font:'700 20px/1 Manrope,sans-serif',display:'flex',alignItems:'center',justifyContent:'center'},
+      classNote:S.allCls?(()=>{
+        const t3=this.CLS.reduce((a,c)=>{const n=this.counts(c.k,S.train);
+          return{f:a.f+n.free,p:a.p+n.part};},{f:0,p:0});
+        return 'Every class \u00b7 '+t3.f+' berths free your whole way, '+t3.p+' cover only part of it.';})()
+        :(()=>{
         if(S.allCls){const tot=this.CLS.reduce((a,c)=>{const n=this.counts(c.k,S.train);
             return{free:a.free+n.free,part:a.part+n.part};},{free:0,part:0});
           return 'All classes · '+tot.free+' berths free your whole way on this journey, '
@@ -3214,8 +3239,8 @@ class Component extends DCLogic {
         return cls.label+' · ₹'+money(this.fare(S.cls,km))+' · '+n.free
           +' berths free your whole way on this journey, '+n.part+' cover part of it.';})(),
       modalQuotas:Object.keys(qNotes).map(q=>({label:q,
-        style:{padding:'9px 14px',borderRadius:999,cursor:'pointer',whiteSpace:'nowrap',
-          font:(q===S.quota?'700':'600')+' 12.5px/1 Manrope,sans-serif',
+        style:{height:36,padding:'0 13px',borderRadius:9,display:'inline-flex',alignItems:'center',
+          cursor:'pointer',whiteSpace:'nowrap',font:'700 13px/1 Manrope,sans-serif',
           border:'1px solid '+(q===S.quota?'var(--k-d8385a)':'var(--k-e2ccd3)'),
           background:q===S.quota?'var(--k-fdf3f5)':'var(--k-fff)',
           color:q===S.quota?'var(--k-fg-d8385a)':'var(--k-fg-40434a)'},
@@ -3229,7 +3254,7 @@ class Component extends DCLogic {
       modalTiers:tiers,
       modalEyebrow:tr.no+' '+tr.name+' \u00b7 '+dsel.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}).toUpperCase(),
       modalTripLine:fromS.n+' \u2192 '+toS.n+' \u00b7 departs '+disp(depJ)+' \u00b7 arrives '+disp(arrJ),
-      modalGoLabel:'Select berths for '+S.pax+' passenger'+(S.pax>1?'s':'')+' \u2192',
+      modalGoLabel:'Select berths for '+S.pax+' passenger'+(S.pax>1?'s':''),
       chosenSlotLabel:tr.no+' '+tr.name,
       chosenSlotDate:dateLong+' '+dsel.getFullYear(),
       chosenSlotTimes:'Departs '+disp(depJ)+' from '+fromS.n+'  →  arrives '+disp(arrJ)+(arrJ>=1440&&depJ<1440?' (+1 day)':'')+' at '+toS.n+' · '+dur,
