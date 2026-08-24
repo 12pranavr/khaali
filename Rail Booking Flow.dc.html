@@ -363,10 +363,10 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 
 <div onClick="{{ toggleChat }}" style="{{ chatFab }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Ask Saarthi</span></div>
 <div style="{{ chatPanel }}">
-  <div style="flex:none;background:#1f2a63;color:#f4efe6;padding:13px 16px;display:flex;align-items:center;gap:11px">
+  <div style="flex:none;background:var(--k-1a1e26);color:#f4efe6;padding:13px 16px;display:flex;align-items:center;gap:11px">
     <div style="position:relative;width:40px;height:40px;flex:none">
       <div style="{{ chatPulse }}"></div>
-      <div style="position:absolute;inset:0;border-radius:50%;background:#c13a26;color:#fff;display:flex;align-items:center;justify-content:center;font:700 19px/1 'Cormorant Garamond',Georgia,serif">S</div>
+      <div style="position:absolute;inset:0;border-radius:50%;background:var(--k-d8385a);color:var(--k-fg-fff);display:flex;align-items:center;justify-content:center;font:700 19px/1 'Cormorant Garamond',Georgia,serif">S</div>
     </div>
     <div style="flex:1;min-width:0">
       <div style="font:700 18px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:.04em">Saarthi</div>
@@ -388,18 +388,18 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
     </sc-for>
     <div style="{{ chatSuggWrap }}">
-      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8b90a5;margin:4px 0 1px">TRY SAYING</div>
+      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;color:var(--k-fg-8a8a84);margin:4px 0 1px">TRY SAYING</div>
       <sc-for list="{{ chatSuggs }}" as="g" hint-placeholder-count="3">
-        <div onClick="{{ g.onClick }}" style="background:#fff;border:1px solid #e2d4b8;border-radius:10px;padding:11px 14px;cursor:pointer">
-          <div style="font:600 14px/1.5 'Noto Sans Devanagari',Archivo,sans-serif;color:#1f2a63">{{ g.t }}</div>
-          <div style="font:500 11.5px/1.4 Archivo,sans-serif;color:#8b90a5;margin-top:2px">{{ g.s }}</div>
+        <div onClick="{{ g.onClick }}" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:11px 14px;cursor:pointer">
+          <div style="font:600 14px/1.5 'Noto Sans Devanagari',Archivo,sans-serif;color:var(--k-fg-14161a)">{{ g.t }}</div>
+          <div style="font:500 11.5px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84);margin-top:2px">{{ g.s }}</div>
         </div>
       </sc-for>
     </div>
     <div style="{{ chatBusyStyle }}"><span style="{{ chatDot1 }}"></span><span style="{{ chatDot2 }}"></span><span style="{{ chatDot3 }}"></span></div>
   </div>
   <div style="{{ endRowStyle }}"><div onClick="{{ endCallClick }}" style="{{ endCallStyle }}"><span style="font-size:11px">&#9646;</span>End call</div></div>
-  <div style="flex:none;border-top:1px solid #e2d4b8;background:#f6efdd;padding:13px 14px;display:flex;align-items:center;gap:10px">
+  <div style="flex:none;border-top:1px solid var(--k-e6e5e0);background:var(--k-fafaf8);padding:13px 14px;display:flex;align-items:center;gap:10px">
     <div style="position:relative;width:48px;height:48px;flex:none">
       <div style="{{ micPulse }}"></div>
       <div onClick="{{ toggleRec }}" title="Speak" style="{{ micStyle }}">
@@ -409,10 +409,10 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     <div style="{{ chatListenBar }}">
       <div id="saarthi-lvl" style="flex:1;display:flex;align-items:flex-end;gap:3px;height:20px;overflow:hidden">
         <sc-for list="{{ chatLvlBars }}" as="b" hint-placeholder-count="18">
-          <span style="flex:1;height:3px;min-width:3px;border-radius:2px;background:#c13a26;transition:height .08s linear"></span>
+          <span style="flex:1;height:3px;min-width:3px;border-radius:2px;background:var(--k-d8385a);transition:height .08s linear"></span>
         </sc-for>
       </div>
-      <span style="flex:none;font:600 11.5px/1 Archivo,sans-serif;color:#c13a26;font-style:normal">{{ chatRecTime }} &#183; Listening&#8230; tap mic to finish</span>
+      <span style="flex:none;font:600 11.5px/1 Archivo,sans-serif;color:var(--k-fg-d8385a);font-style:normal">{{ chatRecTime }} &#183; Listening&#8230; tap mic to finish</span>
     </div>
     <input value="{{ chatQ }}" onChange="{{ setChatQ }}" onKeyDown="{{ chatKey }}" placeholder="&#2354;&#2367;&#2326;&#2367;&#2319; &#2351;&#2366; &#127908; &#2342;&#2348;&#2366;&#2311;&#2319;&#8230; / type or tap the mic" style="{{ chatInputStyle }}"></input>
     <button onClick="{{ sendChat }}" style="{{ chatSendStyle }}">&#10148;</button>
@@ -3476,9 +3476,9 @@ class Component extends DCLogic {
       chatReset:()=>this.chatReset(),
       endCallClick:()=>this.endCall(),
       endRowStyle:{display:S.chatCall?'flex':'none',flex:'none',justifyContent:'center',
-        padding:'6px 0 8px',background:'#f8f2e4'},
+        padding:'6px 0 8px',background:'var(--k-fbfbfa)'},
       endCallStyle:{display:'inline-flex',alignItems:'center',gap:6,
-        background:'#c13a26',color:'#fff',font:'700 12px/1 Archivo,Manrope,sans-serif',
+        background:'var(--k-d8385a)',color:'#fff',font:'700 12px/1 Archivo,Manrope,sans-serif',
         padding:'10px 18px',borderRadius:999,cursor:'pointer',
         boxShadow:'0 6px 16px rgba(158,45,28,.3)'},
       chatSub:S.chatRec?'Listening\u2026':S.chatBusy?'Thinking\u2026':S.chatSpeak?'Speaking\u2026':'ask in any Indian language',
@@ -3501,40 +3501,40 @@ class Component extends DCLogic {
         {t:'\u0c87\u0cb5\u0ca4\u0ccd\u0ca4\u0cc1 \u0cac\u0cc6\u0c82\u0c97\u0cb3\u0cc2\u0cb0\u0cbf\u0c97\u0cc6 \u0caf\u0cbe\u0cb5 \u0c9f\u0ccd\u0cb0\u0cc6\u0cd6\u0ca8\u0ccd \u0c87\u0ca6\u0cc6?',s:'Which trains to Bengaluru today? \u00b7 Kannada'},
         {t:'amber seat sasti kyun hoti hai?',s:'Why is the amber berth cheaper?'},
       ].map(g=>({t:g.t,s:g.s,onClick:()=>{this.setState({chatQ:''});this.sendChat(true,g.t);}})),
-      chatInputStyle:{display:S.chatRec?'none':'block',flex:1,minWidth:0,background:'#fff',
-        border:'1px solid #d8c9ac',borderRadius:10,padding:'12px 14px',
-        font:"500 14px/1.4 'Noto Sans Devanagari',Archivo,Manrope,sans-serif",color:'#1f2a63',outline:'none',minHeight:46},
+      chatInputStyle:{display:S.chatRec?'none':'block',flex:1,minWidth:0,background:'var(--k-fff)',
+        border:'1px solid var(--k-d4d3ce)',borderRadius:10,padding:'12px 14px',
+        font:"500 14px/1.4 'Noto Sans Devanagari',Archivo,Manrope,sans-serif",color:'var(--k-fg-14161a)',outline:'none',minHeight:46},
       chatSendStyle:{display:S.chatRec?'none':'flex',flex:'none',width:46,height:46,borderRadius:10,border:'none',
         cursor:'pointer',alignItems:'center',justifyContent:'center',fontSize:15,color:'#fff',
-        background:(S.chatQ||'').trim()?'#c13a26':'#d8c9ac',transition:'background .2s'},
+        background:(S.chatQ||'').trim()?'var(--k-d8385a)':'var(--k-d4d3ce)',transition:'background .2s'},
       chatListenBar:{display:S.chatRec?'flex':'none',flex:1,minWidth:0,alignItems:'center',gap:12,
-        background:'#fff',border:'1px solid #c13a26',borderRadius:10,padding:'11px 14px',minHeight:46},
+        background:'var(--k-fff)',border:'1px solid var(--k-d8385a)',borderRadius:10,padding:'11px 14px',minHeight:46},
       chatRecTime:'0:'+String(S.chatRecSec||0).padStart(2,'0'),
       chatLvlBars:Array.from({length:18},()=>({})),
       toggleRec:()=>this.toggleRec(),
-      micPulse:{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid #c13a26',
+      micPulse:{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid var(--k-d8385a)',
         display:S.chatRec?'block':'none',animation:'kring 1.2s infinite'},
       micStyle:{position:'absolute',inset:0,width:48,height:48,borderRadius:'50%',border:'none',
         cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',
-        background:S.chatRec?'#9e2d1c':'#c13a26',boxShadow:'0 6px 16px rgba(158,45,28,.3)'},
+        background:S.chatRec?'var(--k-a71f3d)':'var(--k-d8385a)',boxShadow:'0 6px 16px rgba(158,45,28,.3)'},
       setChatQ:e=>this.setState({chatQ:e.target.value}),
       chatKey:e=>{if(e.key==='Enter')this.sendChat();},
       sendChat:()=>this.sendChat(),
       chatQ:S.chatQ||'',
       chatFab:{position:'fixed',right:22,bottom:22,zIndex:70,display:S.chatOpen?'none':'flex',
-        alignItems:'center',gap:9,background:'#c13a26',color:'#fff',
+        alignItems:'center',gap:9,background:'var(--k-d8385a)',color:'#fff',
         font:'700 14px/1 Archivo,Manrope,sans-serif',padding:'15px 22px',borderRadius:999,
         cursor:'pointer',boxShadow:'0 10px 28px rgba(158,45,28,.35)'},
       chatPanel:{position:'fixed',right:22,bottom:22,zIndex:70,
         width:'min(400px, calc(100vw - 28px))',height:'min(660px, calc(100vh - 80px))',
-        display:S.chatOpen?'flex':'none',flexDirection:'column',background:'#f8f2e4',
-        border:'1px solid #e2d4b8',borderRadius:14,overflow:'hidden',
+        display:S.chatOpen?'flex':'none',flexDirection:'column',background:'var(--k-fbfbfa)',
+        border:'1px solid var(--k-e6e5e0)',borderRadius:14,overflow:'hidden',
         boxShadow:'0 24px 60px rgba(40,45,90,.22)'},
       chatBusyStyle:{display:S.chatBusy?'flex':'none',alignSelf:'flex-start',gap:5,
-        background:'#fff',border:'1px solid #e2d4b8',borderRadius:'4px 14px 14px 14px',padding:'14px 18px'},
-      chatDot1:{width:7,height:7,borderRadius:'50%',background:'#8b90a5',animation:'kblink 1s infinite'},
-      chatDot2:{width:7,height:7,borderRadius:'50%',background:'#8b90a5',animation:'kblink 1s infinite',animationDelay:'.2s'},
-      chatDot3:{width:7,height:7,borderRadius:'50%',background:'#8b90a5',animation:'kblink 1s infinite',animationDelay:'.4s'},
+        background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:'4px 14px 14px 14px',padding:'14px 18px'},
+      chatDot1:{width:7,height:7,borderRadius:'50%',background:'var(--k-fg-a8a8a2)',animation:'kblink 1s infinite'},
+      chatDot2:{width:7,height:7,borderRadius:'50%',background:'var(--k-fg-a8a8a2)',animation:'kblink 1s infinite',animationDelay:'.2s'},
+      chatDot3:{width:7,height:7,borderRadius:'50%',background:'var(--k-fg-a8a8a2)',animation:'kblink 1s infinite',animationDelay:'.4s'},
       chatRows:((S.chatMsgs&&S.chatMsgs.length)?S.chatMsgs
         :[{role:'assistant',content:'\u0928\u092e\u0938\u094d\u0924\u0947! \u091f\u094d\u0930\u0947\u0928, \u0938\u0940\u091f, \u0926\u093e\u092e \u2014 \u091c\u094b \u092a\u0942\u091b\u0928\u093e \u0939\u0948 \u092c\u094b\u0932\u0915\u0930 \u092a\u0942\u091b\u093f\u090f\u0964'}]).map(m=>{
         const mine=m.role==='user';
@@ -3543,21 +3543,21 @@ class Component extends DCLogic {
           wrap:{display:'flex',flexDirection:'column',alignItems:mine?'flex-end':'flex-start',gap:6,
             animation:'popIn .3s both'},
           bub:{maxWidth:'88%',whiteSpace:'pre-wrap',
-            background:mine?'#1f2a63':'#fff',
-            border:mine?'none':'1px solid '+(playing?'#c13a26':'#e2d4b8'),
-            color:mine?'#f4efe6':'#1f2a63',
+            background:mine?'var(--k-14161a)':'var(--k-fff)',
+            border:mine?'none':'1px solid '+(playing?'var(--k-d8385a)':'var(--k-e6e5e0)'),
+            color:mine?'var(--k-fg-fff)':'var(--k-fg-14161a)',
             font:"500 14px/1.6 'Noto Sans Devanagari',Archivo,Manrope,sans-serif",padding:'11px 14px',
             borderRadius:mine?'14px 4px 14px 14px':'4px 14px 14px 14px'},
           footStyle:{display:mine?'none':'flex',alignItems:'center',gap:10,minHeight:20},
           spk:playing?'\u25fc stop':(S.chatLoadKey===m.content)?'\u23f3 \u2026':'\ud83d\udd0a listen',
           spkStyle:{font:'600 12px/1 Archivo,Manrope,sans-serif',
-            color:(playing||S.chatLoadKey===m.content)?'#c13a26':'#8b90a5',cursor:'pointer',padding:'3px 2px'},
+            color:(playing||S.chatLoadKey===m.content)?'var(--k-fg-d8385a)':'var(--k-fg-8a8a84)',cursor:'pointer',padding:'3px 2px'},
           pctWrap:{display:playing?'block':'none',flex:1,maxWidth:130,height:3,borderRadius:2,
-            background:'#e9e0cc',overflow:'hidden'},
-          pctBar:{height:'100%',width:(S.chatPlayPct||0)+'%',background:'#c13a26',transition:'width .15s linear'},
+            background:'var(--k-e8e7e2)',overflow:'hidden'},
+          pctBar:{height:'100%',width:(S.chatPlayPct||0)+'%',background:'var(--k-d8385a)',transition:'width .15s linear'},
           linkLabel:'Show me \u2192',
           linkStyle:{display:m.link?'inline-block':'none',font:'700 12px/1 Archivo,Manrope,sans-serif',
-            color:'#c13a26',cursor:'pointer',padding:'3px 2px'},
+            color:'var(--k-fg-d8385a)',cursor:'pointer',padding:'3px 2px'},
           onSpk:mine?()=>{}:()=>this.speakText(m.content.slice(0,480),this.langOf(m.content)),
           onLink:m.link?()=>{try{window.history.pushState({},'',m.link);}catch(e){}
             this.applyUrl();window.scrollTo(0,0);}:()=>{}};
