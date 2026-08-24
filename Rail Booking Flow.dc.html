@@ -1693,7 +1693,7 @@ class Component extends DCLogic {
   imgSrc(no,w){const m=this.imgFor(no);return m?'https://commons.wikimedia.org/wiki/Special:FilePath/'+encodeURIComponent(m.f)+'?width='+(w||640):'';}
   imgCredit(no){const m=this.imgFor(no);return m?'Photo: '+m.by+' / Wikimedia Commons':'';}
   imgHref(no){const m=this.imgFor(no);return m?'https://commons.wikimedia.org/wiki/File:'+encodeURIComponent(m.f):'';}
-  state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:2,seed:7,dayIdx:0,
+  state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
            city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
            q:'',searchOpen:false,searchSel:0,fOpen:null,fFare:'all',fSort:'time',dark:false,
@@ -3219,7 +3219,7 @@ class Component extends DCLogic {
       journeyKm:served?km:208,
 
       classModalOpen:S.classModal,countModalOpen:S.countModal,
-      openClassModal:()=>{if(this.cxOf(tr.no,S.dayIdx))return;this.setState({classModal:true,onlyThis:true});},
+      openClassModal:()=>{if(this.cxOf(tr.no,S.dayIdx))return;this.setState({classModal:true,onlyThis:true,pax:1});},
       heroFavGlyph:this.isFav(tr.no)?'\u2605':'\u2606',
       heroFavStyle:{cursor:'pointer',fontSize:'.72em',verticalAlign:'middle',
         color:this.isFav(tr.no)?'var(--k-fg-d8385a)':'rgba(255,255,255,.45)'},
@@ -4086,14 +4086,16 @@ class Component extends DCLogic {
           // Book opens the class/quota/passenger modal right here - no detour
           // through the train page just to press one more button.
           onBook:cx?()=>{}:()=>{this._c={};
-            this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[]});},
+            this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[],pax:1});},
           cells:this.CLS.map(c=>{const n=this.counts(c.k,x.no);const none=n.free+n.part===0;
             return {k:c.k,price:money(this.fare(c.k,km)),
               freeText:none?'Sold out':n.free+' free',partText:none?'':'+'+n.part+' en route',
               freeStyle:{font:'600 11px/1.3 Manrope,sans-serif',color:none?'var(--k-fg-a8a8a2)':n.free?'var(--k-fg-14663a)':'var(--k-fg-a8a8a2)',margin:'3px 0 1px'},
               style:{border:'1px solid '+(none?'var(--k-eeede9)':'var(--k-dce9e2)'),background:none?'var(--k-fafaf8)':'var(--k-f7fbf9)',
                 borderRadius:6,padding:'9px 12px',minWidth:104,cursor:none?'default':'pointer'},
-              onClick:none?()=>{}:()=>{this.setState({train:x.no,cls:c.k,page:'train',routeOpen:true,classModal:true});window.scrollTo(0,0);}};})};
+              // clicking a class cell means THAT class — switch off the
+              // all-classes default or the modal ignores the choice just made
+              onClick:none?()=>{}:()=>{this._c={};this.setState({train:x.no,cls:c.k,allCls:false,pax:1,picks:[],page:'train',routeOpen:true,classModal:true});window.scrollTo(0,0);}};})};
       });
       // live grouping only means something for tomorrow; a future date gets
       // one plain timetable so nobody reads today's positions into it
