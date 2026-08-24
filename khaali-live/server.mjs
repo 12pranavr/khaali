@@ -209,6 +209,7 @@ const SAARTHI_SYS = () => [
   'khaali sells interval berths: green = berth free for the whole journey; amber = berth occupied for part of the route and free for the rest, priced only for the empty stretch, so it is cheaper. Booking opens from tomorrow up to 60 days ahead. Payment is a simulated QR; this is a prototype, not IRCTC.',
   'Today is ' + TODAY() + '. Bookings run from tomorrow up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
   'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it).',
+  'NEVER ask the traveller which date before searching. With no date named, omit the date field and search anyway \u2014 the system picks the first bookable day and tells them which day it used.',
   'CANCELLATION QUESTIONS (which trains are cancelled / is X cancelled / kya cancel hai / \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"cancellations","from":<index>,"to":<index>,"date":"YYYY-MM-DD"}} \u2014 from/to/date all OPTIONAL (omit for the whole corridor; date defaults to tomorrow; today is allowed).',
   'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, \u0cb5\u0cc7\u0caf\u0ccd\u0c9f\u0cbf\u0c82\u0c97\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} \u2014 wl REQUIRED (their waitlist position), the rest optional.',
   'TICKET QUESTIONS (my ticket / meri booking / mera PNR / is my train ok / \u0ca8\u0ca8\u0ccd\u0ca8 \u0c9f\u0cbf\u0c95\u0cc6\u0c9f\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"mybookings"}} \u2014 the system reads the traveller\u2019s real tickets and checks each for cancellation.',
@@ -561,12 +562,22 @@ async function api(req, res, url) {
         { role: 'user', content: 'yeh amber wali seat sasti kyun hai?' },
         { role: 'assistant', content: '{"say":"Kyunki woh berth aapke route ke sirf ek hisse mein khaali hai — aap sirf us khaali stretch ka daam dete ho, poore safar ka nahi. Isliye woh green (poora raasta khaali) berth se sasti hai.","action":null}' },
       ];
-      const lastUser = hist.filter(m => m.role === 'user').pop();
+      const users = hist.filter(m => m.role === 'user');
+      const lastUser = users[users.length - 1];
       const asked = lastUser ? requestedLangOf(lastUser.content) : null;
-      const sl = asked || (lastUser ? scriptLangOf(lastUser.content) : null);
+      let sl = asked || (lastUser ? scriptLangOf(lastUser.content) : null);
+      // A conversation keeps its language. 'Date 25th of August' typed in
+      // Latin must not undo the Marathi they asked for two turns ago.
+      if (!sl) {
+        for (let i = users.length - 2; i >= 0; i--) {
+          const prev = requestedLangOf(users[i].content) || scriptLangOf(users[i].content);
+          if (prev) { sl = prev; break; }
+        }
+      }
       const langNote = sl
-        ? ' NON-NEGOTIABLE: ' + (asked ? 'the traveller has ASKED for ' + sl[0] + ' \u2014 honour it. ' : 'the traveller\u2019s message is written in ' + sl[0] + ' script. ')
-          + 'Every word of your "say" text MUST be in ' + sl[0] + ' (' + sl[1] + '), in its own script. Do not use any other language.'
+        ? ' NON-NEGOTIABLE: ' + (asked ? 'the traveller has ASKED for ' + sl[0] + ' \u2014 honour it. '
+            : 'this conversation is being held in ' + sl[0] + '. ')
+          + 'Every word of your "say" text MUST be in ' + sl[0] + ' (' + sl[1] + '), in its own script, for THIS and every later reply until they switch. Do not use any other language.'
         : '';
       const msgs1 = [{ role: 'system', content: SAARTHI_SYS() + langNote }, ...SHOTS, ...hist];
       let first;
@@ -731,6 +742,7 @@ async function api(req, res, url) {
         const human = dO.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
         const alive = brief.trains.filter(t => !t.cancelled);
         const cxd = brief.trains.filter(t => t.cancelled);
+        const dateWasNamed = !!(act.date && /^\d{4}-\d{2}-\d{2}$/.test(act.date));
         let en;
         if (!alive.length) {
           en = 'No trains are available from ' + r.fromName + ' to ' + r.toName + ' on ' + human + '.'
@@ -742,6 +754,9 @@ async function api(req, res, url) {
             + (b.cheaperOpenEnRoute ? ', and ' + b.cheaperOpenEnRoute + ' cheaper berths that become free along the way' : '') + '.'
             + (b2 ? ' ' + b2.name + ' at ' + b2.dep + ' also has ' + b2.freeWholeWay + ' free berths.' : '')
             + (cxd.length ? ' Careful: train ' + cxd.map(t => t.no).join(', ') + ' is cancelled that day.' : '');
+        }
+        if (!dateWasNamed && alive.length) {
+          en += ' I looked at ' + human + ', the first day you can book \u2014 tell me another date any time.';
         }
         let say = en;
         if (sl) {
@@ -765,10 +780,10 @@ async function api(req, res, url) {
       let sayFinal = (plan && plan.say ? String(plan.say).trim() : '') || sayOf(first) || await retrySayFor(sl);
       // Hard guarantee: an explicitly requested language always wins, even if
       // the model ignored the pin — force-translate (auto-detected source).
-      if (asked && asked[1] !== 'en-IN') {
+      if (sl && sl[1] !== 'en-IN') {
         const got = scriptLangOf(sayFinal);
-        if (!got || got[1] !== asked[1]) {
-          try { sayFinal = (await translateTo(sayFinal, asked[1], 'auto')) || sayFinal; } catch (e) {}
+        if (!got || got[1] !== sl[1]) {
+          try { sayFinal = (await translateTo(sayFinal, sl[1], 'auto')) || sayFinal; } catch (e) {}
         }
       }
       return send(res, 200, { say: sayFinal, lang: sl ? sl[1] : null });
