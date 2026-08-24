@@ -1687,7 +1687,7 @@ class Component extends DCLogic {
   imgHref(no){const m=this.imgFor(no);return m?'https://commons.wikimedia.org/wiki/File:'+encodeURIComponent(m.f):'';}
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:2,seed:7,dayIdx:0,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
-           city:'Bengaluru',cityOpen:false,tick:0,allCls:false,onlyThis:true,
+           city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
            q:'',searchOpen:false,searchSel:0,fOpen:null,fFare:'all',fSort:'time',dark:false,
            bookings:[
              {from:0,to:13,train:'16021',cls:'3A',quota:'General',pax:1,dayIdx:-6,
@@ -3990,11 +3990,11 @@ class Component extends DCLogic {
             onClick:()=>this.setState({fOpen:S.fOpen===d.key?null:d.key,sortOpen:false}),
             opts:d.opts.map(o=>({label:o.l,style:row(o.on),tickStyle:tick(o.on),onClick:o.fn})),
           })),
-          resAnyActive:{display:(!S.allCls&&S.cls!=='SL')||fFare!=='all'||S.quota!=='General'?'inline-flex':'none',
+          resAnyActive:{display:!S.allCls||fFare!=='all'||S.quota!=='General'?'inline-flex':'none',
             alignItems:'center',height:38,padding:'0 13px',background:'transparent',border:'none',
             font:'700 13px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',
             textDecoration:'underline',textUnderlineOffset:'3px'},
-          resClearAll:()=>{this._c={};this.setState({cls:'SL',allCls:false,fFare:'all',quota:'General',fOpen:null,picks:[]});},
+          resClearAll:()=>{this._c={};this.setState({allCls:true,fFare:'all',quota:'General',fOpen:null,picks:[]});},
           resSortLabel:sortLabel,
           resSortStyle:chip(false,S.sortOpen),
           resSortToggle:()=>this.setState({sortOpen:!S.sortOpen,fOpen:null}),
@@ -4018,7 +4018,8 @@ class Component extends DCLogic {
         return (d1==null||a1==null)?1e9:(((a1-d1)%1440)+1440)%1440;};
       const byTimeR=(a,b)=>this.sMin(a,S.from,'d')%1440-this.sMin(b,S.from,'d')%1440;
       const rows=this.TRAINS.filter(x=>this.serves(x,S.from,S.to)).sort((a,b)=>
-        fSort==='free'?(this.counts(S.cls,b.no).free-this.counts(S.cls,a.no).free)||byTimeR(a,b)
+        fSort==='free'?((S.allCls?this.CLS.reduce((t,c)=>t+this.counts(c.k,b.no).free,0):this.counts(S.cls,b.no).free)
+                       -(S.allCls?this.CLS.reduce((t,c)=>t+this.counts(c.k,a.no).free,0):this.counts(S.cls,a.no).free))||byTimeR(a,b)
         :fSort==='dur'?(legOf(a)-legOf(b))||byTimeR(a,b)
         :byTimeR(a,b)).map(x=>{
         const lv=this.liveOf(x);
