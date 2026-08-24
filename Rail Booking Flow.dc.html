@@ -90,7 +90,9 @@ body{background-image:repeating-linear-gradient(45deg, rgba(31,42,99,.018) 0 2px
 :root[data-theme="dark"] .k-topbar{color:#f4efe6;--k-fff:#0d0d10; --k-fbfbfa:#0a0a0c; --k-e6e5e0:#24242b; --k-f0efeb:#24242b; --k-fg-14161a:#f4efe6; --k-14161a:#f4efe6}
 .k-heroruled{background-image:repeating-linear-gradient(0deg, rgba(31,42,99,.05) 0 1px, transparent 1px 4px)}
 :root[data-theme="dark"] .k-heroruled{background-image:repeating-linear-gradient(0deg, rgba(244,239,230,.045) 0 1px, transparent 1px 4px)}
-.k-heroright{background-image:repeating-linear-gradient(0deg, rgba(244,239,230,.035) 0 1px, transparent 1px 5px)}
+.k-heroright{background-image:repeating-linear-gradient(0deg, rgba(244,239,230,.035) 0 1px, transparent 1px 5px);border-radius:0 11px 11px 0}
+.k-heroruled{border-radius:11px 0 0 11px}
+@media (max-width:900px){.k-heroruled{border-radius:11px}}
 .k-heroedge{position:absolute;right:14px;top:50%;transform:translateY(-50%) rotate(180deg);writing-mode:vertical-rl;font:600 10px/1 'IBM Plex Mono',monospace;letter-spacing:.3em;color:rgba(244,239,230,.72)}
 .k-postmark{position:absolute;left:-26px;bottom:26px;width:128px;height:128px;border-radius:50%;border:2px solid rgba(244,239,230,.85);display:grid;place-items:center;transform:rotate(-14deg);pointer-events:none}
 .k-postmark-in{width:98px;height:98px;border-radius:50%;border:1.5px solid rgba(244,239,230,.7);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;color:rgba(244,239,230,.9)}
@@ -113,8 +115,9 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 .k-dates{scrollbar-width:none}
 .k-dates::-webkit-scrollbar{display:none}
 .k-calpop{position:absolute;top:calc(100% - 6px);right:0;z-index:80}
-.k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:90}
-@media (max-width:860px){.k-calpop3{position:fixed;top:110px;left:12px;right:12px;width:auto!important}}
+.k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:120}
+@media (max-width:860px){.k-calpop3{position:fixed;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);
+  width:min(352px,calc(100vw - 24px))!important;max-height:calc(100vh - 40px);overflow-y:auto;z-index:200}}
 .k-stnrow:hover{background:var(--k-f4f3ef)}
 @media (max-width:1040px){
   .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
@@ -244,7 +247,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 <sc-if value="{{ onHome }}" hint-placeholder-val="{{ true }}">
 <div>
   <div style="max-width:1240px;margin:0 auto;padding:26px 22px 0">
-    <div class="k-hero" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);padding:0;color:var(--k-fg-14161a);box-shadow:0 10px 30px rgba(40,45,90,.10)">
+    <div class="k-hero" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);padding:0;color:var(--k-fg-14161a);box-shadow:0 10px 30px rgba(40,45,90,.10)">
       <div class="k-heroruled" style="padding:40px 40px 36px;min-width:0">
         <div style="font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase;margin-bottom:16px">Bengaluru — Mysuru corridor</div>
         <h1 style="margin:0 0 12px;font:600 clamp(32px,4vw,54px)/1.06 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Berths that are already empty</h1>
