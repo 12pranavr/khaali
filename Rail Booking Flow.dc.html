@@ -436,13 +436,17 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         </sc-for>
       </div>
     </div>
-    <div style="flex:1;min-width:170px">
-      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Sort by</div>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <sc-for list="{{ resultSorts }}" as="o" hint-placeholder-count="3">
-          <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.l }}</div>
-        </sc-for>
-      </div>
+    <div class="k-filters" style="flex:1;min-width:250px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+        <div style="{{ f.wrapRes }}">
+          <div onClick="{{ f.onToggle }}" style="{{ f.styleRes }}">{{ f.label }} &#9662;</div>
+          <div style="{{ f.panel }}">
+            <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
+              <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
     </div>
     <div class="k-calwrap" style="position:relative">
       <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Date</div>
@@ -2742,6 +2746,13 @@ class Component extends DCLogic {
        opts:SORTO.map(o=>fOpt(o.l,fSort===o.k,()=>this.setState(Object.assign({fSort:o.k},shut))))}
     ];
     const filters=filterDefs.map((d,i)=>({label:d.label,opts:d.opts,
+      wrapRes:{position:'relative'},
+      styleRes:{display:'flex',alignItems:'center',whiteSpace:'nowrap',padding:'11px 14px',
+        borderRadius:7,minHeight:42,cursor:'pointer',
+        border:'1px solid '+(fOpen===i?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+        background:fOpen===i?'var(--k-fdf3f5)':'var(--k-fafaf8)',
+        color:fOpen===i?'var(--k-fg-d8385a)':'var(--k-fg-14161a)',
+        font:'600 13px/1 Manrope,sans-serif'},
       wrap:{position:'relative',display:'flex',alignItems:'stretch'},
       panel:{display:fOpen===i?'block':'none',position:'absolute',top:'100%',
         left:i>=2?'auto':0,right:i>=2?0:'auto',minWidth:200,background:'var(--k-fff)',
@@ -3898,7 +3909,11 @@ class Component extends DCLogic {
             :{flex:'none',border:'none',background:'var(--k-d8385a)',color:'var(--k-fg-fff)',
               font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:6,
               cursor:'pointer',minHeight:44},
-          onOpen:open,onBook:cx?()=>{}:open,
+          onOpen:open,
+          // Book opens the class/quota/passenger modal right here - no detour
+          // through the train page just to press one more button.
+          onBook:cx?()=>{}:()=>{this._c={};
+            this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[]});},
           cells:this.CLS.map(c=>{const n=this.counts(c.k,x.no);const none=n.free+n.part===0;
             return {k:c.k,price:money(this.fare(c.k,km)),
               freeText:none?'Sold out':n.free+' free',partText:none?'':'+'+n.part+' en route',
