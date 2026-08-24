@@ -115,9 +115,14 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 .k-dates{scrollbar-width:none}
 .k-dates::-webkit-scrollbar{display:none}
 .k-calpop{position:absolute;top:calc(100% - 6px);right:0;z-index:80}
-.k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:120}
-@media (max-width:860px){.k-calpop3{position:fixed;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);
-  width:min(352px,calc(100vw - 24px))!important;max-height:calc(100vh - 40px);overflow-y:auto;z-index:200}}
+/* The calendar centres itself as a small sheet instead of dropping below its
+   button — anchored popovers kept falling past the fold on the home hero, so
+   half the month needed a scroll to read. The huge zero-blur shadow dims the
+   page behind without an overlay element, so the existing click-away on the
+   page underneath still closes it. */
+.k-calpop3{position:fixed;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);
+  width:min(352px,calc(100vw - 24px))!important;max-height:calc(100vh - 40px);overflow-y:auto;z-index:200;
+  box-shadow:0 24px 64px rgba(16,19,25,.35),0 0 0 100vmax rgba(16,19,25,.42)!important}
 .k-stnrow:hover{background:var(--k-f4f3ef)}
 @media (max-width:1040px){
   .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
