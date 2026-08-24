@@ -207,8 +207,8 @@ const SAARTHI_SYS = () => [
   'Corridor stations (index:code name): ' + ST.map((s, i) => i + ':' + s.c + ' ' + s.n).join(', ') + '.',
   'Travellers write station names in any script or spelling — match them phonetically: Bangalore/Bengaluru/बेंगलुरु/ಬೆಂಗಳೂರು = index 5 (Bengaluru KSR City); Mysore/Mysuru/मैसूर/ಮೈಸೂರು = index 13 (Mysuru Jn); Whitefield = 1; Bangarpet = 0; Mandya/मंड्या/ಮಂಡ್ಯ = 11. If both stations are clear, DO return the search action — do not ask again.',
   'khaali sells interval berths: green = berth free for the whole journey; amber = berth occupied for part of the route and free for the rest, priced only for the empty stretch, so it is cheaper. Booking opens from tomorrow up to 60 days ahead. Payment is a simulated QR; this is a prototype, not IRCTC.',
-  'Today is ' + TODAY() + '. Bookings run from tomorrow up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
-  'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it).',
+  'Today is ' + TODAY() + '. Bookings run from today up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
+  'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it; include "around":"HH:MM" in 24-hour time ONLY when the traveller names a time of day \u2014 morning/subah/belagge/kaalai means AM, evening/shaam/sanje/maalai/raat means PM, so \u201caround 7:30 in the evening\u201d \u2192 "around":"19:30").',
   'NEVER ask the traveller which date before searching. With no date named, omit the date field and search anyway \u2014 the system picks the first bookable day and tells them which day it used.',
   'CANCELLATION QUESTIONS (which trains are cancelled / is X cancelled / kya cancel hai / \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"cancellations","from":<index>,"to":<index>,"date":"YYYY-MM-DD"}} \u2014 from/to/date all OPTIONAL (omit for the whole corridor; date defaults to tomorrow; today is allowed).',
   'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, \u0cb5\u0cc7\u0caf\u0ccd\u0c9f\u0cbf\u0c82\u0c97\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} \u2014 wl REQUIRED (their waitlist position), the rest optional.',
@@ -726,7 +726,7 @@ async function api(req, res, url) {
         }
         // Honour a requested date, clamped to the booking window (tomorrow..+60d).
         const t0 = new Date(); t0.setHours(0, 0, 0, 0);
-        const minMs = t0.getTime() + 864e5, maxMs = t0.getTime() + 60 * 864e5;
+        const minMs = t0.getTime(), maxMs = t0.getTime() + 60 * 864e5;
         let dms = minMs;
         if (act.date && /^\d{4}-\d{2}-\d{2}$/.test(act.date)) {
           const pms = new Date(act.date + 'T00:00:00').getTime();
@@ -753,8 +753,42 @@ async function api(req, res, url) {
         const alive = brief.trains.filter(t => !t.cancelled);
         const cxd = brief.trains.filter(t => t.cancelled);
         const dateWasNamed = !!(act.date && /^\d{4}-\d{2}-\d{2}$/.test(act.date));
+        // A named time narrows the answer to departures within 90 minutes of
+        // it. Cancelled trains inside the window are called out by name, and
+        // an empty window answers with the nearest departures instead.
+        let win = null;
+        if (act.around && /^\d{1,2}:\d{2}$/.test(String(act.around))) {
+          const [ah, am2] = String(act.around).split(':').map(Number);
+          if (ah >= 0 && ah < 24 && am2 >= 0 && am2 < 60) {
+            const tgt = ah * 60 + am2;
+            const dist = t => t.depMin == null ? 1e9
+              : Math.min(Math.abs((t.depMin % 1440) - tgt), 1440 - Math.abs((t.depMin % 1440) - tgt));
+            const all = r.trains.map(t => ({ t, d: dist(t) })).sort((a, b) => a.d - b.d);
+            win = { hh: hhmm(tgt), near: all.filter(x => x.d <= 90).map(x => x.t),
+                    nearest: all.slice(0, 3).map(x => x.t) };
+          }
+        }
         let en;
-        if (!alive.length) {
+        if (win) {
+          const inW = win.near.filter(t => !t.cancelled);
+          const cxW = win.near.filter(t => t.cancelled);
+          if (inW.length) {
+            en = inW.length + (inW.length === 1 ? ' train leaves' : ' trains leave') + ' around ' + win.hh
+              + ' from ' + r.fromName + ' to ' + r.toName + ' on ' + human + ': '
+              + inW.slice(0, 3).map(t => t.name + ' (' + t.no + ') at ' + t.dep + ' \u2014 '
+                  + t.counts.free + ' berths free your whole way'
+                  + (t.counts.part ? ', ' + t.counts.part + ' cheaper en route' : '')).join('; ') + '.'
+              + (cxW.length ? ' Careful: ' + cxW.map(t => t.no + ' at ' + t.dep).join(', ')
+                  + ' in that window is cancelled that day.' : '');
+          } else {
+            const nr = win.nearest.filter(t => !t.cancelled).slice(0, 2);
+            en = 'No train leaves around ' + win.hh + ' from ' + r.fromName + ' to ' + r.toName + ' on ' + human + '.'
+              + (cxW.length ? ' ' + cxW.map(t => t.name + ' (' + t.no + ') at ' + t.dep).join(', ')
+                  + ' would have fit but is cancelled that day.' : '')
+              + (nr.length ? ' The closest departures are ' + nr.map(t => t.name + ' (' + t.no + ') at '
+                  + t.dep + ' with ' + t.counts.free + ' berths free').join(' and ') + '.' : '');
+          }
+        } else if (!alive.length) {
           en = 'No trains are available from ' + r.fromName + ' to ' + r.toName + ' on ' + human + '.'
             + (cxd.length ? ' ' + cxd.map(t => t.no).join(', ') + ' cancelled that day.' : '');
         } else {
@@ -765,7 +799,7 @@ async function api(req, res, url) {
             + (b2 ? ' ' + b2.name + ' at ' + b2.dep + ' also has ' + b2.freeWholeWay + ' free berths.' : '')
             + (cxd.length ? ' Careful: train ' + cxd.map(t => t.no).join(', ') + ' is cancelled that day.' : '');
         }
-        if (!dateWasNamed && alive.length) {
+        if (!dateWasNamed && alive.length && !win) {
           en += ' I looked at ' + human + ', the first day you can book \u2014 tell me another date any time.';
         }
         let say = en;

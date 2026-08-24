@@ -711,7 +711,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
             <span style="flex:1;text-align:right;color:var(--k-fg-8a8a84)">= free berths</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-            <div onClick="{{ calTomorrow }}" style="font:700 12px/1 Manrope,sans-serif;color:var(--k-fg-d8385a);cursor:pointer">Tomorrow</div>
+            <div onClick="{{ calTomorrow }}" style="font:700 12px/1 Manrope,sans-serif;color:var(--k-fg-d8385a);cursor:pointer">Today</div>
             <div style="flex:1;text-align:right;font:500 10.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ calFootNote }}</div>
           </div>
         </div>
@@ -1774,7 +1774,7 @@ class Component extends DCLogic {
     const order=[];for(let i=0;i<n;i++)order.push(i);
     for(let i=n-1;i>0;i--){const j=Math.floor(rnd()*(i+1));const t=order[i];order[i]=order[j];order[j]=t;}
     // mirrors engine.mjs seedOccupancy exactly: weekly demand pulse per date
-    const dow=new Date(Date.now()+(this.state.dayIdx+1)*864e5).getDay();
+    const dow=new Date(Date.now()+this.state.dayIdx*864e5).getDay();
     let df=dow===0||dow===6?1.02+rnd()*0.33
       :dow===5?0.88+rnd()*0.4
       :0.5+rnd()*0.45;
@@ -1933,7 +1933,7 @@ class Component extends DCLogic {
   srvDate(){
     // Mirrors the strip's dateFor(): day 0 is TOMORROW (chart closes 4h before
     // departure), and the key is the local calendar date, not the UTC one.
-    const d=new Date(Date.now()+(this.state.dayIdx+1)*864e5);
+    const d=new Date(Date.now()+this.state.dayIdx*864e5);
     return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);}
   tfetch(url,opts,ms){const c=new AbortController();
     const t=setTimeout(()=>c.abort(),ms||8000);
@@ -2166,7 +2166,7 @@ class Component extends DCLogic {
     return i>=0?i:null;
   }
   isoOfDay(dayIdx){
-    const d=new Date(Date.now()+((dayIdx||0)+1)*864e5);
+    const d=new Date(Date.now()+(dayIdx||0)*864e5);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
   oddsOf(no,dayIdx,cls,wl){
@@ -2176,14 +2176,14 @@ class Component extends DCLogic {
     let h=2166136261>>>0;const str=no+'|'+iso+'|'+cls;
     for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
     const df=0.55+(h%1000)/1000*0.8;
-    const days=Math.max(0,dayIdx+1);
+    const days=Math.max(0,dayIdx);
     const churnWindow=Math.min(1.6,0.55+days/18);
     const expCancel=Math.max(2,Math.round(cap*0.06*churnWindow*(1.55-df)));
     const spread=expCancel*0.45+1.5;
     const p=1/(1+Math.exp((wl-expCancel)/spread));
     return {pct:Math.max(2,Math.min(98,Math.round(p*100))),expCancel,days,cap};
   }
-  cxIso(dayIdx){const d=new Date(Date.now()+((dayIdx==null?0:dayIdx)+1)*864e5);
+  cxIso(dayIdx){const d=new Date(Date.now()+(dayIdx==null?0:dayIdx)*864e5);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
   cxOf(no,dayIdx){
     if(no==='16021')return null;
@@ -2406,7 +2406,7 @@ class Component extends DCLogic {
     const cls=S.allCls?'all':S.cls;
     const key=S.train+'|'+cls+'|'+S.from+'|'+S.to;
     if(S.calAv&&S.calAv.key===key)return;               // already loaded for this journey
-    const d0=new Date(Date.now()+864e5);
+    const d0=new Date();
     const startIso=new Date(d0.getTime()-d0.getTimezoneOffset()*60000).toISOString().slice(0,10);
     try{
       const j=await this.tfetch('/api/calendar?train='+S.train+'&cls='+cls+'&from='+S.from
@@ -2612,7 +2612,7 @@ class Component extends DCLogic {
     const clsL=S.allCls?'All classes':cls.label;
     const lv=this.liveOf(tr);
 
-    const dateFor=i=>new Date(Date.now()+(i+1)*864e5);
+    const dateFor=i=>new Date(Date.now()+i*864e5);
     const dsel=dateFor(S.dayIdx);
     const dateLong=dsel.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
 
@@ -3148,7 +3148,7 @@ class Component extends DCLogic {
           fromSuggPanel:panel('from'),toSuggPanel:panel('to'),
           openFromSugg:()=>this.setState({stnOpen:'from'}),
           openToSugg:()=>this.setState({stnOpen:'to'}),
-          dateBtnText:(()=>{const d=new Date(Date.now()+(S.dayIdx+1)*864e5);
+          dateBtnText:(()=>{const d=new Date(Date.now()+S.dayIdx*864e5);
             return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});})(),
           dateBtnStyle:{minWidth:168,padding:'13px 12px',borderRadius:7,
             border:'1px solid '+(S.calOpen?'var(--k-d8385a)':'var(--k-d4d3ce)'),
@@ -3462,7 +3462,7 @@ class Component extends DCLogic {
               color:isCur?'var(--k-fg-d8385a)':'var(--k-fg-14161a)',display:isCur||isBoard?'block':'none',paddingTop:3}};
         });})(),
 
-      bookBtnLabel:S.dayIdx===0?'Book for tomorrow'
+      bookBtnLabel:S.dayIdx===0?'Book for today'
         :'Book for '+dsel.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}),
       bookBtnSub:(S.dayIdx===0
         ?dsel.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' \u00b7 ':'')
@@ -3754,7 +3754,7 @@ class Component extends DCLogic {
             const cards=[];
             pairs.forEach(p=>{
               const trD=this.TRAINS.find(x=>x.no===p[0].train);
-              const dD=new Date(Date.now()+(p[0].dayIdx+1)*864e5);
+              const dD=new Date(Date.now()+p[0].dayIdx*864e5);
               cards.push({kind:'DOUBLE BOOKING',kindColor:'var(--k-fg-c2870a)',
                 title:(trD?trD.name:p[0].train)+' \u00b7 '+ST[p[0].from].n+' \u2192 '+ST[p[0].to].n,
                 sub:dD.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
@@ -3768,7 +3768,7 @@ class Component extends DCLogic {
               const dl=this.bigDelayOf(b.train,b.dayIdx);
               const cxB=this.cxOf(b.train,b.dayIdx);
               const trB=this.TRAINS.find(x=>x.no===b.train);
-              const dB=new Date(Date.now()+(b.dayIdx+1)*864e5);
+              const dB=new Date(Date.now()+b.dayIdx*864e5);
               const when=dB.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
               if(cxB)cards.push({kind:'TRAIN CANCELLED',kindColor:'var(--k-fg-d8385a)',
                 title:(trB?trB.name:b.train)+' \u00b7 '+ST[b.from].n+' \u2192 '+ST[b.to].n,
@@ -3876,7 +3876,7 @@ class Component extends DCLogic {
           const bt=this.TRAINS.find(x=>x.no===b.train)||this.TRAINS[0];
           const bc=this.CLS.find(c=>c.k===b.cls);
           const up=b.dayIdx>=0;
-          const d=new Date(Date.now()+(b.dayIdx+1)*864e5);
+          const d=new Date(Date.now()+b.dayIdx*864e5);
           const dM=this.sMin(bt,b.from,'d'),aM=this.sMin(bt,b.to,'a');
           const later=b.picks.filter(p=>p.k==='part'&&p.at>b.from).length;
           const bcx=up?this.cxOf(b.train,b.dayIdx):null;
@@ -4075,7 +4075,7 @@ class Component extends DCLogic {
           favStyle:{flex:'none',fontSize:19,cursor:'pointer',padding:'6px 4px',lineHeight:1,
             color:fav?'var(--k-fg-d8385a)':'var(--k-fg-b8b8b2)'},
           onFav:()=>this.toggleFav(x.no),
-          bookLabel:cx?'Cancelled':'Book',
+          bookLabel:cx?'Cancelled':(pos.g===2&&S.dayIdx===0?'Book tomorrow':'Book'),
           bookStyle:cx?{flex:'none',border:'1px solid var(--k-eeede9)',background:'var(--k-fafaf8)',
               color:'var(--k-fg-a8a8a2)',font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',
               borderRadius:6,cursor:'default',minHeight:44}
@@ -4086,7 +4086,7 @@ class Component extends DCLogic {
           // Book opens the class/quota/passenger modal right here - no detour
           // through the train page just to press one more button.
           onBook:cx?()=>{}:()=>{this._c={};
-            this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[],pax:1});},
+            this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[],pax:1,dayIdx:(pos.g===2&&S.dayIdx===0)?1:S.dayIdx});},
           cells:this.CLS.map(c=>{const n=this.counts(c.k,x.no);const none=n.free+n.part===0;
             return {k:c.k,price:money(this.fare(c.k,km)),
               freeText:none?'Sold out':n.free+' free',partText:none?'':'+'+n.part+' en route',
@@ -4095,7 +4095,7 @@ class Component extends DCLogic {
                 borderRadius:6,padding:'9px 12px',minWidth:104,cursor:none?'default':'pointer'},
               // clicking a class cell means THAT class — switch off the
               // all-classes default or the modal ignores the choice just made
-              onClick:none?()=>{}:()=>{this._c={};this.setState({train:x.no,cls:c.k,allCls:false,pax:1,picks:[],page:'train',routeOpen:true,classModal:true});window.scrollTo(0,0);}};})};
+              onClick:none?()=>{}:()=>{this._c={};this.setState({train:x.no,cls:c.k,allCls:false,pax:1,picks:[],dayIdx:(pos.g===2&&S.dayIdx===0)?1:S.dayIdx,page:'train',routeOpen:true,classModal:true});window.scrollTo(0,0);}};})};
       });
       // live grouping only means something for tomorrow; a future date gets
       // one plain timetable so nobody reads today's positions into it
@@ -4108,7 +4108,7 @@ class Component extends DCLogic {
         {title:'Departing later today',dot:'var(--k-c9c9c2)',
           sub:'scheduled departure from '+fromS.n+' shown'},
         {title:'Already left '+fromS.n+' today',dot:'var(--k-e0a419)',
-          sub:'still bookable \u2014 your ticket is for '+dateLong},
+          sub:'gone for today \u2014 Book gives you tomorrow\u2019s train'},
       ].map((dd,gi)=>({title:dd.title,sub:dd.sub,rows:rows.filter(r=>r.grp===gi),
           n:rows.filter(r=>r.grp===gi).length,
           dotStyle:{width:9,height:9,borderRadius:'50%',background:dd.dot,flex:'none'}}))

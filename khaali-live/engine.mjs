@@ -178,7 +178,7 @@ export function seedOccupancy(clsKey, trainNo, dayIdx = 0, seed = 7) {
 
   // Demand has a weekly pulse: weekends run hot, Fridays fill, weekdays vary,
   // and the odd random date spikes like a festival. Deterministic per date.
-  const dow = new Date(Date.now() + (dayIdx + 1) * 864e5).getDay();
+  const dow = new Date(Date.now() + dayIdx * 864e5).getDay();
   let df = dow === 0 || dow === 6 ? 1.02 + rnd() * 0.33
     : dow === 5 ? 0.88 + rnd() * 0.4
     : 0.5 + rnd() * 0.45;
