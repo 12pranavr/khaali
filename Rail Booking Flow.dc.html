@@ -113,6 +113,9 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 .k-dates{scrollbar-width:none}
 .k-dates::-webkit-scrollbar{display:none}
 .k-calpop{position:absolute;top:calc(100% - 6px);right:0;z-index:80}
+.k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:90}
+@media (max-width:860px){.k-calpop3{position:fixed;top:110px;left:12px;right:12px;width:auto!important}}
+.k-stnrow:hover{background:var(--k-f4f3ef)}
 @media (max-width:860px){.k-calpop{position:fixed;top:170px;left:12px;right:12px;width:auto!important}}
 @media (max-width:1024px){
   .k-restrain{flex:1 1 100%!important;width:100%!important}
@@ -235,20 +238,50 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <div style="font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase;margin-bottom:16px">Bengaluru — Mysuru corridor</div>
         <h1 style="margin:0 0 12px;font:600 clamp(32px,4vw,54px)/1.06 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Berths that are already empty</h1>
         <p style="margin:0;font-size:15.5px;line-height:1.65;color:var(--k-fg-5a5f6a);max-width:34em">A berth booked only as far as Bengaluru sits empty for the rest of the run. Pick your two stations and we count those.</p>
-        <datalist id="k-stn"><sc-for list="{{ stnOpts }}" as="s" hint-placeholder-count="14"><option value="{{ s.n }}"></option></sc-for></datalist>
         <div class="k-heroform" style="margin-top:28px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
-          <div>
+          <div class="k-stnwrap" style="position:relative">
             <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">From</div>
-            <input list="k-stn" value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onBlur="{{ blurFrom }}" placeholder="Type a station or code" style="min-width:190px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
+            <input value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onFocus="{{ openFromSugg }}" placeholder="Type a station or code" style="min-width:190px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
+            <div style="{{ fromSuggPanel }}">
+              <sc-for list="{{ fromSuggs }}" as="o" hint-placeholder-count="5">
+                <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+              </sc-for>
+            </div>
           </div>
           <div onClick="{{ swapStations }}" title="Swap" style="flex:none;margin-bottom:6px;width:38px;height:38px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k-fg-d8385a);font-size:15px">&#8646;</div>
-          <div>
+          <div class="k-stnwrap" style="position:relative">
             <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">To</div>
-            <input list="k-stn" value="{{ toTxt }}" onChange="{{ setToTxt }}" onBlur="{{ blurTo }}" placeholder="Type a station or code" style="min-width:190px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
+            <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" placeholder="Type a station or code" style="min-width:190px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
+            <div style="{{ toSuggPanel }}">
+              <sc-for list="{{ toSuggs }}" as="o" hint-placeholder-count="5">
+                <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+              </sc-for>
+            </div>
           </div>
-          <div>
+          <div class="k-calwrap" style="position:relative">
             <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">Date</div>
-            <input type="date" value="{{ searchDateISO }}" min="{{ searchDateMin }}" max="{{ searchDateMax }}" onChange="{{ setSearchDate }}" style="min-width:168px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
+            <div onClick="{{ toggleCal }}" style="{{ dateBtnStyle }}"><span>{{ dateBtnText }}</span><span style="color:var(--k-fg-d8385a)">&#9662;</span></div>
+            <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <div style="{{ calHeadStyle }}">{{ calHead }}</div>
+                <div onClick="{{ calPrev.onClick }}" style="{{ calPrev.style }}">{{ calPrev.glyph }}</div>
+                <div onClick="{{ calNext.onClick }}" style="{{ calNext.style }}">{{ calNext.glyph }}</div>
+              </div>
+              <div style="display:flex">
+                <sc-for list="{{ calDows }}" as="d" hint-placeholder-count="7"><div style="{{ d.style }}">{{ d.t }}</div></sc-for>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;width:315px">
+                <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+                  <div onClick="{{ c.onClick }}" style="{{ c.style }}"><span>{{ c.t }}</span><span style="{{ c.nStyle }}">{{ c.n }}</span></div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:14px;margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb);font:600 11px/1.4 Manrope,sans-serif">
+                <span style="color:var(--k-fg-14663a)">&#9679; plenty</span>
+                <span style="color:var(--k-fg-c2870a)">&#9679; filling</span>
+                <span style="color:var(--k-fg-d8385a)">&#9679; almost gone</span>
+                <span style="flex:1;text-align:right;color:var(--k-fg-8a8a84)">= free berths</span>
+              </div>
+            </div>
           </div>
           <button class="k-searchbtn" onClick="{{ goResults }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15px/1 Archivo,Manrope,sans-serif;padding:0 28px;border-radius:7px;cursor:pointer;min-height:48px">Search trains</button>
         </div>
@@ -383,20 +416,50 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     <div onClick="{{ goHome }}" style="margin-left:auto;color:var(--k-fg-d8385a);font:700 13.5px/1 Manrope,sans-serif;cursor:pointer">Change stations</div>
   </div>
   <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">Counts are for your two stations, not the whole train. Blue numbers are berths that free up en route.</div>
-  <datalist id="k-stn2"><sc-for list="{{ stnOpts }}" as="s" hint-placeholder-count="14"><option value="{{ s.n }}"></option></sc-for></datalist>
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 16px;margin-bottom:18px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-    <div>
+    <div class="k-stnwrap" style="position:relative">
       <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">From</div>
-      <input list="k-stn2" value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onBlur="{{ blurFrom }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+      <input value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onFocus="{{ openFromSugg }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+      <div style="{{ fromSuggPanel }}">
+        <sc-for list="{{ fromSuggs }}" as="o" hint-placeholder-count="5">
+          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+        </sc-for>
+      </div>
     </div>
     <div onClick="{{ swapStations }}" title="Swap" style="flex:none;margin-bottom:4px;width:34px;height:34px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k-fg-d8385a);font-size:14px">&#8646;</div>
-    <div>
+    <div class="k-stnwrap" style="position:relative">
       <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">To</div>
-      <input list="k-stn2" value="{{ toTxt }}" onChange="{{ setToTxt }}" onBlur="{{ blurTo }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+      <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+      <div style="{{ toSuggPanel }}">
+        <sc-for list="{{ toSuggs }}" as="o" hint-placeholder-count="5">
+          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+        </sc-for>
+      </div>
     </div>
-    <div>
+    <div class="k-calwrap" style="position:relative">
       <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Date</div>
-      <input type="date" value="{{ searchDateISO }}" min="{{ searchDateMin }}" max="{{ searchDateMax }}" onChange="{{ setSearchDate }}" style="min-width:158px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+      <div onClick="{{ toggleCal }}" style="{{ dateBtnSmall }}"><span>{{ dateBtnText }}</span><span style="color:var(--k-fg-d8385a)">&#9662;</span></div>
+      <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="{{ calHeadStyle }}">{{ calHead }}</div>
+          <div onClick="{{ calPrev.onClick }}" style="{{ calPrev.style }}">{{ calPrev.glyph }}</div>
+          <div onClick="{{ calNext.onClick }}" style="{{ calNext.style }}">{{ calNext.glyph }}</div>
+        </div>
+        <div style="display:flex">
+          <sc-for list="{{ calDows }}" as="d" hint-placeholder-count="7"><div style="{{ d.style }}">{{ d.t }}</div></sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;width:315px">
+          <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+            <div onClick="{{ c.onClick }}" style="{{ c.style }}"><span>{{ c.t }}</span><span style="{{ c.nStyle }}">{{ c.n }}</span></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb);font:600 11px/1.4 Manrope,sans-serif">
+          <span style="color:var(--k-fg-14663a)">&#9679; plenty</span>
+          <span style="color:var(--k-fg-c2870a)">&#9679; filling</span>
+          <span style="color:var(--k-fg-d8385a)">&#9679; almost gone</span>
+          <span style="flex:1;text-align:right;color:var(--k-fg-8a8a84)">= free berths</span>
+        </div>
+      </div>
     </div>
   </div>
   <sc-for list="{{ resultGroups }}" as="g" hint-placeholder-count="3">
@@ -1546,7 +1609,9 @@ class Component extends DCLogic {
     this._sd=e=>{const t=e.target&&e.target.closest?e.target:null;
       if(this.state.searchOpen&&!(t&&t.closest('.k-hdrsearch')))this.setState({searchOpen:false});
       if(this.state.fOpen!=null&&!(t&&t.closest('.k-filters')))this.setState({fOpen:null});
-      if(this.state.calOpen&&!(t&&t.closest('.k-calwrap')))this.setState({calOpen:false});};
+      if(this.state.calOpen&&!(t&&t.closest('.k-calwrap')))this.setState({calOpen:false});
+      if(this.state.stnOpen&&!(t&&t.closest('.k-stnwrap')))
+        this.setState({stnOpen:null,fromTxt:null,toTxt:null});};
     document.addEventListener('mousedown',this._sd);
     this.routeBoot();
     this.srvBoot();}
@@ -2915,6 +2980,47 @@ class Component extends DCLogic {
       toOpts:ST.map((s,i)=>({i:String(i),n:s.n})).filter(o=>+o.i!==S.from),
       fromIdx:String(S.from),toIdx:String(S.to),
       stnOpts:ST.map(s=>({n:s.n})),
+      ...(()=>{
+        const mk=(which)=>{
+          const txt=which==='from'?(S.fromTxt!=null?S.fromTxt:''):(S.toTxt!=null?S.toTxt:'');
+          const q=String(txt).trim().toLowerCase();
+          const other=which==='from'?S.to:S.from;
+          const list=ST.map((st2,i)=>({st2,i}))
+            .filter(o=>o.i!==other&&(!q||o.st2.n.toLowerCase().indexOf(q)>=0||o.st2.c.toLowerCase().indexOf(q)>=0))
+            .slice(0,7)
+            .map(o=>({n:o.st2.n,c:o.st2.c,km:o.st2.km+' km',
+              row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
+                borderBottom:'1px solid var(--k-f4f3ef)'},
+              nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+              cStyle:{font:"600 11px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-d8385a)'},
+              kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:52,textAlign:'right'},
+              onPick:()=>{this._c={};
+                this.setState(which==='from'?{from:o.i,fromTxt:null,stnOpen:null,picks:[]}
+                                            :{to:o.i,toTxt:null,stnOpen:null,picks:[]});}}));
+          return list;
+        };
+        const panel=(which)=>({display:S.stnOpen===which?'block':'none',position:'absolute',
+          top:'calc(100% + 5px)',left:0,minWidth:250,zIndex:90,background:'var(--k-fff)',
+          border:'1px solid var(--k-e6e5e0)',borderRadius:9,overflow:'hidden',
+          boxShadow:'0 14px 34px rgba(40,45,90,.18)'});
+        return {
+          fromSuggs:mk('from'),toSuggs:mk('to'),
+          fromSuggPanel:panel('from'),toSuggPanel:panel('to'),
+          openFromSugg:()=>this.setState({stnOpen:'from'}),
+          openToSugg:()=>this.setState({stnOpen:'to'}),
+          dateBtnText:(()=>{const d=new Date(Date.now()+(S.dayIdx+1)*864e5);
+            return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});})(),
+          dateBtnStyle:{minWidth:168,padding:'13px 12px',borderRadius:7,
+            border:'1px solid '+(S.calOpen?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+            background:'var(--k-fafaf8)',color:'var(--k-fg-14161a)',
+            font:'600 14.5px/1 Archivo,Manrope,sans-serif',minHeight:48,cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'space-between',gap:10},
+          dateBtnSmall:{minWidth:150,padding:'11px 12px',borderRadius:7,
+            border:'1px solid '+(S.calOpen?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+            background:'var(--k-fafaf8)',color:'var(--k-fg-14161a)',
+            font:'600 13.5px/1 Manrope,sans-serif',minHeight:42,cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'space-between',gap:10},
+        };})(),
       fromTxt:S.fromTxt!=null?S.fromTxt:ST[S.from].n,
       toTxt:S.toTxt!=null?S.toTxt:ST[S.to].n,
       setFromTxt:e=>{const v=e.target.value;const i=this.pickStationIdx(v);
