@@ -116,6 +116,15 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 .k-calpop3{position:absolute;top:calc(100% + 6px);left:0;z-index:90}
 @media (max-width:860px){.k-calpop3{position:fixed;top:110px;left:12px;right:12px;width:auto!important}}
 .k-stnrow:hover{background:var(--k-f4f3ef)}
+@media (max-width:1040px){
+  .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
+  .k-searchgrid>div:nth-child(4),.k-searchgrid>div:nth-child(5){grid-column:1/-1}
+}
+@media (max-width:600px){
+  .k-searchgrid{grid-template-columns:1fr!important}
+  .k-searchgrid>div:nth-child(2){justify-self:start}
+  .k-searchgrid>div{grid-column:1/-1}
+}
 .k-msheet::-webkit-scrollbar{width:6px}
 .k-msheet::-webkit-scrollbar-thumb{background:var(--k-d4d3ce);border-radius:3px}
 @media (max-width:860px){.k-calpop{position:fixed;top:170px;left:12px;right:12px;width:auto!important}}
@@ -418,41 +427,33 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 
   </div>
   <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">Counts are for your two stations, not the whole train. Blue numbers are berths that free up en route.</div>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 16px;margin-bottom:18px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-    <div class="k-stnwrap" style="position:relative">
-      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">From</div>
-      <input value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onFocus="{{ openFromSugg }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+  <div class="k-searchgrid" style="margin-top:20px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px;display:grid;grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr) auto auto;gap:11px;align-items:end">
+    <div class="k-stnwrap" style="min-width:0;position:relative">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">From</div>
+      <input value="{{ fromTxt }}" onChange="{{ setFromTxt }}" onFocus="{{ openFromSugg }}" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 14px;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none"></input>
       <div style="{{ fromSuggPanel }}">
         <sc-for list="{{ fromSuggs }}" as="o" hint-placeholder-count="5">
           <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
         </sc-for>
       </div>
     </div>
-    <div onClick="{{ swapStations }}" title="Swap" style="flex:none;margin-bottom:4px;width:34px;height:34px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k-fg-d8385a);font-size:14px">&#8646;</div>
-    <div class="k-stnwrap" style="position:relative">
-      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">To</div>
-      <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" style="min-width:170px;padding:11px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1 Manrope,sans-serif;min-height:42px;outline:none"></input>
+    <div onClick="{{ swapStations }}" title="Swap stations" style="height:46px;width:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;color:var(--k-fg-d8385a);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
+    <div class="k-stnwrap" style="min-width:0;position:relative">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">To</div>
+      <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 14px;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none"></input>
       <div style="{{ toSuggPanel }}">
         <sc-for list="{{ toSuggs }}" as="o" hint-placeholder-count="5">
           <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
         </sc-for>
       </div>
     </div>
-    <div class="k-filters" style="flex:1;min-width:250px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
-      <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
-        <div style="{{ f.wrapRes }}">
-          <div onClick="{{ f.onToggle }}" style="{{ f.styleRes }}">{{ f.label }} &#9662;</div>
-          <div style="{{ f.panel }}">
-            <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
-              <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</div>
-            </sc-for>
-          </div>
-        </div>
-      </sc-for>
-    </div>
     <div class="k-calwrap" style="position:relative">
-      <div style="font:600 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:6px">Date</div>
-      <div onClick="{{ toggleCal }}" style="{{ dateBtnSmall }}"><span>{{ dateBtnText }}</span><span style="color:var(--k-fg-d8385a)">&#9662;</span></div>
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">Date</div>
+      <div style="display:flex;align-items:center;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;overflow:hidden">
+        <div onClick="{{ dayPrev }}" style="{{ dayPrevStyle }}">&#8249;</div>
+        <div onClick="{{ toggleCal }}" style="min-width:118px;text-align:center;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);cursor:pointer">{{ dateBtnText }}</div>
+        <div onClick="{{ dayNext }}" style="{{ dayNextStyle }}">&#8250;</div>
+      </div>
       <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <div style="{{ calHeadStyle }}">{{ calHead }}</div>
@@ -471,11 +472,46 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <span style="color:var(--k-fg-14663a)">&#9679; plenty</span>
           <span style="color:var(--k-fg-c2870a)">&#9679; filling</span>
           <span style="color:var(--k-fg-d8385a)">&#9679; almost gone</span>
-          <span style="flex:1;text-align:right;color:var(--k-fg-8a8a84)">= free berths</span>
+        </div>
+      </div>
+    </div>
+    <div onClick="{{ doSearch }}" style="height:46px;padding:0 26px;border-radius:9px;background:var(--k-d8385a);color:var(--k-fg-fff);font:800 14.5px/1 Manrope,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center">Search</div>
+  </div>
+
+  <div class="k-filters" style="margin-top:14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+    <sc-for list="{{ resFilters }}" as="f" hint-placeholder-count="3">
+      <div style="position:relative">
+        <div onClick="{{ f.onClick }}" style="{{ f.style }}">
+          <span style="{{ f.capStyle }}">{{ f.cap }}</span>
+          <span>{{ f.value }}</span>
+          <span style="font-size:9px;opacity:.6;line-height:1">&#9660;</span>
+        </div>
+        <div style="{{ f.panel }}">
+          <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
+            <div onClick="{{ o.onClick }}" style="{{ o.style }}"><span>{{ o.label }}</span><span style="{{ o.tickStyle }}">&#10003;</span></div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+    <div onClick="{{ resClearAll }}" style="{{ resAnyActive }}">Clear filters</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:9px">
+      <span style="font:600 12.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">Sort by</span>
+      <div style="position:relative">
+        <div onClick="{{ resSortToggle }}" style="{{ resSortStyle }}">
+          <span>{{ resSortLabel }}</span>
+          <span style="font-size:9px;opacity:.6;line-height:1">&#9660;</span>
+        </div>
+        <div style="{{ resSortPanel }}">
+          <sc-for list="{{ resSortOpts }}" as="o" hint-placeholder-count="4">
+            <div onClick="{{ o.onClick }}" style="{{ o.style }}"><span>{{ o.label }}</span><span style="{{ o.tickStyle }}">&#10003;</span></div>
+          </sc-for>
         </div>
       </div>
     </div>
   </div>
+
+  <div style="margin-top:26px;padding-top:18px;border-top:1px solid var(--k-f0efeb)"></div>
+
   <sc-for list="{{ resultGroups }}" as="g" hint-placeholder-count="3">
   <div style="display:flex;align-items:center;gap:9px;margin:26px 0 13px">
     <span style="{{ g.dotStyle }}"></span>
@@ -1674,6 +1710,7 @@ class Component extends DCLogic {
       if(this.state.searchOpen&&!(t&&t.closest('.k-hdrsearch')))this.setState({searchOpen:false});
       if(this.state.fOpen!=null&&!(t&&t.closest('.k-filters')))this.setState({fOpen:null});
       if(this.state.calOpen&&!(t&&t.closest('.k-calwrap')))this.setState({calOpen:false});
+      if(this.state.sortOpen&&!(t&&t.closest('.k-filters')))this.setState({sortOpen:false});
       if(this.state.stnOpen&&!(t&&t.closest('.k-stnwrap')))
         this.setState({stnOpen:null,fromTxt:null,toTxt:null});};
     document.addEventListener('mousedown',this._sd);
@@ -3899,9 +3936,68 @@ class Component extends DCLogic {
         font:'500 13.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
 
       resultsCount:this.TRAINS.filter(x=>this.serves(x,S.from,S.to)).length,
-      resultSorts:[{k:'time',l:'Departure time'},{k:'free',l:'Most berths free'},{k:'dur',l:'Fastest'}]
-        .map(o=>({l:o.l,onClick:()=>{this._c={};this.setState({fSort:o.k});},
-          style:this.chip(fSort===o.k,'8px 14px')})),
+      ...(()=>{
+        const chip=(active,open)=>({display:'inline-flex',alignItems:'center',gap:8,height:38,
+          padding:'0 14px',borderRadius:9,cursor:'pointer',whiteSpace:'nowrap',
+          font:'700 13.5px/1 Manrope,sans-serif',
+          border:'1px solid '+(active?'var(--k-d8385a)':(open?'var(--k-b8b8b2)':'var(--k-e2ccd3)')),
+          background:active?'var(--k-fdf3f5)':'var(--k-fafaf8)',
+          color:active?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'});
+        const row=on=>({display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,
+          padding:'9px 11px',borderRadius:7,cursor:'pointer',
+          font:'600 13.5px/1 Manrope,sans-serif',
+          background:on?'var(--k-f4f3ef)':'transparent',
+          color:on?'var(--k-fg-14161a)':'var(--k-fg-40434a)'});
+        const tick=on=>({color:'var(--k-fg-d8385a)',fontSize:12,opacity:on?1:0});
+        const panel=open=>({display:open?'block':'none',position:'absolute',top:'calc(100% + 6px)',
+          left:0,zIndex:60,minWidth:200,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+          borderRadius:10,padding:5,boxShadow:'0 18px 44px rgba(16,19,25,.22)'});
+        const defs=[
+          {key:'cls',cap:'Class',value:S.allCls?'All classes':clsL,active:!S.allCls,
+           opts:[{l:'All classes',on:S.allCls,fn:()=>{this._c={};this.setState({allCls:true,fOpen:null,picks:[]});}}]
+             .concat(this.CLS.map(c=>({l:c.label+' \u00b7 \u20b9'+money(this.fare(c.k,km)),
+               on:!S.allCls&&S.cls===c.k,
+               fn:()=>{this._c={};this.setState({cls:c.k,allCls:false,fOpen:null,picks:[]});}})))},
+          {key:'fare',cap:'Fare',value:fareLabel,active:fFare!=='all',
+           opts:FAREO.map(o=>({l:o.l,on:fFare===o.k,fn:()=>{
+             const keep=fareTiers.filter(t=>t.p<=capOf(o.k));
+             const nc=keep.some(t=>t.k===S.cls)?S.cls:(keep.length?keep[keep.length-1].k:S.cls);
+             this._c={};this.setState({fFare:o.k,cls:nc,fOpen:null,picks:[]});}}))},
+          {key:'quota',cap:'Quota',value:S.quota,active:S.quota!=='General',
+           opts:QUOTAS.map(q=>({l:q,on:S.quota===q,fn:()=>this.setState({quota:q,fOpen:null})}))},
+        ];
+        return {
+          resFilters:defs.map(d=>({
+            cap:d.active?'':d.cap,value:d.value,
+            capStyle:{display:d.active?'none':'inline',fontWeight:600,color:'var(--k-fg-8a8a84)'},
+            style:chip(d.active,S.fOpen===d.key),
+            panel:panel(S.fOpen===d.key),
+            onClick:()=>this.setState({fOpen:S.fOpen===d.key?null:d.key,sortOpen:false}),
+            opts:d.opts.map(o=>({label:o.l,style:row(o.on),tickStyle:tick(o.on),onClick:o.fn})),
+          })),
+          resAnyActive:{display:(!S.allCls&&S.cls!=='SL')||fFare!=='all'||S.quota!=='General'?'inline-flex':'none',
+            alignItems:'center',height:38,padding:'0 13px',background:'transparent',border:'none',
+            font:'700 13px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',
+            textDecoration:'underline',textUnderlineOffset:'3px'},
+          resClearAll:()=>{this._c={};this.setState({cls:'SL',allCls:false,fFare:'all',quota:'General',fOpen:null,picks:[]});},
+          resSortLabel:sortLabel,
+          resSortStyle:chip(false,S.sortOpen),
+          resSortToggle:()=>this.setState({sortOpen:!S.sortOpen,fOpen:null}),
+          resSortPanel:Object.assign(panel(S.sortOpen),{left:'auto',right:0}),
+          resSortOpts:SORTO.map(o=>({label:o.l,style:row(fSort===o.k),tickStyle:tick(fSort===o.k),
+            onClick:()=>{this._c={};this.setState({fSort:o.k,sortOpen:false});}})),
+          dayPrev:()=>{if(S.dayIdx>0){this._c={};this.setState({dayIdx:S.dayIdx-1,picks:[]});}},
+          dayNext:()=>{if(S.dayIdx<60){this._c={};this.setState({dayIdx:S.dayIdx+1,picks:[]});}},
+          dayPrevStyle:{width:36,height:44,display:'flex',alignItems:'center',justifyContent:'center',
+            background:'transparent',border:'none',fontSize:20,lineHeight:1,
+            cursor:S.dayIdx>0?'pointer':'default',
+            color:S.dayIdx>0?'var(--k-fg-40434a)':'var(--k-fg-c9c9c2)'},
+          dayNextStyle:{width:36,height:44,display:'flex',alignItems:'center',justifyContent:'center',
+            background:'transparent',border:'none',fontSize:20,lineHeight:1,
+            cursor:S.dayIdx<60?'pointer':'default',
+            color:S.dayIdx<60?'var(--k-fg-40434a)':'var(--k-fg-c9c9c2)'},
+          doSearch:()=>this.setState({fOpen:null,sortOpen:false,stnOpen:null,calOpen:false,fromTxt:null,toTxt:null}),
+        };})(),
       resultGroups:(()=>{
       const legOf=x=>{const d1=this.sMin(x,S.from,'d'),a1=this.sMin(x,S.to,'a');
         return (d1==null||a1==null)?1e9:(((a1-d1)%1440)+1440)%1440;};
