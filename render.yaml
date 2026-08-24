@@ -1,0 +1,24 @@
+# Render blueprint. Point Render at this repo and it reads these settings
+# instead of asking you to type them in. Singapore is the closest region to
+# India, which keeps the demo quick for anyone judging from here.
+#
+# Both keys are marked sync:false, meaning Render asks you to paste them in
+# the dashboard rather than reading them from this file — they never enter
+# the repository.
+services:
+  - type: web
+    name: khaali
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: khaali-live
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SARVAM_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

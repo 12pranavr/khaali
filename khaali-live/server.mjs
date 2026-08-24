@@ -268,6 +268,16 @@ async function api(req, res, url) {
   const q = url.searchParams;
   const p = url.pathname;
 
+  // Render pings this to decide whether the instance is alive, and an uptime
+  // pinger hits it to stop the free tier falling asleep between judges. It
+  // touches no state and costs nothing, so it is safe to call every minute.
+  if (p === '/api/health') {
+    return send(res, 200, {
+      ok: true, up: Math.round(process.uptime()),
+      sarvam: !!SARVAM_KEY, openai: !!process.env.OPENAI_API_KEY,
+    });
+  }
+
   if (p === '/api/meta') {
     return send(res, 200, {
       stations: ST.map((s, i) => ({ i, ...s })),

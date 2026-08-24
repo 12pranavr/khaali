@@ -5,6 +5,9 @@
     "start": "node server.mjs",
     "test": "node test.mjs"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
