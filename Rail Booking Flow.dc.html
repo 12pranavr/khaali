@@ -1878,7 +1878,11 @@ class Component extends DCLogic {
       const auth={...this.state.auth,name:data.name,fullName:data.fullName,phone:data.phone,
         address:data.address,aad4:data.aad4,aadOk:data.aadOk};
       try{localStorage.setItem('khaali-auth',JSON.stringify(auth));}catch(e){}
-      this.setState({auth,pBusy:false,pMsg:extra&&extra.aadOk?'Aadhaar verified \u2014 only the last 4 digits were kept.':'Profile saved to your account.'});
+      // a plain save closes the sheet - the updated greeting IS the receipt.
+      // An Aadhaar verify stays open so the new VERIFIED chip is seen.
+      const aadDone=!!(extra&&extra.aadOk);
+      this.setState({auth,pBusy:false,profOpen:aadDone,
+        pMsg:aadDone?'Aadhaar verified \u2014 only the last 4 digits were kept.':null});
     }catch(e){this.setState({pBusy:false,pErr:'Network hiccup \u2014 try again.'});}
   }
   verifyAadhaar(){
