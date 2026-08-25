@@ -144,8 +144,15 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 }
 @media (max-width:600px){
   .k-searchgrid{grid-template-columns:1fr!important}
-  .k-searchgrid>div:nth-child(2){justify-self:start}
   .k-searchgrid>div{grid-column:1/-1}
+  /* stacked fields: the swap floats over the seam between FROM and TO on
+     the right, rotated so its arrows read up-down - no orphan row */
+  .k-swap{justify-self:end;transform:rotate(90deg);position:relative;z-index:5;
+    margin:-30px 4px -30px 0;background:var(--k-fff)!important;
+    box-shadow:0 2px 10px rgba(16,19,25,.16)}
+  .k-swap2{transform:rotate(90deg);position:relative;z-index:5;
+    margin:-24px 10px -24px auto!important;background:var(--k-fff);
+    box-shadow:0 2px 10px rgba(16,19,25,.16)}
 }
 .k-msheet::-webkit-scrollbar{width:6px}
 .k-msheet::-webkit-scrollbar-thumb{background:var(--k-d4d3ce);border-radius:3px}
@@ -289,7 +296,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
               </sc-for>
             </div>
           </div>
-          <div onClick="{{ swapStations }}" title="Swap" style="flex:none;margin-bottom:6px;width:38px;height:38px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k-fg-d8385a);font-size:15px">&#8646;</div>
+          <div class="k-swap2" onClick="{{ swapStations }}" title="Swap" style="flex:none;margin-bottom:6px;width:38px;height:38px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--k-fg-d8385a);font-size:15px">&#8646;</div>
           <div class="k-stnwrap" style="position:relative">
             <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">To</div>
             <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" placeholder="Type a station or code" style="min-width:190px;padding:13px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14.5px/1 Archivo,Manrope,sans-serif;min-height:48px;outline:none"></input>
@@ -467,7 +474,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         </sc-for>
       </div>
     </div>
-    <div onClick="{{ swapStations }}" title="Swap stations" style="height:46px;width:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;color:var(--k-fg-d8385a);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
+    <div class="k-swap" onClick="{{ swapStations }}" title="Swap stations" style="height:46px;width:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;color:var(--k-fg-d8385a);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
     <div class="k-stnwrap" style="min-width:0;position:relative">
       <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">To</div>
       <input value="{{ toTxt }}" onChange="{{ setToTxt }}" onFocus="{{ openToSugg }}" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 14px;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none"></input>
