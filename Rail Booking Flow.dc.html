@@ -1808,7 +1808,8 @@ class Component extends DCLogic {
         token:j.access_token,refresh:j.refresh_token||'',at:Date.now()};
       try{localStorage.setItem('khaali-auth',JSON.stringify(auth));
         localStorage.setItem('khaali-who',auth.email);}catch(e){}
-      this.setState({auth,authOpen:false,authMenu:false,aBusy:false,aPass:'',aErr:null});
+      this.setState({auth,authOpen:false,authMenu:false,aBusy:false,aPass:'',aErr:null},
+        ()=>{if(this._resave){this._resave=false;this.saveProfile();}});
     }catch(e){this.setState({aBusy:false,aErr:'Network hiccup \u2014 try again.'});}
   }
   async loadOdds2(key){
@@ -1824,6 +1825,7 @@ class Component extends DCLogic {
       this.setState({odds2:{key,data:{trains:[]},err:true}});
     }
   }
+  capFirst(s){s=String(s||'').trim();return s?s[0].toUpperCase()+s.slice(1):s;}
   async refreshAuth(){
     const A=this.state.auth;
     if(!A||!A.refresh)return false;
@@ -1862,8 +1864,16 @@ class Component extends DCLogic {
       }
       if(!r.ok){
         const j=await r.json().catch(()=>({}));
-        return this.setState({pBusy:false,
-          pErr:String(j.msg||j.message||('Could not save (http '+r.status+') \u2014 sign in again.'))});
+        const raw=String(j.msg||j.message||j.error_description||'');
+        if(r.status===401||r.status===403||/jwt|expired|claims|invalid token/i.test(raw)){
+          // session too old to renew - ask for the password once, then finish
+          // the save automatically the moment sign-in succeeds
+          this._resave=true;
+          return this.setState({pBusy:false,
+            pErr:'Your session had expired \u2014 sign in below and this will save itself.',
+            authOpen:true,authMode:'in',aEmail:(this.state.auth||{}).email||'',aPass:'',aErr:null});
+        }
+        return this.setState({pBusy:false,pErr:raw||('Could not save (http '+r.status+')')});
       }
       const auth={...this.state.auth,name:data.name,fullName:data.fullName,phone:data.phone,
         address:data.address,aad4:data.aad4,aadOk:data.aadOk};
@@ -4048,7 +4058,7 @@ class Component extends DCLogic {
         const A=S.auth;
         const first=A?String(A.name||'traveller').trim().split(/\s+/)[0]:'';
         return {
-          authBtnLabel:A?('Namaste, '+first+' \u25be'):'Sign in',
+          authBtnLabel:A?('Namaste, '+this.capFirst(first)+' \u25be'):'Sign in',
           authBtnClick:A?()=>this.setState({authMenu:!S.authMenu})
             :()=>this.setState({authOpen:true,authMode:'in',aErr:null,aPass:''}),
           authBtnStyle:{border:A?'1px solid var(--k-d4d3ce)':'none',
@@ -4063,7 +4073,7 @@ class Component extends DCLogic {
           authMenuName:A?A.name:'',authMenuEmail:A?A.email:'',
           authMenuPhone:A&&A.phone?A.phone:'',
           signOut:()=>this.signOut(),
-          authWrap:{display:S.authOpen?'flex':'none',position:'fixed',inset:0,zIndex:130,
+          authWrap:{display:S.authOpen?'flex':'none',position:'fixed',inset:0,zIndex:140,
             background:'rgba(20,16,10,.55)',alignItems:'center',justifyContent:'center',padding:20},
           authClose:()=>this.setState({authOpen:false,aErr:null}),
           authTag:S.authMode==='up'?'New traveller':'Welcome back',
@@ -4093,7 +4103,7 @@ class Component extends DCLogic {
           profWrap:{display:S.profOpen?'flex':'none',position:'fixed',inset:0,zIndex:130,
             background:'rgba(20,16,10,.55)',alignItems:'center',justifyContent:'center',padding:20},
           profClose:()=>this.setState({profOpen:false}),
-          profTitle:A?('Namaste, '+String(A.name||'traveller').split(/\s+/)[0]):'',
+          profTitle:A?('Namaste, '+this.capFirst(String(A.name||'traveller').split(/\s+/)[0])):'',
           profEmail:A?A.email:'',
           pName:S.pName||'',setPName:e=>this.setState({pName:e.target.value,pErr:null,pMsg:null}),
           pFull:S.pFull||'',setPFull:e=>this.setState({pFull:e.target.value,pErr:null,pMsg:null}),
