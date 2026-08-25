@@ -234,7 +234,15 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
       <div onClick="{{ toggleTheme }}" title="{{ themeTitle }}" style="{{ themeBtn }}">{{ themeIcon }}</div>
       <div onClick="{{ toggleCity }}" style="font-size:13.5px;font-weight:600;color:var(--k-fg-40434a);cursor:pointer;padding:9px 4px">{{ city }} ▾</div>
-      <button style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 13px/1 Manrope,sans-serif;padding:11px 17px;border-radius:5px;cursor:pointer;min-height:40px">Sign in</button>
+      <div class="k-authwrap" style="position:relative">
+        <button onClick="{{ authBtnClick }}" style="{{ authBtnStyle }}">{{ authBtnLabel }}</button>
+        <div style="{{ authMenuPanel }}">
+          <div style="font:700 14px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ authMenuName }}</div>
+          <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ authMenuEmail }}</div>
+          <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ authMenuPhone }}</div>
+          <button onClick="{{ signOut }}" style="width:100%;margin-top:12px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 12.5px/1 Manrope,sans-serif;padding:11px;border-radius:7px;cursor:pointer;min-height:40px">Sign out</button>
+        </div>
+      </div>
     </div>
   </div>
   <div style="border-top:1px solid var(--k-f0efeb);background:var(--k-fbfbfa)">
@@ -1299,6 +1307,30 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   </div>
 </div>
 
+<div style="{{ authWrap }}">
+  <div style="width:min(400px,92vw);background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);overflow-y:auto">
+    <div style="display:flex;align-items:center;margin-bottom:8px">
+      <div style="font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;color:var(--k-fg-d8385a);text-transform:uppercase">{{ authTag }}</div>
+      <div onClick="{{ authClose }}" style="margin-left:auto;cursor:pointer;font-size:19px;line-height:1;color:var(--k-fg-8a8a84);padding:4px 6px">&#215;</div>
+    </div>
+    <div style="font:600 24px/1.2 'Cormorant Garamond',Georgia,serif;margin-bottom:16px">{{ authTitle }}</div>
+    <div style="{{ authUpOnly }}">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Your name</div>
+      <input value="{{ aName }}" onChange="{{ setAName }}" placeholder="Goes on the greeting, not the govt records" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Phone</div>
+      <input value="{{ aPhone }}" onChange="{{ setAPhone }}" inputmode="tel" placeholder="For delay alerts · optional" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
+    </div>
+    <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Email</div>
+    <input value="{{ aEmail }}" onChange="{{ setAEmail }}" inputmode="email" placeholder="you@example.com" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
+    <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Password</div>
+    <input type="password" value="{{ aPass }}" onChange="{{ setAPass }}" placeholder="At least 6 characters" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 4px"></input>
+    <div style="{{ authErrStyle }}">{{ authErr }}</div>
+    <button onClick="{{ authGo }}" style="width:100%;margin-top:12px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">{{ authGoLabel }}</button>
+    <div onClick="{{ authSwap }}" style="margin-top:14px;text-align:center;font:700 12.5px/1.4 Manrope,sans-serif;color:var(--k-fg-d8385a);cursor:pointer">{{ authSwapText }}</div>
+    <div style="margin-top:12px;font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);text-align:center">Your password goes straight to Supabase — khaali never sees or stores it.</div>
+  </div>
+</div>
+
 <sc-if value="{{ onFavorites }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:900px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:22px">
@@ -1694,6 +1726,8 @@ class Component extends DCLogic {
   imgCredit(no){const m=this.imgFor(no);return m?'Photo: '+m.by+' / Wikimedia Commons':'';}
   imgHref(no){const m=this.imgFor(no);return m?'https://commons.wikimedia.org/wiki/File:'+encodeURIComponent(m.f):'';}
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
+           auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
+           authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
            city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
            q:'',searchOpen:false,searchSel:0,fOpen:null,fFare:'all',fSort:'time',dark:false,
@@ -1704,6 +1738,42 @@ class Component extends DCLogic {
               picks:[{key:'S3-4',no:4,coach:'S3',type:'LB',k:'part',at:5},{key:'S3-6',no:6,coach:'S3',type:'UB',k:'part',at:5}],
               pnr:'4517203964',total:272,names:['Lakshmi Devi','Susheela Rao']}
            ]};
+  SUPA='https://bqzbdajkrtbuovhjimvp.supabase.co';
+  SUPA_KEY='sb_publishable_RGMBcLx0VUY1-5vfm___-Q_5ryOV-y0';
+  async doAuth(){
+    const S=this.state;
+    const email=String(S.aEmail||'').trim(),pass=String(S.aPass||'');
+    const name=String(S.aName||'').trim(),phone=String(S.aPhone||'').trim();
+    if(S.authMode==='up'&&!name)return this.setState({aErr:'Tell us your name \u2014 it becomes your greeting.'});
+    if(!/^\S+@\S+\.\S+$/.test(email))return this.setState({aErr:'That email does not look right.'});
+    if(pass.length<6)return this.setState({aErr:'Password needs at least 6 characters.'});
+    this.setState({aBusy:true,aErr:null});
+    try{
+      const url=this.SUPA+'/auth/v1/'+(S.authMode==='up'?'signup':'token?grant_type=password');
+      const body=S.authMode==='up'?{email,password:pass,data:{name,phone}}:{email,password:pass};
+      const r=await fetch(url,{method:'POST',
+        headers:{apikey:this.SUPA_KEY,'content-type':'application/json'},
+        body:JSON.stringify(body)});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){
+        const m=j.error_description||j.msg||j.message||(j.error&&j.error.message)||'Could not sign you in.';
+        return this.setState({aBusy:false,aErr:String(m)});
+      }
+      const u=j.user||{},md=u.user_metadata||{};
+      if(!j.access_token)return this.setState({aBusy:false,
+        aErr:'Account created, but email confirmation is switched on in Supabase \u2014 confirm from your inbox, then sign in.'});
+      const auth={email:u.email||email,name:md.name||name||'traveller',phone:md.phone||phone||'',
+        token:j.access_token,at:Date.now()};
+      try{localStorage.setItem('khaali-auth',JSON.stringify(auth));
+        localStorage.setItem('khaali-who',auth.email);}catch(e){}
+      this.setState({auth,authOpen:false,authMenu:false,aBusy:false,aPass:'',aErr:null});
+    }catch(e){this.setState({aBusy:false,aErr:'Network hiccup \u2014 try again.'});}
+  }
+  signOut(){
+    try{localStorage.removeItem('khaali-auth');
+      localStorage.setItem('khaali-who','phone-'+Math.random().toString(36).slice(2,6));}catch(e){}
+    this.setState({auth:null,authMenu:false});
+  }
   applyTheme(on){try{document.documentElement.setAttribute('data-theme',on?'dark':'light');
     localStorage.setItem('khaali-theme',on?'dark':'light');}catch(e){}}
   componentDidMount(){this._t=setInterval(()=>this.setState({tick:this.state.tick+1}),5000);
@@ -1713,6 +1783,7 @@ class Component extends DCLogic {
     this.applyTheme(on);if(on!==this.state.dark)this.setState({dark:on});
     this._sd=e=>{const t=e.target&&e.target.closest?e.target:null;
       if(this.state.searchOpen&&!(t&&t.closest('.k-hdrsearch')))this.setState({searchOpen:false});
+      if(this.state.authMenu&&!(t&&t.closest('.k-authwrap')))this.setState({authMenu:false});
       if(this.state.fOpen!=null&&!(t&&t.closest('.k-filters')))this.setState({fOpen:null});
       if(this.state.calOpen&&!(t&&t.closest('.k-calwrap')))this.setState({calOpen:false});
       if(this.state.sortOpen&&!(t&&t.closest('.k-filters')))this.setState({sortOpen:false});
@@ -3808,6 +3879,45 @@ class Component extends DCLogic {
           dupBannerStyle:{display:pairs.length?'block':'none',background:'var(--k-fdf0e3)',
             border:'1px solid var(--k-e2ccd3)',borderRadius:8,padding:'12px 15px',margin:'0 0 16px',
             font:'600 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
+        };})(),
+      ...(()=>{
+        const A=S.auth;
+        const first=A?String(A.name||'traveller').trim().split(/\s+/)[0]:'';
+        return {
+          authBtnLabel:A?('Namaste, '+first+' \u25be'):'Sign in',
+          authBtnClick:A?()=>this.setState({authMenu:!S.authMenu})
+            :()=>this.setState({authOpen:true,authMode:'in',aErr:null,aPass:''}),
+          authBtnStyle:{border:A?'1px solid var(--k-d4d3ce)':'none',
+            background:A?'var(--k-fff)':'var(--k-d8385a)',
+            color:A?'var(--k-fg-14161a)':'var(--k-fg-fff)',
+            font:'700 13px/1 Manrope,sans-serif',padding:'11px 15px',borderRadius:5,
+            cursor:'pointer',minHeight:40,whiteSpace:'nowrap'},
+          authMenuPanel:{display:S.authMenu&&A?'block':'none',position:'absolute',right:0,
+            top:'calc(100% + 8px)',width:232,background:'var(--k-fff)',
+            border:'1px solid var(--k-e6e5e0)',borderRadius:10,zIndex:95,
+            boxShadow:'0 16px 44px rgba(16,19,25,.18)',padding:'14px 16px'},
+          authMenuName:A?A.name:'',authMenuEmail:A?A.email:'',
+          authMenuPhone:A&&A.phone?A.phone:'',
+          signOut:()=>this.signOut(),
+          authWrap:{display:S.authOpen?'flex':'none',position:'fixed',inset:0,zIndex:130,
+            background:'rgba(20,16,10,.55)',alignItems:'center',justifyContent:'center',padding:20},
+          authClose:()=>this.setState({authOpen:false,aErr:null}),
+          authTag:S.authMode==='up'?'New traveller':'Welcome back',
+          authTitle:S.authMode==='up'?'Create your account':'Sign in to khaali',
+          authUpOnly:{display:S.authMode==='up'?'block':'none'},
+          aName:S.aName||'',setAName:e=>this.setState({aName:e.target.value,aErr:null}),
+          aPhone:S.aPhone||'',
+          setAPhone:e=>this.setState({aPhone:String(e.target.value||'').replace(/[^0-9+ ]/g,'').slice(0,14),aErr:null}),
+          aEmail:S.aEmail||'',setAEmail:e=>this.setState({aEmail:e.target.value,aErr:null}),
+          aPass:S.aPass||'',setAPass:e=>this.setState({aPass:e.target.value,aErr:null}),
+          authErr:S.aErr||'',
+          authErrStyle:{display:S.aErr?'block':'none',marginTop:8,padding:'10px 13px',
+            borderRadius:7,background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
+            font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+          authGo:()=>{if(!S.aBusy)this.doAuth();},
+          authGoLabel:S.aBusy?'One moment\u2026':(S.authMode==='up'?'Create account':'Sign in'),
+          authSwap:()=>this.setState({authMode:S.authMode==='up'?'in':'up',aErr:null}),
+          authSwapText:S.authMode==='up'?'Already have an account? Sign in':'New to khaali? Create an account',
         };})(),
       favRows:this.favs().map(no=>{
         const x=this.TRAINS.find(t=>t.no===no);
