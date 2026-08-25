@@ -249,14 +249,6 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       <div class="k-city" onClick="{{ toggleCity }}" style="font-size:13.5px;font-weight:600;color:var(--k-fg-40434a);cursor:pointer;padding:9px 4px">{{ city }} ▾</div>
       <div class="k-authwrap" style="position:relative">
         <button onClick="{{ authBtnClick }}" style="{{ authBtnStyle }}"><span class="k-namaste">{{ authBtnNamaste }}</span>{{ authBtnLabel }}</button>
-        <div style="{{ authMenuPanel }}">
-          <div style="font:700 14px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ authMenuName }}</div>
-          <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ authMenuEmail }}</div>
-          <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ authMenuPhone }}</div>
-          <div style="{{ authMenuAad }}">{{ authMenuAadText }}</div>
-          <button onClick="{{ openProfile }}" style="width:100%;margin-top:12px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 12.5px/1 Manrope,sans-serif;padding:11px;border-radius:7px;cursor:pointer;min-height:40px">My profile</button>
-          <button onClick="{{ signOut }}" style="width:100%;margin-top:12px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 12.5px/1 Manrope,sans-serif;padding:11px;border-radius:7px;cursor:pointer;min-height:40px">Sign out</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1386,6 +1378,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     <div style="{{ profErrStyle }}">{{ profErr }}</div>
     <div style="{{ profMsgStyle }}">{{ profMsg }}</div>
     <button onClick="{{ profSave }}" style="width:100%;margin-top:6px;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">{{ profSaveLabel }}</button>
+    <button onClick="{{ profSignOut }}" style="width:100%;margin-top:10px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 13px/1 Manrope,sans-serif;padding:13px;border-radius:8px;cursor:pointer;min-height:44px">Sign out</button>
   </div>
 </div>
 
@@ -1923,7 +1916,7 @@ class Component extends DCLogic {
   signOut(){
     try{localStorage.removeItem('khaali-auth');
       localStorage.setItem('khaali-who','phone-'+Math.random().toString(36).slice(2,6));}catch(e){}
-    this.setState({auth:null,authMenu:false});
+    this.setState({auth:null,authMenu:false,profOpen:false});
   }
   applyTheme(on){try{document.documentElement.setAttribute('data-theme',on?'dark':'light');
     localStorage.setItem('khaali-theme',on?'dark':'light');}catch(e){}}
@@ -4094,7 +4087,8 @@ class Component extends DCLogic {
         return {
           authBtnNamaste:A?'Namaste, ':'',
           authBtnLabel:A?(this.capFirst(first)+' \u25be'):'Sign in',
-          authBtnClick:A?()=>this.setState({authMenu:!S.authMenu})
+          // signed in, your name IS the profile button - no dropdown between
+          authBtnClick:A?()=>this.openProfile()
             :()=>this.setState({authOpen:true,authMode:'in',aErr:null,aPass:''}),
           authBtnStyle:{border:A?'1px solid var(--k-d4d3ce)':'none',
             background:A?'var(--k-fff)':'var(--k-d8385a)',
@@ -4164,6 +4158,7 @@ class Component extends DCLogic {
             font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-14663a)'},
           profSave:()=>{if(!S.pBusy)this.saveProfile();},
           profSaveLabel:S.pBusy?'Saving\u2026':'Save profile',
+          profSignOut:()=>this.signOut(),
         };})(),
       favRows:this.favs().map(no=>{
         const x=this.TRAINS.find(t=>t.no===no);
