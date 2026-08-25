@@ -3182,7 +3182,10 @@ class Component extends DCLogic {
       onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',
       // Berths is deliberately not here: the seat map only means anything once a
       // train and a journey are chosen, so it is reached through Departures.
-      nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Departures',p:'showtimes'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
+      // Departures left the nav on purpose: it sells no part of the story and
+      // its one real job — picking a boarding point — is offered mid-booking
+      // by the class modal's link. The page itself stays alive at its URL.
+      nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
         onClick:()=>this.go(x.p)})),
