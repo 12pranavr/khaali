@@ -389,13 +389,20 @@ async function api(req, res, url) {
     const base = start ? new Date(start + 'T00:00:00') : new Date();
     const out = {};
     const classes = cls === 'all' ? CLS.map(c => c.k) : [cls];
+    // train=all sums every train serving the pair, so the calendar's heat is
+    // the same number the seat-check page adds up - one world, one count.
+    const tlist = train === 'all'
+      ? TRAINS.filter(t => serves(t, from, to)).map(t => t.no)
+      : [train];
     let total = 0;
     for (let i = 0; i < days; i++) {
       const d = new Date(base.getTime() + i * 864e5);
       const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
       let free = 0, part = 0;
-      for (const k of classes) {
-        const c = store.countsFor(train, iso, k, from, to);
+      for (const k of classes) for (const no of tlist) {
+        // a cancelled run sells nothing that day — same rule the page applies
+        if (train === 'all' && cancelledOn(no, iso)) continue;
+        const c = store.countsFor(no, iso, k, from, to);
         free += c.free; part += c.part;
         if (i === 0) total += c.free + c.part + c.taken + c.locked;
       }

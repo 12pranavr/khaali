@@ -184,7 +184,9 @@ export function seedOccupancy(clsKey, trainNo, dayIdx = 0, seed = 7) {
     : 0.5 + rnd() * 0.45;
   if (rnd() < 0.14) df = Math.min(1.35, df + 0.38);
   const longBias = (df - 0.55) / 0.8 * 0.8;
-  const freeN = Math.max(0, Math.floor(C.free * (2.1 - df)));
+  // A hot date sells out full-way in every class - AC included - so the
+  // waitlist page has genuine red cases. Quieter days scale down as before.
+  const freeN = df > 1.15 ? 0 : Math.max(0, Math.floor(C.free * (2.1 - df)));
   // Busy day = fewer untouched berths of every kind, so the count someone can
   // actually book falls as demand rises.
   // No floor here: a genuinely hot date is allowed to sell out full-way, so

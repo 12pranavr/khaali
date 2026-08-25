@@ -2491,12 +2491,12 @@ class Component extends DCLogic {
     const S=this.state;
     if(!S.srvOn)return;
     const cls=S.allCls?'all':S.cls;
-    const key=S.train+'|'+cls+'|'+S.from+'|'+S.to;
+    const key='all|'+cls+'|'+S.from+'|'+S.to;
     if(S.calAv&&S.calAv.key===key)return;               // already loaded for this journey
     const d0=new Date();
     const startIso=new Date(d0.getTime()-d0.getTimezoneOffset()*60000).toISOString().slice(0,10);
     try{
-      const j=await this.tfetch('/api/calendar?train='+S.train+'&cls='+cls+'&from='+S.from
+      const j=await this.tfetch('/api/calendar?train=all&cls='+cls+'&from='+S.from
         +'&to='+S.to+'&start='+startIso+'&days=61',null,6000).then(r=>r.json());
       this.setState({calAv:{key:key,days:j.days,total:j.total||432}});
     }catch(e){}
@@ -2516,7 +2516,7 @@ class Component extends DCLogic {
         const b=p.idx!=null&&av.berths[p.idx];return b&&(b.k==='free'||b.k==='part');});
       const dropped=picks.length!==(this.state.picks||[]).length;
       if(this._c)delete this._c.__cc;
-      const calKey=S.train+'|'+(S.allCls?'all':S.cls)+'|'+S.from+'|'+S.to;
+      const calKey='all|'+(S.allCls?'all':S.cls)+'|'+S.from+'|'+S.to;
       if(this.state.calAv&&this.state.calAv.key!==calKey)this.setState({calAv:null});
       this.setState({srvAv:av,srvKey:key,srvCounts:ct.counts,srvOn:true,picks,srvStamp:Date.now(),
         srvNote:dropped?'Someone else took a berth you had selected. It has been removed.':null});
@@ -2813,7 +2813,7 @@ class Component extends DCLogic {
       for(let i=0;i<lead;i++)out.push({t:'',style:{width:45,height:48},onClick:()=>{}});
       const nDays=new Date(vm.getFullYear(),vm.getMonth()+1,0).getDate();
       const isoOf=x=>new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().slice(0,10);
-      const avKey=S.train+'|'+(S.allCls?'all':S.cls)+'|'+S.from+'|'+S.to;
+      const avKey='all|'+(S.allCls?'all':S.cls)+'|'+S.from+'|'+S.to;
       const avDays=(S.calAv&&S.calAv.key===avKey)?S.calAv.days:null;
       for(let i=1;i<=nDays;i++){
         const d=new Date(vm.getFullYear(),vm.getMonth(),i);
@@ -3730,7 +3730,9 @@ class Component extends DCLogic {
             badgeWrap:{marginTop:8},
             badgeStyle:{font:"700 9px/1 'IBM Plex Mono',monospace",letterSpacing:'.13em',
               color:C[1],border:'1px solid '+C[0],borderRadius:999,padding:'5px 9px'},
-            head:b==='book'?(t.counts.free+' berths free your whole way \u2014 just book'):
+            head:b==='book'?(t.counts.free<=5
+                ?('Only '+t.counts.free+' left your whole way \u2014 going fast')
+                :(t.counts.free+' berths free your whole way \u2014 just book')):
               b==='hop'?'Sold out full-way \u2014 but a seat is CERTAIN with one berth change':
               b==='odds'?'Genuinely full \u2014 these are your honest odds':
               ('Cancelled \u2014 '+(t.cancelReason||'')),
