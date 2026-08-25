@@ -906,6 +906,29 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <div style="font:600 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);max-width:15em">{{ storyBigSub }}</div>
         </div>
       </div>
+      <div style="background:var(--k-fafaf8);border:1px solid var(--k-eeede9);border-radius:9px;padding:13px 17px;margin-bottom:16px">
+        <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:baseline">
+          <div style="flex:none">
+            <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--k-fg-d8385a);margin-bottom:5px">This train, for real</div>
+            <div style="font:600 11.5px/1.4 Manrope,sans-serif;color:var(--k-fg-5a5f6a)">{{ packSub }}</div>
+          </div>
+          <div style="flex:none">
+            <div style="font:600 9.5px/1 Manrope,sans-serif;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:5px">Free end to end today</div>
+            <div style="font:700 21px/1 Manrope,sans-serif">{{ packBefore }}</div>
+          </div>
+          <div style="flex:none;font:700 15px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84);align-self:center">&#8594;</div>
+          <div style="flex:none">
+            <div style="font:600 9.5px/1 Manrope,sans-serif;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:5px">After repacking</div>
+            <div style="font:700 21px/1 Manrope,sans-serif;color:var(--k-fg-1f9d55)">{{ packAfter }}</div>
+          </div>
+          <div style="flex:1;min-width:140px">
+            <div style="font:600 9.5px/1 Manrope,sans-serif;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:5px">Busiest leg</div>
+            <div style="font:700 21px/1 Manrope,sans-serif">{{ packPeak }}</div>
+            <div style="font:500 10.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:2px">{{ packPeakSub }}</div>
+          </div>
+        </div>
+        <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:9px">{{ packNote }}</div>
+      </div>
       <div style="overflow-x:auto">
         <div style="min-width:560px;position:relative;padding-bottom:4px">
           <div style="position:relative;height:20px;margin-left:30px">
@@ -935,52 +958,6 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
     </div>
 
-    <div style="{{ packPanel }}">
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-        <div style="font:700 15.5px/1.3 Manrope,sans-serif">Repack the chart</div>
-        <div style="font-size:12.5px;color:var(--k-fg-8a8a84)">{{ packSub }}</div>
-      </div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px">
-        <div style="flex:1;min-width:150px">
-          <div style="{{ packColHead }}">Free end to end today</div>
-          <div style="font:700 27px/1.1 Manrope,sans-serif">{{ packBefore }}</div>
-        </div>
-        <div style="flex:1;min-width:150px">
-          <div style="{{ packColHead }}">After repacking</div>
-          <div style="font:700 27px/1.1 Manrope,sans-serif;color:var(--k-fg-1f9d55)">{{ packAfter }}</div>
-        </div>
-        <div style="flex:1;min-width:150px">
-          <div style="{{ packColHead }}">Busiest leg</div>
-          <div style="font:700 27px/1.1 Manrope,sans-serif">{{ packPeak }}</div>
-          <div style="font-size:11.5px;color:var(--k-fg-8a8a84);margin-top:3px">{{ packPeakSub }}</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:22px;flex-wrap:wrap">
-        <div style="flex:1;min-width:250px">
-          <div style="{{ packColHead }}">Today · scattered</div>
-          <sc-for list="{{ packRowsBefore }}" as="r" hint-placeholder-count="120">
-            <div style="{{ r.row }}">
-              <sc-for list="{{ r.bars }}" as="bar" hint-placeholder-count="1">
-                <div style="{{ bar }}"></div>
-              </sc-for>
-            </div>
-          </sc-for>
-          <div style="font-size:11px;color:var(--k-fg-9a9a94);margin-top:7px">{{ packLegendA }}</div>
-        </div>
-        <div style="flex:1;min-width:250px">
-          <div style="{{ packColHead }}">Repacked · stacked</div>
-          <sc-for list="{{ packRowsAfter }}" as="r" hint-placeholder-count="120">
-            <div style="{{ r.row }}">
-              <sc-for list="{{ r.bars }}" as="bar" hint-placeholder-count="2">
-                <div style="{{ bar }}"></div>
-              </sc-for>
-            </div>
-          </sc-for>
-          <div style="font-size:11px;color:var(--k-fg-9a9a94);margin-top:7px">{{ packLegendB }}</div>
-        </div>
-      </div>
-      <div style="margin-top:16px;padding-top:13px;border-top:1px solid var(--k-f0efeb);font-size:12px;color:var(--k-fg-6a6d75);line-height:1.55">{{ packNote }}</div>
-    </div>
 
     <sc-for list="{{ coachBlocks }}" as="cb" hint-placeholder-count="6">
       <div style="margin-bottom:30px">
