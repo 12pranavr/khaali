@@ -1,5 +1,6 @@
 # secrets — never commit the Sarvam key
 khaali-live/.sarvam-key
+khaali-live/.openai-key
 .env
 
 # dependencies & runtime junk
