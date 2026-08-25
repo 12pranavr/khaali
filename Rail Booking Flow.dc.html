@@ -890,6 +890,51 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     </div>
     <div style="{{ seatNotice }}">{{ seatNoticeText }}</div>
 
+    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:20px 22px;margin-bottom:22px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <sc-for list="{{ storyTabs }}" as="st" hint-placeholder-count="3">
+          <div onClick="{{ st.onClick }}" style="{{ st.style }}"><span style="{{ st.numStyle }}">{{ st.n }}</span>{{ st.label }}</div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px">
+        <div style="flex:1;min-width:240px">
+          <div style="font:700 19px/1.2 Manrope,sans-serif;margin-bottom:7px">{{ storyTitle }}</div>
+          <div style="font:500 12.5px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);max-width:44em">{{ storyBody }}</div>
+        </div>
+        <div style="flex:none;text-align:right">
+          <div style="{{ storyBigStyle }}">{{ storyBig }}</div>
+          <div style="font:600 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);max-width:15em">{{ storyBigSub }}</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <div style="min-width:560px;position:relative;padding-bottom:4px">
+          <div style="position:relative;height:20px;margin-left:30px">
+            <sc-for list="{{ storyStations }}" as="ss" hint-placeholder-count="6">
+              <span style="{{ ss.style }}">{{ ss.n }}</span>
+            </sc-for>
+          </div>
+          <div style="position:relative">
+            <div style="{{ storyHandover }}"></div>
+            <sc-for list="{{ storyRows }}" as="sr" hint-placeholder-count="24">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                <span style="{{ sr.numStyle }}">{{ sr.n }}</span>
+                <div style="position:relative;flex:1;height:20px;background:var(--k-f4f3ef);border-radius:6px">
+                  <sc-for list="{{ sr.segs }}" as="sg" hint-placeholder-count="2">
+                    <div style="{{ sg.style }}">{{ sg.txt }}</div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <div style="{{ storyTip }}">the handover: one passenger gets off at Ramanagara, the next gets on</div>
+          </div>
+        </div>
+      </div>
+      <div style="{{ storyFoot }}">
+        <div style="font:700 13.5px/1.4 Manrope,sans-serif;color:var(--k-fg-14663a)">4 berths with nobody on them, the whole trip</div>
+        <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin-top:3px">Ready to sell as 4 normal tickets. Do this across the whole train and you get 33.</div>
+      </div>
+    </div>
+
     <div style="{{ packPanel }}">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:16px">
         <div style="font:700 15.5px/1.3 Manrope,sans-serif">Repack the chart</div>
@@ -1794,7 +1839,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -4191,6 +4236,88 @@ class Component extends DCLogic {
           profSave:()=>{if(!S.pBusy)this.saveProfile();},
           profSaveLabel:S.pBusy?'Saving\u2026':'Save profile',
           profSignOut:()=>this.signOut(),
+        };})(),
+      ...(()=>{
+        const STN=['Bangarpet','Whitefield','Bengaluru KSR','Ramanagara','Mandya','Mysuru'];
+        const POS=[0,20,40,60,80,100];
+        const COL=['#a5673f','#3d7a9e','#c94f57','#6b7d3a','#7a5fa0','#a84f7d','#2f6f6b','#b8552f','#4a7d4f','#8a6d3b','#5b6b9e','#9e7a3d'];
+        const P=[[0,3],[1,4],[0,5],[0,3],[0,3],[0,5],[0,5],[0,5],[0,5],[1,4],[1,4],[0,3],
+                 [3,5],[3,5],[0,5],[0,5],[0,5],[1,4],[0,5],[0,5],[0,5],[3,5],[3,5],[0,5]];
+        const LV=[0,3,4,11],BD=[12,13,21,22];   // leavers end at Ramanagara; boarders start there
+        const step=S.packStep||1;
+        const col=i=>COL[i%COL.length];
+        const seg=(a,b,bg,txt,dash)=>({style:{position:'absolute',left:POS[a]+'%',
+          width:(POS[b]-POS[a])+'%',top:0,bottom:0,borderRadius:6,
+          background:dash?'rgba(31,157,85,.10)':bg,
+          border:dash?'1.5px dashed var(--k-1f9d55)':'none',
+          font:"600 9.5px/20px 'IBM Plex Mono',monospace",color:'var(--k-fg-14663a)',
+          paddingLeft:txt?8:0,whiteSpace:'nowrap',overflow:'hidden'},txt:txt||''});
+        const GREY='var(--k-d4d3ce)';
+        const rows=[];
+        if(step===1){
+          P.forEach((p,i)=>{const sg=[];
+            if(p[0]>0)sg.push(seg(0,p[0],null,'no one until '+STN[p[0]],true));
+            sg.push(seg(p[0],p[1],col(i)));
+            if(p[1]<5)sg.push(seg(p[1],5,null,'no one after '+STN[p[1]],true));
+            rows.push({n:i+1,segs:sg});});
+        }else{
+          const merged=LV.map((li,k)=>({li,bi:BD[k]}));
+          const rowOf=(i)=>{
+            const m=merged.find(x=>x.li===i);
+            if(m)return {n:0,segs:[seg(0,3,col(m.li)),seg(3,5,col(m.bi))]};
+            if(BD.includes(i))return {n:0,segs:[seg(0,5,null,'',true)]};
+            const p=P[i];return {n:0,segs:[seg(p[0],p[1],GREY)]};
+          };
+          if(step===2){P.forEach((p,i)=>{const r=rowOf(i);r.n=i+1;rows.push(r);});}
+          else{
+            const order=[...LV,
+              ...P.map((p,i)=>i).filter(i=>!LV.includes(i)&&!BD.includes(i)&&P[i][0]===0&&P[i][1]===5),
+              ...P.map((p,i)=>i).filter(i=>!LV.includes(i)&&!BD.includes(i)&&!(P[i][0]===0&&P[i][1]===5)),
+              ...BD];
+            order.forEach((i,k)=>{const r=rowOf(i);r.n=k+1;rows.push(r);});
+          }
+        }
+        rows.forEach(r=>{r.numStyle={flex:'none',width:22,textAlign:'right',
+          font:"500 10px/1 'IBM Plex Mono',monospace",
+          color:step===3&&r.n>20?'var(--k-fg-14663a)':'var(--k-fg-a8a8a2)'};});
+        const bodies={
+          1:'24 people, 24 berths. Every dashed box is an empty part of a berth \u2014 the passenger has already got off, or has not boarded yet. Every berth has a name on it, so nothing can be sold. But look how much of the chart is actually empty.',
+          2:'4 people get off at Ramanagara. 4 other people board there. So the second group takes over the first group\u2019s berths. Nobody shares and nobody is disturbed \u2014 one person leaves before the next one arrives. That leaves 4 berths with no one on them at all, but spread around.',
+          3:'Same people, same journeys \u2014 the berths are only renumbered so the empties end up side by side at the bottom, where they can be sold like any normal ticket.'};
+        return {
+          storyTabs:[[1,'Today'],[2,'Fill the gaps'],[3,'Give them new numbers']].map(([k,l])=>({
+            n:String(k),label:l,onClick:()=>this.setState({packStep:k}),
+            style:{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',
+              font:'700 12.5px/1 Manrope,sans-serif',padding:'11px 15px',borderRadius:8,
+              border:'1px solid '+(step===k?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+              background:step===k?'var(--k-d8385a)':'var(--k-fff)',
+              color:step===k?'var(--k-fg-fff)':'var(--k-fg-14161a)'},
+            numStyle:{display:'inline-flex',width:17,height:17,borderRadius:'50%',
+              alignItems:'center',justifyContent:'center',
+              font:"700 9.5px/1 'IBM Plex Mono',monospace",
+              border:'1px solid '+(step===k?'rgba(255,255,255,.6)':'var(--k-c9c9c2)'),
+              color:step===k?'var(--k-fg-fff)':'var(--k-fg-8a8a84)'}})),
+          storyTitle:['','Today','Fill the gaps','Give them new numbers'][step],
+          storyBody:bodies[step],
+          storyBig:step===1?'0':'4',
+          storyBigStyle:{font:"700 44px/1 'Cormorant Garamond',Georgia,serif",
+            color:step===1?'var(--k-fg-a8a8a2)':'var(--k-fg-14663a)'},
+          storyBigSub:step===1?'berths empty for the whole trip \u00b7 3 on the full train'
+            :step===2?'empty for the whole trip, spread around \u00b7 33 on the full train'
+            :'empty, together, sellable \u00b7 33 on the full train',
+          storyStations:STN.map((n,i)=>({n,style:{position:'absolute',left:POS[i]+'%',
+            font:"500 9.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',
+            whiteSpace:'nowrap',transform:i===5?'translateX(-100%)':'none'}})),
+          storyHandover:{display:step>1?'block':'none',position:'absolute',
+            left:'calc(30px + (100% - 30px)*0.6)',top:-4,bottom:0,width:0,
+            borderLeft:'2px dashed var(--k-1f9d55)',opacity:.7,zIndex:2},
+          storyRows:rows,
+          storyTip:{display:step===3?'block':'none',position:'absolute',right:6,top:'62%',
+            width:190,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+            borderRadius:9,padding:'11px 13px',font:'600 11px/1.5 Manrope,sans-serif',
+            color:'var(--k-fg-14161a)',boxShadow:'0 10px 26px rgba(16,19,25,.16)',zIndex:3},
+          storyFoot:{display:step===3?'block':'none',marginTop:14,padding:'14px 17px',
+            borderRadius:9,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-dce9e2)'},
         };})(),
       favRows:this.favs().map(no=>{
         const x=this.TRAINS.find(t=>t.no===no);
