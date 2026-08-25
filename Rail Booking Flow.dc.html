@@ -1207,39 +1207,41 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 
 <sc-if value="{{ onOdds }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:980px;margin:0 auto;padding:32px 22px 80px">
-  <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">Waitlist · confirmation odds</div>
-  <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Will my waitlist confirm?</h1>
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+  <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">Seat check &#183; before you book</div>
+  <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Will I get a seat?</h1>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
     <div style="font:600 13.5px/1.4 Manrope,sans-serif;color:var(--k-fg-5a5f6a)">{{ oddsJourney }}</div>
     <div onClick="{{ oddsChange }}" style="font:700 12.5px/1 Manrope,sans-serif;color:var(--k-fg-d8385a);cursor:pointer">Change</div>
   </div>
-  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:16px 20px;margin-bottom:22px">
-    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase">Your waitlist number</div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <div onClick="{{ oddsWlMinus }}" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;font:700 17px/1 Manrope,sans-serif;cursor:pointer">−</div>
-      <div style="font:700 24px/1 'IBM Plex Mono',monospace;min-width:64px;text-align:center">WL {{ oddsWl }}</div>
-      <div onClick="{{ oddsWlPlus }}" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--k-d4d3ce);display:flex;align-items:center;justify-content:center;font:700 17px/1 Manrope,sans-serif;cursor:pointer">+</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-left:auto">
+  <div style="font:500 13px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-bottom:18px;max-width:52em">Every train answers before you pay: a berth you can simply book, a seat made certain by one berth change, or your honest odds &#8212; nothing else.</div>
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:14px 18px;margin-bottom:22px">
+    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-8a8a84);text-transform:uppercase">Already waitlisted?</div>
+    <input value="{{ oddsWlTyped }}" onChange="{{ setOddsWlTyped }}" inputmode="numeric" placeholder="WL number" style="width:110px;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:700 14px/1 'IBM Plex Mono',monospace;outline:none"></input>
+    <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);flex:1;min-width:200px">{{ oddsWlNote }}</div>
+    <div style="display:flex;gap:8px">
       <sc-for list="{{ oddsCls }}" as="c" hint-placeholder-count="3"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.k }}</div></sc-for>
     </div>
   </div>
-  <sc-for list="{{ oddsRows }}" as="r" hint-placeholder-count="5">
-    <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:16px 20px;margin-bottom:10px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-      <div onClick="{{ r.onOpen }}" style="width:190px;cursor:pointer">
+  <sc-for list="{{ odds2Rows }}" as="r" hint-placeholder-count="5">
+    <div style="{{ r.cardStyle }}">
+      <div onClick="{{ r.onOpen }}" style="flex:none;width:170px;cursor:pointer">
         <div style="font:700 15px/1.3 Manrope,sans-serif">{{ r.name }}</div>
-        <div style="font:400 11px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.no }} · dep {{ r.dep }}</div>
+        <div style="font:400 11px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.no }} &#183; dep {{ r.dep }}</div>
+        <div style="{{ r.badgeWrap }}"><span style="{{ r.badgeStyle }}">{{ r.badge }}</span></div>
       </div>
-      <div style="{{ r.barOuter }}"><div style="{{ r.barInner }}"></div></div>
+      <div style="flex:1;min-width:260px">
+        <div style="{{ r.headStyle }}">{{ r.head }}</div>
+        <div style="{{ r.subStyle }}">{{ r.sub }}</div>
+        <div style="{{ r.racStyle }}">{{ r.rac }}</div>
+        <div style="{{ r.whyStyle }}">{{ r.why }}</div>
+        <button onClick="{{ r.onBtn }}" style="{{ r.btnStyle }}">{{ r.btnLabel }}</button>
+      </div>
       <div style="{{ r.pctStyle }}">{{ r.pct }}</div>
-      <div style="flex-basis:100%;display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">
-        <div style="font:500 12px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ r.why }}</div>
-        <div onClick="{{ r.onOpen }}" style="cursor:pointer"><span style="{{ r.skipStyle }}">{{ r.skip }} →</span></div>
-      </div>
     </div>
   </sc-for>
-  <div style="{{ oddsEmpty }}">No running trains serve this pair on that date. Change stations or date.</div>
-  <div style="margin-top:18px;font:500 12px/1.7 Manrope,sans-serif;color:var(--k-fg-8a8a84);max-width:48em">How this works: for each run we estimate how many booked berths free up before the chart (from the same demand model that fills the trains), then place your WL number on that curve. Synthetic but consistent \u2014 the green line is khaali\u2019s real answer: berths that are already empty for your stretch.</div>
+  <div style="{{ odds2Loading }}">{{ odds2LoadText }}</div>
+  <div style="{{ odds2Empty }}">No running trains serve this pair on that date. Change stations or date.</div>
+  <div style="margin-top:18px;font:500 12px/1.7 Manrope,sans-serif;color:var(--k-fg-8a8a84);max-width:52em">How this works: every number is arithmetic on facts we can name &#8212; this train&#8217;s demand on that date, the day of the week, festival windows, cancelled parallel trains, how you join the queue (board at the origin and you are GNWL; mid-route is RLWL and clears about half as fast; Tatkal is TQWL), and RAC as its own outcome. No AI touches the number.</div>
 </div>
 </sc-if>
 
@@ -1728,6 +1730,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
+           wlTyped:'',odds2:null,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
            city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
            q:'',searchOpen:false,searchSel:0,fOpen:null,fFare:'all',fSort:'time',dark:false,
@@ -1768,6 +1771,19 @@ class Component extends DCLogic {
         localStorage.setItem('khaali-who',auth.email);}catch(e){}
       this.setState({auth,authOpen:false,authMenu:false,aBusy:false,aPass:'',aErr:null});
     }catch(e){this.setState({aBusy:false,aErr:'Network hiccup \u2014 try again.'});}
+  }
+  async loadOdds2(key){
+    if(this._o2f===key)return;
+    this._o2f=key;
+    const [f,t2,d,c,q2,w]=key.split('|');
+    try{
+      const j=await this.tfetch('/api/odds2?from='+f+'&to='+t2+'&date='+d+'&cls='+c
+        +'&quota='+encodeURIComponent(q2)+(w!=='0'?('&wl='+w):''),null,9000).then(r=>r.json());
+      this.setState({odds2:{key,data:j}});
+    }catch(e){
+      // park an empty answer so the render loop does not hammer a dead server
+      this.setState({odds2:{key,data:{trains:[]},err:true}});
+    }
   }
   signOut(){
     try{localStorage.removeItem('khaali-auth');
@@ -3689,37 +3705,78 @@ class Component extends DCLogic {
             font:'500 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
         };})(),
       ...(()=>{
-        const wl=Math.max(1,Math.min(200,S.wlNum||12));
-        const list=this.TRAINS.filter(x=>this.serves(x,S.from,S.to)&&!this.cxOf(x.no,S.dayIdx));
-        const rows=list.map(x=>{
-          const o=this.oddsOf(x.no,S.dayIdx,S.cls,wl);
-          const n=this.counts(S.cls,x.no);
-          return {x,o,n};
-        }).sort((a,b)=>b.o.pct-a.o.pct).slice(0,8).map(({x,o,n})=>{
-          const col=o.pct>=70?'var(--k-fg-14663a)':o.pct>=40?'var(--k-fg-c2870a)':'var(--k-fg-d8385a)';
-          const barCol=o.pct>=70?'var(--k-1f9d55)':o.pct>=40?'var(--k-e0a419)':'var(--k-d8385a)';
-          const open=()=>{this._c={};this.setState({train:x.no,page:'train',routeOpen:true});window.scrollTo(0,0);};
-          return {name:x.name,no:x.no,
-            dep:this.toHHMM(this.sMin(x,S.from,'d')),
-            pct:o.pct+'%',pctStyle:{font:"700 26px/1 'Cormorant Garamond',Georgia,serif",color:col,flex:'none',width:74,textAlign:'right'},
-            barOuter:{flex:1,height:7,borderRadius:4,background:'var(--k-f0efeb)',overflow:'hidden',minWidth:120},
-            barInner:{height:'100%',width:o.pct+'%',borderRadius:4,background:barCol},
-            why:'~'+o.expCancel+' berths usually free up before the chart on this run',
-            skip:n.free>0?('or skip the list: '+n.free+' free now'+(n.part?' \u00b7 +'+n.part+' cheaper en route':'')):(n.part>0?('no full-way berths \u2014 but '+n.part+' open en route'):'sold out'),
-            skipStyle:{font:'700 12px/1.4 Manrope,sans-serif',color:n.free>0?'var(--k-fg-14663a)':'var(--k-fg-c2870a)'},
-            onOpen:open};
-        });
+        const isoO=this.isoOfDay(S.dayIdx);
+        const clsO=S.allCls?'SL':S.cls;
+        const wlT=String(S.wlTyped||'').replace(/[^0-9]/g,'');
+        const o2key=[S.from,S.to,isoO,clsO,S.quota,wlT||'0'].join('|');
+        const have=(S.odds2&&S.odds2.key===o2key)?S.odds2.data:null;
+        if(S.page==='odds'&&!have&&S.srvOn)this.loadOdds2(o2key);
+        const BANDC={book:['var(--k-1f9d55)','var(--k-fg-14663a)'],
+          hop:['var(--k-e0a419)','var(--k-fg-c2870a)'],
+          odds:['var(--k-d8385a)','var(--k-fg-d8385a)'],
+          cx:['var(--k-c9c9c2)','var(--k-fg-8a8a84)']};
+        const rows=((have&&have.trains)||[]).map(t=>{
+          const o=t.odds,b=t.band,C=BANDC[b];
+          const open=()=>{this._c={};this.setState({train:t.no,page:'train',routeOpen:true});window.scrollTo(0,0);};
+          const posLine=wlT?('at your WL '+o.pos):('book now and you join at about WL '+o.wlNow);
+          return {
+            name:t.name,no:t.no,dep:t.dep,onOpen:open,
+            cardStyle:{background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+              borderLeft:'4px solid '+C[0],borderRadius:10,padding:'16px 20px',marginBottom:10,
+              display:'flex',gap:18,alignItems:'flex-start',flexWrap:'wrap',
+              opacity:b==='cx'?.65:1},
+            badge:b==='book'?'SEAT CONFIRMED':b==='hop'?'SKIP THE LIST'
+              :b==='odds'?(o.type+' \u00b7 WAITLIST'):'CANCELLED',
+            badgeWrap:{marginTop:8},
+            badgeStyle:{font:"700 9px/1 'IBM Plex Mono',monospace",letterSpacing:'.13em',
+              color:C[1],border:'1px solid '+C[0],borderRadius:999,padding:'5px 9px'},
+            head:b==='book'?(t.counts.free+' berths free your whole way \u2014 just book'):
+              b==='hop'?'Sold out full-way \u2014 but a seat is CERTAIN with one berth change':
+              b==='odds'?'Genuinely full \u2014 these are your honest odds':
+              ('Cancelled \u2014 '+(t.cancelReason||'')),
+            headStyle:{font:'700 14px/1.4 Manrope,sans-serif',color:C[1]},
+            sub:b==='book'?('\u20b9'+t.price+' all the way'+(t.counts.part?(' \u00b7 +'+t.counts.part+' cheaper berths open en route'):'')):
+              b==='hop'?(t.counts.part+' berths free up en route \u00b7 pay only for the stretch each one covers'):
+              b==='odds'?(posLine+' \u00b7 about '+t.odds.clears+' of the queue clears before charting'):'',
+            subStyle:{display:b==='cx'?'none':'block',font:'500 12.5px/1.5 Manrope,sans-serif',
+              color:'var(--k-fg-5a5f6a)',marginTop:4},
+            rac:(b==='hop'||b==='odds')?('Waitlist this train instead? '+o.pct+'% confirmed berth \u00b7 '
+              +o.pctRAC+'% you board at all (RAC counts as boarding)'):'',
+            racStyle:{display:(b==='hop'||b==='odds')?'block':'none',
+              font:'600 12px/1.5 Manrope,sans-serif',
+              color:b==='hop'?'var(--k-fg-8a8a84)':C[1],marginTop:6},
+            why:((b==='odds'||b==='hop')&&o.why.length)?('Why: '+o.why.join(' \u00b7 ')):'',
+            whyStyle:{display:((b==='odds'||b==='hop')&&o.why.length)?'block':'none',
+              font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:4},
+            pct:b==='odds'?(o.pct+'%'):'',
+            pctStyle:{display:b==='odds'?'block':'none',
+              font:"700 30px/1 'Cormorant Garamond',Georgia,serif",color:C[1],flex:'none',marginLeft:'auto'},
+            btnLabel:b==='book'?'Book this train':b==='hop'?'Show my certain seat':'',
+            btnStyle:{display:(b==='book'||b==='hop')?'inline-block':'none',border:'none',
+              background:b==='book'?'var(--k-1f9d55)':'var(--k-d8385a)',color:'#fff',
+              font:'700 13px/1 Manrope,sans-serif',padding:'12px 18px',borderRadius:7,
+              cursor:'pointer',minHeight:42,marginTop:10},
+            onBtn:b==='book'?()=>{this._c={};this.setState({train:t.no,cls:clsO,allCls:false,
+                classModal:true,onlyThis:true,hov:null,picks:[],pax:1});}
+              :b==='hop'?()=>{this._c={};this.go('hop');}
+              :()=>{},
+          };});
         return {
-          oddsRows:rows,
-          oddsWl:String(Math.max(1,Math.min(200,S.wlNum||12))),
-          oddsWlMinus:()=>this.setState({wlNum:Math.max(1,(S.wlNum||12)-1)}),
-          oddsWlPlus:()=>this.setState({wlNum:Math.min(200,(S.wlNum||12)+1)}),
-          oddsJourney:fromS.n+' \u2192 '+toS.n+' \u00b7 '+dateLong+' \u00b7 '+clsL,
-          oddsChange:()=>this.go('home'),
-          oddsEmpty:{display:rows.length?'none':'block',textAlign:'center',padding:'46px 20px',
+          odds2Rows:rows,
+          odds2Loading:{display:(S.page==='odds'&&!have)?'block':'none',textAlign:'center',
+            padding:'44px 20px',font:'600 13px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+          odds2LoadText:S.srvOn?'Reading every train on this pair\u2026':'This page needs the live server.',
+          odds2Empty:{display:(have&&!rows.length)?'block':'none',textAlign:'center',padding:'44px 20px',
             font:'600 14px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
-          oddsCls:this.CLS.map(c=>({k:c.k,onClick:()=>{this._c={};this.setState({cls:c.k});},
-            style:this.chip(S.cls===c.k,'9px 14px')})),
+          oddsWlTyped:wlT,
+          setOddsWlTyped:e=>this.setState({wlTyped:String(e.target.value||'').replace(/[^0-9]/g,'').slice(0,3)}),
+          oddsWlNote:wlT?('Red and amber rows below are scored for YOUR WL '+wlT+'.')
+            :'No number? We score the queue you\u2019d join if you booked this minute.',
+          oddsJourney:fromS.n+' \u2192 '+toS.n+' \u00b7 '+dateLong+' \u00b7 '
+            +this.CLS.find(c=>c.k===clsO).label+' \u00b7 '+S.quota+' quota',
+          oddsChange:()=>this.go('home'),
+          oddsCls:this.CLS.map(c=>({k:c.k,onClick:()=>{this._c={};this.setState({cls:c.k,allCls:false});},
+            style:this.chip(clsO===c.k,'9px 14px')})),
         };})(),
       ...(()=>{
         const f=Math.min(S.from,S.to),t=Math.max(S.from,S.to);
