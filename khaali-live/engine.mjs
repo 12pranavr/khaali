@@ -184,10 +184,12 @@ export function seedOccupancy(clsKey, trainNo, dayIdx = 0, seed = 7) {
     : 0.5 + rnd() * 0.45;
   if (rnd() < 0.14) df = Math.min(1.35, df + 0.38);
   const longBias = (df - 0.55) / 0.8 * 0.8;
-  const freeN = Math.max(0, Math.round(C.free * (2.1 - df)));
+  const freeN = Math.max(0, Math.floor(C.free * (2.1 - df)));
   // Busy day = fewer untouched berths of every kind, so the count someone can
   // actually book falls as demand rises.
-  const vacN = Math.max(3, Math.round(C.vac * Math.max(0.3, 2.9 - 2.0 * df) * (1 + (parseInt(tr.no) % 7) * 0.03)));
+  // No floor here: a genuinely hot date is allowed to sell out full-way, so
+  // the waitlist page has real work to do. Quiet days still leave plenty.
+  const vacN = Math.round(C.vac * Math.max(0, 2.55 - 2.0 * df) * (1 + (parseInt(tr.no) % 7) * 0.03));
   const blockers = [
     [0, 13], [0, 11], [0, 9], [5, 13], [5, 11],
     [6, 12], [4, 9], [2, 13], [8, 13], [3, 12],
@@ -263,6 +265,110 @@ export function oddsOf(no, dateISO, clsKey, wl) {
   const spread = expCancel * 0.45 + 1.5;
   const p = 1 / (1 + Math.exp((wl - expCancel) / spread));
   return { pct: Math.max(2, Math.min(98, Math.round(p * 100))), expCancel, days, cap };
+}
+
+// ------------------------------------------------- waitlist odds, take two --
+// Every input here is a fact with a name, so any number on the page can be
+// read out loud: this train's demand seed, the day of the week, a festival
+// window, a cancelled parallel train, how you joined the queue. No model in
+// the loop - the LLM only words the verdict, it never touches the number.
+
+/** Corridor demand calendar for the demo year. dm = extra demand pressure. */
+export const FESTIVALS = [
+  { from: '2026-08-26', to: '2026-08-30', why: 'Raksha Bandhan long weekend', dm: 0.22 },
+  { from: '2026-09-12', to: '2026-09-15', why: 'Ganesh Chaturthi', dm: 0.28 },
+  { from: '2026-10-09', to: '2026-10-21', why: 'Mysuru Dasara season', dm: 0.45 },
+  { from: '2026-11-05', to: '2026-11-10', why: 'Deepavali', dm: 0.40 },
+  { from: '2026-12-24', to: '2027-01-02', why: 'Christmas\u2013New Year', dm: 0.30 },
+];
+
+/** Waitlist type is geometry: origin boarding = GNWL, mid-route = RLWL,
+    Tatkal quota = TQWL. Derived, never asked. */
+export function wlTypeOf(no, from, quota) {
+  if (quota === 'Tatkal') return 'TQWL';
+  const tr = trainByNo(no);
+  if (!tr) return 'GNWL';
+  return from === stopIdxs(tr)[0] ? 'GNWL' : 'RLWL';
+}
+
+/**
+ * Will a waitlist position clear on this train, class and date?
+ * Returns three honest numbers: pct (confirmed berth), pctRAC (at least a
+ * shared seat - you board), and wlNow (the queue you would join if you booked
+ * this minute), plus the named reasons behind them.
+ */
+export function oddsOf2(no, dateISO, clsKey, opts = {}) {
+  const { from = 0, to = 13, quota = 'General', wl = null } = opts;
+  const C = classByKey(clsKey);
+  const cap = C.coaches.length * C.per;
+  const why = [];
+
+  // seeded per-train/class/date heat, same FNV recipe the occupancy uses
+  let h = 2166136261 >>> 0;
+  const str = no + '|' + dateISO + '|' + clsKey;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  const df = 0.55 + (h % 1000) / 1000 * 0.8;          // 0.55 quiet .. 1.35 hot
+
+  const d = new Date(dateISO + 'T00:00:00');
+  const dow = d.getDay();
+  let dm = 1;
+  if (dow === 5) { dm += 0.15; why.push('Friday rush'); }
+  else if (dow === 0) { dm += 0.18; why.push('Sunday return traffic'); }
+  else if (dow === 6) { dm += 0.08; why.push('Saturday'); }
+  if (d.getDate() >= 28 && (dow === 5 || dow === 6)) { dm += 0.06; why.push('month-end weekend'); }
+  const fest = FESTIVALS.find(f => dateISO >= f.from && dateISO <= f.to);
+  if (fest) { dm += fest.dm; why.push(fest.why); }
+
+  // a cancelled parallel train shoves its passengers onto this one
+  let sisters = 0;
+  for (const t2 of TRAINS) {
+    if (t2.no !== no && serves(t2, from, to) && cancelledOn(t2.no, dateISO)) sisters++;
+  }
+  if (sisters) {
+    dm += 0.08 * Math.min(3, sisters);
+    why.push(sisters + ' parallel train' + (sisters > 1 ? 's' : '') + ' cancelled that day');
+  }
+
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const days = Math.max(0, Math.round((d.getTime() - t0.getTime()) / 864e5));
+
+  // churn: booked berths that free up before charting. Longer lead = more
+  // plans change; a hot date holds its bookings.
+  const heat = df * dm;
+  const churn = 0.04 + 0.10 * Math.min(1, days / 45);
+  const expCancel = Math.max(1, Math.round(cap * churn * Math.max(0.25, 1.9 - heat)));
+
+  const type = wlTypeOf(no, from, quota);
+  const mult = type === 'GNWL' ? 1 : type === 'RLWL' ? 0.45 : 0.3;
+  const clears = Math.max(1, expCancel * mult);
+  if (type === 'RLWL') why.push('boarding mid-route \u2014 RLWL clears about half as fast');
+  if (type === 'TQWL') why.push('Tatkal waitlist clears last of all');
+  if (days <= 2) why.push('little time left for plans to change');
+  else if (days >= 30) why.push(days + ' days out \u2014 plenty of churn ahead');
+
+  // the queue you would join right now: hot trains near departure run deep
+  const wlNow = Math.max(1, Math.round(
+    cap * 0.12 * Math.max(0, heat - 0.75) * (1 - Math.min(1, days / 60)) + 1 + (h % 5)));
+  const pos = wl != null ? Math.max(1, wl) : wlNow;
+
+  const spread = clears * 0.35 + 1.2;
+  const pC = 1 / (1 + Math.exp((pos - clears) / spread));
+  // RAC is the certainty tier: side berths absorb the queue after the
+  // confirmations, so "do I board at all" clears far deeper than "full berth"
+  const racSlots = clsKey === 'SL' ? C.coaches.length * 7
+    : clsKey === '3A' ? C.coaches.length * 4 : C.coaches.length * 2;
+  const racReach = clears + racSlots * (type === 'GNWL' ? 1 : 0.6);
+  const pR = 1 / (1 + Math.exp((pos - racReach) / (spread + racSlots * 0.15)));
+
+  const pct = Math.max(2, Math.min(98, Math.round(pC * 100)));
+  return {
+    type, wlNow, pos, days, cap,
+    expCancel, clears: Math.round(clears), racSlots,
+    pct,
+    pctRAC: Math.max(pct, Math.min(99, Math.round(pR * 100))),
+    heat: +heat.toFixed(2),
+    why,
+  };
 }
 
 // -------------------------------------------------------------- live train --

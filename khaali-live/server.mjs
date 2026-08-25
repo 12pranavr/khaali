@@ -14,7 +14,7 @@ import { GEO } from './geo.mjs';
 const QRCode = createRequire(import.meta.url)('qrcode');
 import {
   serves, stopIdxs, sMin, hhmm, plat, liveOf, fare, journeyKm, stationByCode,
-  cancelledOn, oddsOf,
+  cancelledOn, oddsOf, oddsOf2,
 } from './engine.mjs';
 import * as store from './store.mjs';
 
@@ -402,6 +402,32 @@ async function api(req, res, url) {
       out[iso] = { free, part };
     }
     return send(res, 200, { train, cls, from, to, total, days: out });
+  }
+
+  // Waitlist verdicts for a whole journey in one call: every serving train
+  // banded book / hop / odds / cx, odds computed only where they mean something.
+  if (p === '/api/odds2') {
+    const from = +q.get('from'), to = +q.get('to');
+    if (!(from >= 0 && to >= 0 && from !== to)) return send(res, 400, { error: 'bad stations' });
+    const date = q.get('date') || TODAY();
+    const cls = q.get('cls') || 'SL';
+    const quota = q.get('quota') || 'General';
+    const wl = q.get('wl') ? Math.max(1, Math.min(200, +q.get('wl') || 1)) : null;
+    const BAND = { book: 0, hop: 1, odds: 2, cx: 3 };
+    const rows = TRAINS.filter(t => serves(t, from, to)).map(t => {
+      const cx = cancelledOn(t.no, date);
+      const av = store.availability(t.no, date, cls, from, to);
+      const o = oddsOf2(t.no, date, cls, { from, to, quota, wl });
+      const band = cx ? 'cx' : av.counts.free > 0 ? 'book' : av.counts.part > 0 ? 'hop' : 'odds';
+      return { no: t.no, name: t.name, dep: hhmm(sMin(t, from, 'd')), depMin: sMin(t, from, 'd'),
+        counts: av.counts, price: av.price, band,
+        cancelReason: cx ? cx.reason : null, odds: o };
+    }).sort((a, b) => (BAND[a.band] - BAND[b.band])
+      || (a.band === 'book' ? b.counts.free - a.counts.free
+        : a.band === 'odds' ? b.odds.pct - a.odds.pct
+        : (a.depMin % 1440) - (b.depMin % 1440)));
+    return send(res, 200, { from, to, date, cls, quota, wl,
+      fromName: ST[from].n, toName: ST[to].n, trains: rows });
   }
 
   if (p === '/api/counts') {
