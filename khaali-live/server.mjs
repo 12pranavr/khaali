@@ -391,9 +391,14 @@ async function api(req, res, url) {
     const classes = cls === 'all' ? CLS.map(c => c.k) : [cls];
     // train=all sums every train serving the pair, so the calendar's heat is
     // the same number the seat-check page adds up - one world, one count.
-    const tlist = train === 'all'
-      ? TRAINS.filter(t => serves(t, from, to)).map(t => t.no)
-      : [train];
+    const tservs = TRAINS.filter(t => serves(t, from, to));
+    const tlist = train === 'all' ? tservs.map(t => t.no) : [train];
+    // On today's date a train that has already left your station sells
+    // nothing — its berths must not inflate today's number.
+    const nowM = (() => { const n = simNow(); return n.getHours() * 60 + n.getMinutes(); })();
+    const goneToday = new Set(tservs
+      .filter(t => { const dm = sMin(t, from, 'd'); return dm != null && ((dm % 1440) + 1440) % 1440 <= nowM; })
+      .map(t => t.no));
     let total = 0;
     for (let i = 0; i < days; i++) {
       const d = new Date(base.getTime() + i * 864e5);
@@ -402,6 +407,7 @@ async function api(req, res, url) {
       for (const k of classes) for (const no of tlist) {
         // a cancelled run sells nothing that day — same rule the page applies
         if (train === 'all' && cancelledOn(no, iso)) continue;
+        if (train === 'all' && iso === TODAY() && goneToday.has(no)) continue;
         const c = store.countsFor(no, iso, k, from, to);
         free += c.free; part += c.part;
         if (i === 0) total += c.free + c.part + c.taken + c.locked;
@@ -421,7 +427,13 @@ async function api(req, res, url) {
     const quota = q.get('quota') || 'General';
     const wl = q.get('wl') ? Math.max(1, Math.min(200, +q.get('wl') || 1)) : null;
     const BAND = { book: 0, hop: 1, odds: 2, cx: 3 };
-    const rows = TRAINS.filter(t => serves(t, from, to)).map(t => {
+    // Today only sells trains that have not left yet; future dates keep all.
+    const nowM2 = (() => { const n = simNow(); return n.getHours() * 60 + n.getMinutes(); })();
+    const rows = TRAINS.filter(t => serves(t, from, to)).filter(t => {
+      if (date !== TODAY()) return true;
+      const dm = sMin(t, from, 'd');
+      return dm == null || ((dm % 1440) + 1440) % 1440 > nowM2;
+    }).map(t => {
       const cx = cancelledOn(t.no, date);
       const av = store.availability(t.no, date, cls, from, to);
       const o = oddsOf2(t.no, date, cls, { from, to, quota, wl });
@@ -770,6 +782,12 @@ async function api(req, res, url) {
           + '-' + String(dO.getDate()).padStart(2, '0');
         const dayIdx = Math.round((dms - minMs) / 864e5);
         const r = search(+act.from, +act.to, date, cls);
+        // Asking about today means trains that can still be caught — a train
+        // that left an hour ago is not an answer.
+        if (date === TODAY()) {
+          const nm = (() => { const n = simNow(); return n.getHours() * 60 + n.getMinutes(); })();
+          r.trains = r.trains.filter(t => t.depMin == null || ((t.depMin % 1440) + 1440) % 1440 > nm);
+        }
         const brief = {
           from: r.fromName, to: r.toName, km: r.km, date, class: cls,
           noDirect: r.noDirect,
