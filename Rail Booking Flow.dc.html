@@ -124,6 +124,19 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   width:min(352px,calc(100vw - 24px))!important;max-height:calc(100vh - 40px);overflow-y:auto;z-index:200;
   box-shadow:0 24px 64px rgba(16,19,25,.35),0 0 0 100vmax rgba(16,19,25,.42)!important}
 .k-stnrow:hover{background:var(--k-f4f3ef)}
+.k-burger{display:none}
+@media (max-width:760px){
+  .k-navitem{display:none}
+  .k-navmeta{display:none}
+  .k-burger{display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 0;
+    font:700 14px/1 Manrope,sans-serif;color:var(--k-fg-14161a)}
+  .k-city{display:none}
+  .k-clockdate{display:none}
+  .k-hdrright{gap:10px!important}
+  .k-clocktime{font:600 14px/1.1 'IBM Plex Mono',monospace!important}
+  .k-authwrap>button{padding:10px 10px!important;font:700 12px/1 Manrope,sans-serif!important}
+  .k-namaste{display:none}
+}
 @media (max-width:1040px){
   .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
   .k-searchgrid>div:nth-child(4),.k-searchgrid>div:nth-child(5){grid-column:1/-1}
@@ -229,13 +242,13 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         </div>
       </div>
       <div style="{{ clockWrap }}">
-        <div style="{{ clockTime }}">{{ clockTimeText }}</div>
-        <div style="{{ clockDate }}">{{ clockDateText }} · <span style="{{ clockTag }}">{{ clockTagText }}</span></div>
+        <div class="k-clocktime" style="{{ clockTime }}">{{ clockTimeText }}</div>
+        <div class="k-clockdate" style="{{ clockDate }}">{{ clockDateText }} · <span style="{{ clockTag }}">{{ clockTagText }}</span></div>
       </div>
       <div onClick="{{ toggleTheme }}" title="{{ themeTitle }}" style="{{ themeBtn }}">{{ themeIcon }}</div>
-      <div onClick="{{ toggleCity }}" style="font-size:13.5px;font-weight:600;color:var(--k-fg-40434a);cursor:pointer;padding:9px 4px">{{ city }} ▾</div>
+      <div class="k-city" onClick="{{ toggleCity }}" style="font-size:13.5px;font-weight:600;color:var(--k-fg-40434a);cursor:pointer;padding:9px 4px">{{ city }} ▾</div>
       <div class="k-authwrap" style="position:relative">
-        <button onClick="{{ authBtnClick }}" style="{{ authBtnStyle }}">{{ authBtnLabel }}</button>
+        <button onClick="{{ authBtnClick }}" style="{{ authBtnStyle }}"><span class="k-namaste">{{ authBtnNamaste }}</span>{{ authBtnLabel }}</button>
         <div style="{{ authMenuPanel }}">
           <div style="font:700 14px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ authMenuName }}</div>
           <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ authMenuEmail }}</div>
@@ -249,12 +262,18 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   </div>
   <div style="border-top:1px solid var(--k-f0efeb);background:var(--k-fbfbfa)">
     <div class="k-nav" style="max-width:1240px;margin:0 auto;padding:0 22px;display:flex;gap:26px;align-items:center;height:42px">
+      <div class="k-burger" onClick="{{ navBurger }}"><span style="font-size:18px;line-height:1">{{ navBurgerIcon }}</span><span>{{ navBurgerLabel }}</span></div>
       <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
-        <div onClick="{{ n.onClick }}" style="{{ n.style }}">{{ n.label }}</div>
+        <div class="k-navitem" onClick="{{ n.onClick }}" style="{{ n.style }}">{{ n.label }}</div>
       </sc-for>
       <div class="k-navmeta" style="margin-left:auto;display:flex;gap:20px;font-size:12.5px;color:var(--k-fg-9a9a94)">
         <span>Synthetic data</span><span>Not affiliated with IRCTC</span>
       </div>
+    </div>
+    <div style="{{ navSheet }}">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div onClick="{{ n.onClick }}" style="{{ n.sheetStyle }}">{{ n.label }}</div>
+      </sc-for>
     </div>
   </div>
 </div>
@@ -1767,7 +1786,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,
+           wlTyped:'',odds2:null,navOpen:false,
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
            city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
@@ -3320,7 +3339,18 @@ class Component extends DCLogic {
       nav:[{l:'Trains',p:'home'},{l:'Route map',p:'map'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
-        onClick:()=>this.go(x.p)})),
+        sheetStyle:{font:'700 15px/1 Manrope,sans-serif',cursor:'pointer',padding:'16px 22px',
+          color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-14161a)',
+          borderBottom:'1px solid var(--k-f0efeb)',
+          background:S.page===x.p?'var(--k-fdf3f5)':'transparent'},
+        onClick:()=>{this.setState({navOpen:false});this.go(x.p);}})),
+      navBurger:()=>this.setState({navOpen:!S.navOpen}),
+      navBurgerIcon:S.navOpen?'\u2715':'\u2630',
+      navBurgerLabel:(()=>{const cur={home:'Trains',map:'Route map',hop:'Seat hop',odds:'Waitlist odds',
+        favorites:'Favorites',wallet:'Wallet',bookings:'My bookings',about:'About'}[S.page];
+        return S.navOpen?'Close':(cur||'Menu');})(),
+      navSheet:{display:S.navOpen?'block':'none',background:'var(--k-fff)',
+        borderTop:'1px solid var(--k-f0efeb)',boxShadow:'0 18px 40px rgba(16,19,25,.14)'},
 
       fromOpts:ST.map((s,i)=>({i:String(i),n:s.n})).filter(o=>+o.i!==S.to),
       toOpts:ST.map((s,i)=>({i:String(i),n:s.n})).filter(o=>+o.i!==S.from),
@@ -4062,7 +4092,8 @@ class Component extends DCLogic {
         const A=S.auth;
         const first=A?String(A.name||'traveller').trim().split(/\s+/)[0]:'';
         return {
-          authBtnLabel:A?('Namaste, '+this.capFirst(first)+' \u25be'):'Sign in',
+          authBtnNamaste:A?'Namaste, ':'',
+          authBtnLabel:A?(this.capFirst(first)+' \u25be'):'Sign in',
           authBtnClick:A?()=>this.setState({authMenu:!S.authMenu})
             :()=>this.setState({authOpen:true,authMode:'in',aErr:null,aPass:''}),
           authBtnStyle:{border:A?'1px solid var(--k-d4d3ce)':'none',

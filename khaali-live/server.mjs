@@ -947,6 +947,13 @@ http.createServer(async (req, res) => {
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   try {
+    if (url.pathname === '/favicon.ico') {
+      return send(res, 200,
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+        + '<rect width="64" height="64" rx="14" fill="#c13a26"/>'
+        + '<text x="32" y="46" font-size="42" font-family="Georgia,serif" fill="#f4efe6" text-anchor="middle">k</text></svg>',
+        'image/svg+xml');
+    }
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     return serveStatic(res, url.pathname);
   } catch (e) {
