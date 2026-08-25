@@ -1022,6 +1022,13 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px">
     <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
       <div style="flex:1;min-width:230px">
+        <div style="margin-bottom:18px">
+          <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">WHO IS TRAVELLING</div>
+          <sc-for list="{{ travInputs }}" as="tv" hint-placeholder-count="2">
+            <input value="{{ tv.v }}" onChange="{{ tv.onChange }}" placeholder="{{ tv.ph }}" style="width:100%;max-width:300px;display:block;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13px/1.3 Manrope,sans-serif;outline:none;margin-bottom:8px"></input>
+          </sc-for>
+          <div style="font:500 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ travNote }}</div>
+        </div>
         <div style="{{ holdTimerWrap }}">
           <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">BERTHS LOCKED FOR YOU</div>
           <div style="{{ holdTimerStyle }}">{{ holdTimer }}</div>
@@ -1788,6 +1795,7 @@ class Component extends DCLogic {
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
            wlTyped:'',odds2:null,navOpen:false,
+           travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
            city:'Bengaluru',cityOpen:false,tick:0,allCls:true,onlyThis:true,
@@ -1921,6 +1929,18 @@ class Component extends DCLogic {
     this.setState({profOpen:true,authMenu:false,pName:A.name||'',pFull:A.fullName||'',
       pPhone:A.phone||'',pAddr:A.address||'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false});
   }
+  /** Names for n travellers: what they typed, else the signed-in profile
+      for passenger 1, else an honest placeholder. */
+  paxNamesFor(n){
+    const A=this.state.auth,t=this.state.travNames||[];
+    const mine=A?(A.fullName||A.name||''):'';
+    return Array.from({length:n},(_,i)=>{
+      const typed=String(t[i]||'').trim();
+      if(typed)return typed;
+      if(i===0&&mine)return this.capFirst(mine);
+      return 'Passenger '+(i+1);
+    });
+  }
   signOut(){
     try{localStorage.removeItem('khaali-auth');
       localStorage.setItem('khaali-who','phone-'+Math.random().toString(36).slice(2,6));}catch(e){}
@@ -2003,8 +2023,8 @@ class Component extends DCLogic {
       :0.5+rnd()*0.45;
     if(rnd()<0.14)df=Math.min(1.35,df+0.38);
     const longBias=(df-0.55)/0.8*0.8;
-    const freeN=Math.max(0,Math.round(C.free*(2.1-df)));
-    const vacN=Math.max(3,Math.round(C.vac*Math.max(0.3,2.9-2.0*df)*(1+(parseInt(tr.no)%7)*.03)));
+    const freeN=df>1.15?0:Math.max(0,Math.floor(C.free*(2.1-df)));
+    const vacN=Math.round(C.vac*Math.max(0,2.55-2.0*df)*(1+(parseInt(tr.no)%7)*.03));
     const blockers=[{s:0,e:13},{s:0,e:11},{s:0,e:9},{s:5,e:13},{s:5,e:11},{s:6,e:12},{s:4,e:9},{s:2,e:13},{s:8,e:13},{s:3,e:12},{s:0,e:7},{s:7,e:13},{s:9,e:13},{s:0,e:10}];
     const spans=new Array(n);let p=0;
     for(let i=0;i<freeN&&p<n;i++)spans[order[p++]]=null;
@@ -2729,7 +2749,7 @@ class Component extends DCLogic {
         type:b.type,k:b.partial?'part':'free',at:null}));
     const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:S.pax,dayIdx:S.dayIdx,
       picks:picks,pnr:String(pnr),total:total,
-      names:Array.from({length:S.pax},(_,i)=>['Ananya Rao','Vikram Shetty','Lakshmi Devi','Rahul Menon','Fatima Sheikh','Joseph Mathew'][i]||'Passenger '+(i+1))};
+      names:this.paxNamesFor(S.pax)};
     const dupOf=S.bookings.find(b=>b.status!=='refunded'&&!b.dupOk&&b.train===rec.train
       &&b.dayIdx===rec.dayIdx&&b.from===rec.from&&b.to===rec.to&&b.cls===rec.cls);
     if(dupOf)setTimeout(()=>this.setState({dupAsk:{a:dupOf.pnr,b:rec.pnr,total:rec.total,
@@ -3637,19 +3657,23 @@ class Component extends DCLogic {
         {label:'Coach',value:S.picks.length?S.picks[0].coach:cls.coaches[0]},
         {label:'Train',value:tr.no}
       ],
-      ticketPax:hopConf
-        ?[{name:'Ananya Rao',
+      ticketPax:(()=>{
+        const bkRec=S.bookings.find(b=>b.pnr===S.viewPnr);
+        const nmArr=(bkRec&&bkRec.names&&bkRec.names.length)?bkRec.names
+          :this.paxNamesFor(hopConf?1:nPax);
+        return hopConf
+        ?[{name:nmArr[0],
            berth:S.picks.map(p=>p.coach+'/'+p.no).join(' + '),type:'Seat-hop',
            note:'Change berth at '+ST[S.picks[0].seg.to].n,
            noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:'var(--k-fg-c2870a)'}}]
         :Array.from({length:nPax},(_,i)=>{
-        const nm=['Ananya Rao','Vikram Shetty','Lakshmi Devi','Rahul Menon','Fatima Sheikh','Joseph Mathew'][i]||'Passenger '+(i+1);
+        const nm=nmArr[i]||'Passenger '+(i+1);
         const pk=S.picks[i];
         const later=pk&&pk.k==='part'&&pk.at>S.from;
         return {name:nm,berth:pk?pk.coach+' / '+pk.no:'—',type:pk?this.typeName(pk.type):'—',
           note:later?'Yours from '+ST[pk.at].n:'Yours for your whole journey',
           noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:later?'var(--k-fg-1f3f8f)':'var(--k-fg-8a8a84)'}};
-      }),
+      });})(),
       qrCells:(()=>{
         const seed=parseInt(tr.no)+S.dayIdx*97+S.seed*13+S.from*7+S.to*3;
         const r=this.rng(seed);const out=[];
@@ -4519,13 +4543,31 @@ class Component extends DCLogic {
         padding:'11px 14px',borderRadius:8,background:'var(--k-eaf0fd)',
         color:'var(--k-fg-1f3f8f)',font:'600 13px/1.45 Manrope,sans-serif',textAlign:'center'},
       seatNoticeText:S.srvNote||S.holdErr||'',
+      ...(()=>{
+        const hop2=S.picks.length&&S.picks.some(p=>p.seg);
+        const nT=hop2?S.pax:nPax;
+        const mine=S.auth?(S.auth.fullName||S.auth.name||''):'';
+        return {
+          travInputs:Array.from({length:nT},(_,i)=>({
+            v:(()=>{const typed=String((S.travNames||[])[i]||'');
+              if(typed)return typed;
+              return i===0&&mine?this.capFirst(mine):'';})(),
+            ph:'Passenger '+(i+1)+' \u2014 name as on ID',
+            onChange:e=>{const a=(this.state.travNames||[]).slice();
+              a[i]=e.target.value;
+              try{localStorage.setItem('khaali-copax',JSON.stringify(a));}catch(err){}
+              this.setState({travNames:a});},
+          })),
+          travNote:mine?'Passenger 1 is prefilled from your profile \u2014 edit it if you are booking for someone else.'
+            :'Sign in and your name fills itself. Names print on the ticket.',
+        };})(),
       goBookings:()=>this.go('bookings'),
       goTicket:()=>{
         if(S.holdId)return this.payHold();
         if(S.srvOn)return this.startHold();
         const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:nPax,dayIdx:S.dayIdx,
           picks:S.picks.slice(),pnr:'451'+String(7829063+S.dayIdx*13+S.seed+parseInt(tr.no)).slice(0,7),
-          total,names:Array.from({length:nPax},(_,i)=>['Ananya Rao','Vikram Shetty','Lakshmi Devi','Rahul Menon','Fatima Sheikh','Joseph Mathew'][i]||'Passenger '+(i+1))};
+          total,names:this.paxNamesFor(nPax)};
         this.setState({bookings:[rec].concat(S.bookings),page:'ticket',viewPnr:rec.pnr,classModal:false,countModal:false,hov:null});
         window.scrollTo(0,0);},
 
