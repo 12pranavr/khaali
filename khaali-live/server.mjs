@@ -545,8 +545,8 @@ async function api(req, res, url) {
       const agentsIn = arrived.filter(a => a.kind === 'agent');
       const humansIn = arrived.filter(a => a.kind === 'human').length;
       const feed = [];
-      agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  agent shop ' + a.id + ' fired ' + a.tries + ' requests'));
-      feed.push(humansIn + ' verified travellers have dropped chits');
+      agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  tout bot-farm ' + a.id + ' (simulated) fired ' + a.tries + ' requests'));
+      feed.push(humansIn + ' simulated ordinary travellers have booked so far');
       R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 ' + ((G.month.get(e.who) || 0)) + '/4 used this month)'));
       const totalTries = R.sim.agents.reduce((s2, a) => s2 + a.tries, 0);
       const me = R.real.find(e => e.who === who) || null;
@@ -570,8 +570,8 @@ async function api(req, res, url) {
             humans: R.result.winners.humans,
             real: R.result.winners.real.length } : null,
           audit: R.result ? [
-            'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' human chits + ' + R.real.length + ' live visitors',
-            'identity filter: ' + totalTries + ' agent requests \u2192 3 verified persons',
+            'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' simulated travellers + ' + R.real.length + ' real ' + (R.real.length === 1 ? 'person' : 'people') + ' on this site',
+            'identity filter: ' + totalTries + ' bot requests trace back to just 3 verified persons',
             'monthly cap: 3 agents \u00d7 4 chits = 12 chits stand',
             'draw: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths from ' + R.result.chits + ' chits',
             'result: ' + R.result.winners.bots + ' bot berths \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
