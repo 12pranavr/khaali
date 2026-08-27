@@ -1329,6 +1329,25 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <button onClick="{{ tkPay }}" style="{{ tkPayStyle }}">{{ tkPayLabel }}</button>
       </div>
       <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:12px">{{ tkMonthLine }}</div>
+      <div style="{{ tkModalWrap }}">
+        <div style="width:min(410px,92vw);background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);overflow-y:auto">
+          <div style="display:flex;align-items:center;margin-bottom:8px">
+            <div style="font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;color:var(--k-fg-d8385a);text-transform:uppercase">Tatkal booking</div>
+            <div onClick="{{ tkModalClose }}" style="margin-left:auto;cursor:pointer;font-size:19px;line-height:1;color:var(--k-fg-8a8a84);padding:4px 6px">&#215;</div>
+          </div>
+          <div style="font:600 20px/1.2 'Cormorant Garamond',Georgia,serif;margin-bottom:3px">Kaveri Express &#183; 16021</div>
+          <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-bottom:16px">{{ tkDateLine }} &#183; {{ tkDep }} Bangarpet &#8594; {{ tkArr }} Mysuru &#183; Sleeper</div>
+          <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Passenger name &#183; as on ID</div>
+          <input value="{{ tkName }}" onChange="{{ setTkName }}" placeholder="Who is travelling?" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 14px"></input>
+          <div style="border:1px solid var(--k-e6e5e0);border-radius:9px;padding:13px 15px;margin-bottom:14px;background:var(--k-fafaf8)">
+            <div style="display:flex;font:600 12.5px/1.6 Manrope,sans-serif"><span>Tatkal fare</span><span style="margin-left:auto">{{ tkFare }}</span></div>
+            <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Locks from your wallet now &#183; refunded instantly if you are not allotted</div>
+            <div style="font:600 11px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin-top:2px">{{ tkWalletLine }}</div>
+          </div>
+          <button onClick="{{ tkConfirmEnter }}" style="width:100%;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">Lock {{ tkFare }} &amp; book</button>
+          <div style="margin-top:11px;text-align:center;font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84)">Allotment runs when the window closes &#8212; booking faster changes nothing.</div>
+        </div>
+      </div>
     </div>
     <div style="flex:1;min-width:300px;background:var(--k-14161a);border:1px solid var(--k-2a2f3a,#2a2f3a);border-radius:12px;padding:20px 22px;color:var(--k-fg-fff)">
       <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#e0a419;text-transform:uppercase;margin-bottom:8px">Backend &#183; what the algorithm is doing</div>
@@ -1908,7 +1927,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -4438,15 +4457,32 @@ class Component extends DCLogic {
           tkDep:this.toHHMM(this.sMin(tkTr,0,'d')),tkArr:this.toHHMM(this.sMin(tkTr,13,'a')),
           tkFare:'\u20b9'+tkFareN,
           tkEnter:()=>{if(!(open&&!me.entered))return;
-            // the commitment gate: entering costs a locked fare - topped up
-            // with clearly-labelled demo money when the wallet is short
+            const pre=this.paxNamesFor(1)[0];
+            this.setState({tkModal:true,
+              tkName:S.tkName!=null?S.tkName:(pre==='Passenger 1'?'':pre)});},
+          tkModalWrap:{display:(S.tkModal&&open&&!me.entered)?'flex':'none',
+            position:'fixed',inset:0,zIndex:140,background:'rgba(20,16,10,.55)',
+            alignItems:'center',justifyContent:'center',padding:20},
+          tkModalClose:()=>this.setState({tkModal:false}),
+          tkName:S.tkName||'',
+          setTkName:e=>this.setState({tkName:e.target.value}),
+          tkWalletLine:(()=>{const b2=this.wallet().bal;
+            return b2>=tkFareN?('Wallet balance \u20b9'+b2+' \u2014 ready')
+              :('Wallet \u20b9'+b2+' \u2014 \u20b9'+tkFareN+' demo money is added automatically');})(),
+          tkConfirmEnter:()=>{if(!(open&&!me.entered))return;
+            const nm=String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller');
+            // the typed name becomes traveller 1, so the eventual ticket and
+            // QR carry the person who actually booked
+            try{const a=(this.state.travNames||[]).slice();a[0]=nm;
+              localStorage.setItem('khaali-copax',JSON.stringify(a));
+              this.setState({travNames:a});}catch(e){}
             if(this.wallet().bal<tkFareN)this.walletCredit(tkFareN,'Demo top-up for Tatkal entry');
             this.walletDebit(tkFareN,'Tatkal entry \u2014 fare locked until allotment');
             try{localStorage.setItem('khaali-tklock',JSON.stringify({round:T.id,amt:tkFareN,settled:false}));}catch(e){}
+            this.setState({tkModal:false});
             (async()=>{try{await this.tfetch('/api/tatkal/enter',{method:'POST',
               headers:{'content-type':'application/json'},
-              body:JSON.stringify({who,paid:true,
-                name:(S.auth&&(S.auth.fullName||S.auth.name))||'a visitor'})},6000);}catch(e){}
+              body:JSON.stringify({who,paid:true,name:nm})},6000);}catch(e){}
               this.loadTk(true);})();},
           tkEnterLabel:doneP?'':(open?(me.entered?'Booking received \u2713'
               :(this.wallet().bal<tkFareN?('Add \u20b9'+tkFareN+' (demo) & book Tatkal')
