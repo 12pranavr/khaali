@@ -449,6 +449,139 @@ async function api(req, res, url) {
       fromName: ST[from].n, toName: ST[to].n, trains: rows });
   }
 
+  // ------------------------------------------------ Fair Tatkal, live --
+  // One round at a time, driven by buttons. The simulated population is
+  // seeded per round; real signed-in visitors drop real chits, and a real
+  // win points at a genuinely free berth the winner then holds and pays for
+  // through the ordinary pipeline.
+  if (p.startsWith('/api/tatkal')) {
+    const TKN = '16021', TKC = 'SL', TKF = 0, TKT = 13, TKB = 40;
+    const tkIso = () => {
+      const d = new Date(Date.now() + 864e5);
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    };
+    if (!global.__tk) global.__tk = { round: null, month: new Map(), history: [] };
+    const G = global.__tk;
+    const fnv = s => { let h = 2166136261 >>> 0;
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+      return h; };
+    const mulb = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const simOf = seed => {
+      const r = mulb(seed);
+      const agents = [{ id: 'A', tries: 180 + Math.floor(r() * 80) },
+        { id: 'B', tries: 110 + Math.floor(r() * 70) },
+        { id: 'C', tries: 60 + Math.floor(r() * 60) }];
+      const humans = 120 + Math.floor(r() * 30);
+      const arrivals = [];
+      agents.forEach(a => arrivals.push({ kind: 'agent', id: a.id, tries: a.tries, atMs: 3 + Math.floor(r() * 40) }));
+      for (let h = 0; h < humans; h++) arrivals.push({ kind: 'human', id: 'h' + h, atMs: 500 + Math.floor(r() * 40000) });
+      return { agents, humans, arrivals };
+    };
+
+    if (p === '/api/tatkal/open' && req.method === 'POST') {
+      const id = (G.history.length + 1);
+      const seed = fnv('tk|' + id + '|' + tkIso());
+      G.round = { id, seed, openedAt: Date.now(), state: 'open', real: [], sim: simOf(seed), result: null };
+      return send(res, 200, { ok: true, id });
+    }
+    if (p === '/api/tatkal/enter' && req.method === 'POST') {
+      let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+      const R = G.round;
+      if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
+      const who = String(b.who || 'guest').slice(0, 80);
+      if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one chit per person per round' });
+      const used = G.month.get(who) || 0;
+      if (used >= 4) return send(res, 409, { error: 'four Tatkal chits per month \u2014 all used' });
+      R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now() });
+      return send(res, 200, { ok: true, chit: R.sim.humans + R.real.length });
+    }
+    if (p === '/api/tatkal/draw' && req.method === 'POST') {
+      const R = G.round;
+      if (!R || R.state !== 'open') return send(res, 409, { error: 'no open window' });
+      R.state = 'done'; R.closedAt = Date.now();
+      const bowl = [];
+      R.sim.agents.forEach(a => { for (let c = 0; c < 4; c++) bowl.push({ kind: 'bot', id: a.id }); });
+      for (let h = 0; h < R.sim.humans; h++) bowl.push({ kind: 'human', id: 'h' + h });
+      R.real.forEach((e, i) => bowl.push({ kind: 'real', id: e.who, name: e.name, ix: i }));
+      const r = mulb(R.seed ^ 0x9e3779b9);
+      for (let i = bowl.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1));
+        const t = bowl[i]; bowl[i] = bowl[j]; bowl[j] = t; }
+      const winners = bowl.slice(0, Math.min(TKB, bowl.length));
+      const realWinners = winners.filter(w => w.kind === 'real');
+      const av = store.availability(TKN, tkIso(), TKC, TKF, TKT);
+      // full-way berths first; on a sold-out day the winner gets the best
+      // partly-free berth instead, priced for the stretch that is theirs
+      const freeIdx = av.berths.filter(x => x.k === 'free').map(x => x.idx)
+        .concat(av.berths.filter(x => x.k === 'part' && x.price != null)
+          .sort((a2, b2) => b2.price - a2.price).map(x => x.idx));
+      realWinners.forEach((w, i) => { w.berthIdx = freeIdx[i] != null ? freeIdx[i] : null; });
+      // only a WIN consumes a monthly chit - losing must cost a human
+      // nothing, while the per-round identity limit still starves bot farms
+      realWinners.forEach(w => G.month.set(w.id, (G.month.get(w.id) || 0) + 1));
+      R.result = {
+        chits: bowl.length,
+        winners: { bots: winners.filter(w => w.kind === 'bot').length,
+          humans: winners.filter(w => w.kind === 'human').length,
+          real: realWinners.map(w => ({ who: w.id, name: w.name, berthIdx: w.berthIdx })) },
+      };
+      G.history.push({ id: R.id, chits: bowl.length, bots: R.result.winners.bots,
+        humans: R.result.winners.humans + realWinners.length });
+      return send(res, 200, { ok: true });
+    }
+    if (p === '/api/tatkal/reset' && req.method === 'POST') {
+      G.round = null;
+      return send(res, 200, { ok: true });
+    }
+    if (p === '/api/tatkal/state') {
+      const who = q.get('who') || 'guest';
+      const R = G.round;
+      if (!R) return send(res, 200, { phase: 'idle', history: G.history.slice(-5),
+        monthUsed: G.month.get(who) || 0, train: TKN, date: tkIso(), berths: TKB });
+      const el = Date.now() - R.openedAt;
+      const arrived = R.sim.arrivals.filter(a => a.atMs <= el);
+      const agentsIn = arrived.filter(a => a.kind === 'agent');
+      const humansIn = arrived.filter(a => a.kind === 'human').length;
+      const feed = [];
+      agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  agent shop ' + a.id + ' fired ' + a.tries + ' requests'));
+      feed.push(humansIn + ' verified travellers have dropped chits');
+      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 ' + ((G.month.get(e.who) || 0)) + '/4 used this month)'));
+      const totalTries = R.sim.agents.reduce((s2, a) => s2 + a.tries, 0);
+      const me = R.real.find(e => e.who === who) || null;
+      const myWin = R.result ? (R.result.winners.real.find(w => w.who === who) || null) : null;
+      return send(res, 200, {
+        phase: R.state, id: R.id, elapsedMs: el, train: TKN, cls: TKC, date: tkIso(), berths: TKB,
+        monthUsed: G.month.get(who) || 0,
+        customer: {
+          entered: !!me, chitNo: me ? R.sim.humans + R.real.indexOf(me) + 1 : null,
+          chitsInBowl: humansIn + agentsIn.length + R.real.length,
+          won: !!myWin, berthIdx: myWin ? myWin.berthIdx : null,
+          result: R.result ? { taken: TKB, toPeople: TKB - R.result.winners.bots } : null,
+        },
+        backend: {
+          feed: feed.slice(-14),
+          agents: R.sim.agents.map(a => ({ id: a.id, tries: a.tries, chits: 4 })),
+          totalTries, humans: R.sim.humans, realChits: R.real.length,
+          bowl: R.result ? R.result.chits : (R.sim.humans + 12 + R.real.length),
+          seed: R.seed,
+          result: R.result ? { bots: R.result.winners.bots,
+            humans: R.result.winners.humans,
+            real: R.result.winners.real.length } : null,
+          audit: R.result ? [
+            'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' human chits + ' + R.real.length + ' live visitors',
+            'identity filter: ' + totalTries + ' agent requests \u2192 3 verified persons',
+            'monthly cap: 3 agents \u00d7 4 chits = 12 chits stand',
+            'draw: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths from ' + R.result.chits + ' chits',
+            'result: ' + R.result.winners.bots + ' bot berths \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
+          ] : ['window is open \u2014 chits are collecting', 'nothing is decided until the draw'],
+        },
+      });
+    }
+    return send(res, 404, { error: 'no such tatkal endpoint' });
+  }
+
   if (p === '/api/counts') {
     const from = +q.get('from'), to = +q.get('to');
     if (!(from >= 0 && to >= 0 && from !== to)) return send(res, 400, { error: 'bad from/to' });

@@ -1301,6 +1301,53 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Take away the starting gun</h1>
   <div style="font:500 13.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:54em;margin-bottom:10px">Tatkal opens at 10:00:00 and the fastest click wins &#8212; so booking bots win. At peak, Railways says up to 80% of Tatkal traffic is non-human. Identity checks inside the race slow down humans, not machines. The fix finance discovered for its own bot war: stop rewarding <b>first</b>. Collect a window into one bowl, then draw.</div>
   <div style="font:600 13px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-bottom:18px">Below: the same morning, twice. {{ ftPeople }} real people and {{ ftAgents }} agent shops running {{ ftBots }} bot accounts, all wanting the same {{ ftBerths }} Tatkal berths.</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;margin-bottom:26px">
+    <div style="flex:1;min-width:300px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:20px 22px">
+      <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-14663a);text-transform:uppercase;margin-bottom:10px">Live &#183; what the customer sees</div>
+      <div style="border:1px solid var(--k-e6e5e0);border-radius:10px;padding:15px 17px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font:700 15.5px/1.3 Manrope,sans-serif">Kaveri Express</div>
+            <div style="font:400 11px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">16021 &#183; {{ tkDateLine }}</div>
+          </div>
+          <span style="margin-left:auto;font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-d8385a);border:1px solid var(--k-d8385a);border-radius:999,padding:5px 9px;border-radius:999px;padding:5px 9px">TATKAL</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:11px">
+          <div style="text-align:right"><div style="font:700 15px/1.2 Manrope,sans-serif">{{ tkDep }}</div><div style="font-size:10.5px;color:var(--k-fg-8a8a84)">BWT</div></div>
+          <div style="flex:1;max-width:70px"><div style="height:2px;background:var(--k-e6e5e0);border-radius:1px"></div></div>
+          <div><div style="font:700 15px/1.2 Manrope,sans-serif">{{ tkArr }}</div><div style="font-size:10.5px;color:var(--k-fg-8a8a84)">MYS</div></div>
+          <div style="margin-left:auto;font:700 13px/1.2 Manrope,sans-serif">SL &#183; {{ tkFare }}</div>
+        </div>
+      </div>
+      <button onClick="{{ tkEnter }}" style="{{ tkEnterStyle }}">{{ tkEnterLabel }}</button>
+      <div style="{{ tkStatusStyle }}">{{ tkStatus }}</div>
+      <div style="{{ tkWinStyle }}">
+        <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--k-fg-14663a);text-transform:uppercase;margin-bottom:6px">Confirmed</div>
+        <div style="font:700 15px/1.4 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ tkWinHead }}</div>
+        <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin:4px 0 10px">{{ tkWinSub }}</div>
+        <button onClick="{{ tkPay }}" style="{{ tkPayStyle }}">{{ tkPayLabel }}</button>
+      </div>
+      <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:12px">{{ tkMonthLine }}</div>
+    </div>
+    <div style="flex:1;min-width:300px;background:var(--k-14161a);border:1px solid var(--k-2a2f3a,#2a2f3a);border-radius:12px;padding:20px 22px;color:var(--k-fg-fff)">
+      <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#e0a419;text-transform:uppercase;margin-bottom:8px">Backend &#183; what the algorithm is doing</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button onClick="{{ tkOpen }}" style="{{ tkOpenStyle }}">Open the 10 AM window</button>
+        <button onClick="{{ tkDraw }}" style="{{ tkDrawStyle }}">Close &amp; run the draw</button>
+        <button onClick="{{ tkReset }}" style="border:1px solid rgba(255,255,255,.25);background:transparent;color:#c8ccd4;font:700 11.5px/1 Manrope,sans-serif;padding:11px 13px;border-radius:7px;cursor:pointer;min-height:40px">Reset</button>
+      </div>
+      <sc-for list="{{ tkFeed }}" as="f" hint-placeholder-count="10">
+        <div style="font:500 10.5px/1.7 'IBM Plex Mono',monospace;color:#aab3c0;border-bottom:1px dashed rgba(255,255,255,.07)">{{ f }}</div>
+      </sc-for>
+      <div style="{{ tkAuditWrap }}">
+        <div style="font:700 10px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#7fe3ae;text-transform:uppercase;margin:12px 0 7px">Audit log &#183; deterministic</div>
+        <sc-for list="{{ tkAudit }}" as="a" hint-placeholder-count="5">
+          <div style="font:500 10.5px/1.8 'IBM Plex Mono',monospace;color:#dfe3ea">{{ a }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:6px;font:700 13px/1.4 Manrope,sans-serif;color:var(--k-fg-14161a)">The math on any morning, without waiting for a draw:</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px">
     <button onClick="{{ ftAgain }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 13.5px/1 Manrope,sans-serif;padding:13px 20px;border-radius:8px;cursor:pointer;min-height:44px">Run another day &#8635;</button>
     <div style="font:500 12px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">Deterministic: day {{ ftDay }} always gives this exact result. No dice hidden.</div>
@@ -2006,6 +2053,25 @@ class Component extends DCLogic {
       if(i===0&&mine)return this.capFirst(mine);
       return 'Passenger '+(i+1);
     });
+  }
+  async loadTk(force){
+    if(this._tkBusy)return;
+    if(!force&&this._tkAt&&Date.now()-this._tkAt<1100)return;
+    this._tkBusy=true;this._tkAt=Date.now();
+    try{
+      const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
+      const j=await this.tfetch('/api/tatkal/state?who='+encodeURIComponent(who),null,6000).then(r=>r.json());
+      this.setState({tk:j});
+    }catch(e){}
+    this._tkBusy=false;
+  }
+  tkPoll(){
+    if(this._tki)return;
+    this.loadTk(true);
+    this._tki=setInterval(()=>{
+      if(this.state.page!=='tatkal'){clearInterval(this._tki);this._tki=null;return;}
+      this.loadTk();
+    },1400);
   }
   signOut(){
     try{localStorage.removeItem('khaali-auth');
@@ -4339,6 +4405,68 @@ class Component extends DCLogic {
             color:'var(--k-fg-14161a)',boxShadow:'0 10px 26px rgba(16,19,25,.16)',zIndex:3},
           storyFoot:{display:step===3?'block':'none',marginTop:14,padding:'14px 17px',
             borderRadius:9,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-dce9e2)'},
+        };})(),
+      ...(()=>{
+        const T=S.tk||{phase:'idle'};
+        if(S.page==='tatkal')this.tkPoll();
+        const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
+        const open=T.phase==='open',doneP=T.phase==='done';
+        const me=(T.customer||{});
+        const post=async(u)=>{try{await this.tfetch(u,{method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({who,name:(S.auth&&(S.auth.fullName||S.auth.name))||'a visitor'})},6000);}catch(e){}
+          this.loadTk(true);};
+        const btnDark=on=>({border:'none',background:on?'#e0a419':'rgba(255,255,255,.12)',
+          color:on?'#14161a':'#8b90a0',font:'700 11.5px/1 Manrope,sans-serif',
+          padding:'11px 13px',borderRadius:7,cursor:on?'pointer':'default',minHeight:40});
+        const tkTr=this.TRAINS.find(x=>x.no==='16021');
+        const tkFareN=this.fare('SL',Math.abs(this.ST[13].km-this.ST[0].km));
+        const tkB=(doneP&&me.won&&me.berthIdx!=null)?this.berths('SL','16021')[me.berthIdx]:null;
+        const tkD=new Date(Date.now()+864e5);
+        return {
+          tkDateLine:'Tomorrow \u00b7 '+tkD.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}),
+          tkDep:this.toHHMM(this.sMin(tkTr,0,'d')),tkArr:this.toHHMM(this.sMin(tkTr,13,'a')),
+          tkFare:'\u20b9'+tkFareN,
+          tkEnter:()=>{if(open&&!me.entered)post('/api/tatkal/enter');},
+          tkEnterLabel:doneP?'':(open?(me.entered?'Booking received \u2713':'Book Tatkal \u00b7 \u20b9'+tkFareN)
+            :'Tatkal opens at 10:00 AM'),
+          tkEnterStyle:{display:doneP?'none':'inline-block',border:'none',
+            background:!open?'var(--k-d4d3ce)':me.entered?'var(--k-1f9d55)':'var(--k-d8385a)',
+            color:!open?'var(--k-fg-8a8a84)':'#fff',
+            font:'700 14px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:8,
+            cursor:(open&&!me.entered)?'pointer':'default',minHeight:46},
+          tkStatus:doneP?(me.won?'':('Not allotted this time \u2014 '+((me.result&&me.result.toPeople)||0)+' of 40 berths went to travellers. Nothing was charged. The next window is one button away.'))
+            :open?(me.entered?('Booking received for '+((S.auth&&this.capFirst(S.auth.name))||'you')+'. Allotment runs when the window closes \u2014 clicking faster would not have helped.')
+              :('Booking is open \u2014 one tap, one fare, no racing.'))
+            :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
+          tkStatusStyle:{display:(doneP&&me.won)?'none':'block',marginTop:10,
+            font:'600 12px/1.6 Manrope,sans-serif',
+            color:(doneP&&!me.won)?'var(--k-fg-c2870a)':'var(--k-fg-5a5f6a)'},
+          tkWinStyle:{display:(doneP&&me.won)?'block':'none',marginTop:8,padding:'14px 16px',
+            borderRadius:10,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-1f9d55)'},
+          tkWinHead:tkB?('Berth '+tkB.coach+'/'+tkB.no+' \u00b7 '+this.typeName(tkB.type)+' \u00b7 tomorrow\u2019s 16021'):'Berth allotted',
+          tkWinSub:'Your booking was allotted a real berth. Pay within 5 minutes and the ticket is yours \u2014 same as any khaali booking.',
+          tkPay:()=>{if(me.berthIdx==null)return;
+            const b=this.berths('SL','16021')[me.berthIdx];
+            if(!b)return;
+            this._c={};
+            const st=this.stateOf(b,0,13);
+            this.setState({train:'16021',cls:'SL',allCls:false,from:0,to:13,dayIdx:1,pax:1,
+              picks:[{key:b.coach+'-'+b.no,idx:b.idx,no:b.no,coach:b.coach,type:b.type,k:st.k,at:st.at}],
+              page:'confirm',routeOpen:true,classModal:false},()=>this.startHold());
+            window.scrollTo(0,0);},
+          tkPayLabel:'Continue to payment \u2192',
+          tkPayStyle:{border:'none',background:'var(--k-1f9d55)',color:'#fff',
+            font:'700 13px/1 Manrope,sans-serif',padding:'12px 18px',borderRadius:7,
+            cursor:'pointer',minHeight:42},
+          tkMonthLine:'Tatkal bookings this month: '+(T.monthUsed||0)+' of 4 \u00b7 the monthly limit is what makes bot farms pointless.',
+          tkOpen:()=>{if(!open)post('/api/tatkal/open');},
+          tkOpenStyle:btnDark(!open),
+          tkDraw:()=>{if(open)post('/api/tatkal/draw');},
+          tkDrawStyle:btnDark(open),
+          tkReset:()=>post('/api/tatkal/reset'),
+          tkFeed:(T.backend&&T.backend.feed)||['press Open the 10 AM window to start a round','the feed will show every arrival: bot bursts and human chits alike'],
+          tkAuditWrap:{display:(T.backend&&T.backend.audit)?'block':'none'},
+          tkAudit:(T.backend&&T.backend.audit)||[],
         };})(),
       ...(()=>{
         const BERTHS=40,AGENTS=3,BOTSPER=16,HUMANS=153;
