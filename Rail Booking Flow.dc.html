@@ -1321,6 +1321,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
       <button onClick="{{ tkEnter }}" style="{{ tkEnterStyle }}">{{ tkEnterLabel }}</button>
       <div style="{{ tkStatusStyle }}">{{ tkStatus }}</div>
+      <button onClick="{{ tkAlt }}" style="{{ tkAltStyle }}">{{ tkAltLabel }}</button>
       <div style="{{ tkWinStyle }}">
         <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--k-fg-14663a);text-transform:uppercase;margin-bottom:6px">Confirmed</div>
         <div style="font:700 15px/1.4 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ tkWinHead }}</div>
@@ -4439,13 +4440,25 @@ class Component extends DCLogic {
             return 'Not allotted this time \u2014 your entry was not among the 40 drawn. '
               +tp+' berths went to travellers'
               +(tb?(', '+tb+' to the capped bot entries that stayed in the draw like everyone else'):' \u2014 the bots won none')
-              +'. Nothing was charged; the next window is one button away.';})())
+              +'. Nothing was charged.'
+              +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no lottery needed.')
+                :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any lottery.'):''));})())
             :open?(me.entered?('Booking received for '+((S.auth&&this.capFirst(S.auth.name))||'you')+'. Allotment runs when the window closes \u2014 clicking faster would not have helped.')
               :('Booking is open \u2014 one tap, one fare, no racing.'))
             :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
           tkStatusStyle:{display:(doneP&&me.won)?'none':'block',marginTop:10,
             font:'600 12px/1.6 Manrope,sans-serif',
             color:(doneP&&!me.won)?'var(--k-fg-c2870a)':'var(--k-fg-5a5f6a)'},
+          tkAlt:()=>{const R2=me.result||{};this._c={};
+            if(R2.free>0){this.setState({train:'16021',cls:'SL',allCls:false,from:0,to:13,dayIdx:1,
+              pax:1,picks:[],classModal:true,onlyThis:true,hov:null});}
+            else{this.setState({from:0,to:13,dayIdx:1,cls:'SL',allCls:false});this.go('hop');}},
+          tkAltLabel:(me.result&&me.result.free>0)?('Book this train normally \u2192 no draw needed')
+            :'See the guaranteed seat-hop \u2192',
+          tkAltStyle:{display:(doneP&&!me.won&&me.result&&(me.result.free>0||me.result.part>0))?'inline-block':'none',
+            marginTop:12,border:'none',background:'var(--k-1f9d55)',color:'#fff',
+            font:'700 13px/1 Manrope,sans-serif',padding:'13px 18px',borderRadius:8,
+            cursor:'pointer',minHeight:44},
           tkWinStyle:{display:(doneP&&me.won)?'block':'none',marginTop:8,padding:'14px 16px',
             borderRadius:10,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-1f9d55)'},
           tkWinHead:tkB?('Berth '+tkB.coach+'/'+tkB.no+' \u00b7 '+this.typeName(tkB.type)+' \u00b7 tomorrow\u2019s 16021'):'Berth allotted',

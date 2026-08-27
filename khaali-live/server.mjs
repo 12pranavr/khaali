@@ -523,6 +523,7 @@ async function api(req, res, url) {
       realWinners.forEach(w => G.month.set(w.id, (G.month.get(w.id) || 0) + 1));
       R.result = {
         chits: bowl.length,
+        counts: { free: av.counts.free, part: av.counts.part },
         winners: { bots: winners.filter(w => w.kind === 'bot').length,
           humans: winners.filter(w => w.kind === 'human').length,
           real: realWinners.map(w => ({ who: w.id, name: w.name, berthIdx: w.berthIdx })) },
@@ -558,7 +559,8 @@ async function api(req, res, url) {
           entered: !!me, chitNo: me ? R.sim.humans + R.real.indexOf(me) + 1 : null,
           chitsInBowl: humansIn + agentsIn.length + R.real.length,
           won: !!myWin, berthIdx: myWin ? myWin.berthIdx : null,
-          result: R.result ? { taken: TKB, toPeople: TKB - R.result.winners.bots } : null,
+          result: R.result ? { taken: TKB, toPeople: TKB - R.result.winners.bots,
+            free: R.result.counts.free, part: R.result.counts.part } : null,
         },
         backend: {
           feed: feed.slice(-14),
