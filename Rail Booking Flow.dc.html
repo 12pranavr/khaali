@@ -2063,6 +2063,16 @@ class Component extends DCLogic {
       const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
       const j=await this.tfetch('/api/tatkal/state?who='+encodeURIComponent(who),null,6000).then(r=>r.json());
       this.setState({tk:j});
+      // settle the fare lock exactly once per round, the moment allotment runs
+      try{
+        const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
+        if(L&&!L.settled&&j.phase==='done'&&j.id===L.round){
+          const won=!!(j.customer&&j.customer.won);
+          this.walletCredit(L.amt,won?'Tatkal allotted \u2014 fare lock released toward payment'
+            :'Tatkal not allotted \u2014 locked fare refunded instantly');
+          L.settled=true;localStorage.setItem('khaali-tklock',JSON.stringify(L));
+        }
+      }catch(e){}
     }catch(e){}
     this._tkBusy=false;
   }
@@ -4427,8 +4437,20 @@ class Component extends DCLogic {
           tkDateLine:'Tomorrow \u00b7 '+tkD.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}),
           tkDep:this.toHHMM(this.sMin(tkTr,0,'d')),tkArr:this.toHHMM(this.sMin(tkTr,13,'a')),
           tkFare:'\u20b9'+tkFareN,
-          tkEnter:()=>{if(open&&!me.entered)post('/api/tatkal/enter');},
-          tkEnterLabel:doneP?'':(open?(me.entered?'Booking received \u2713':'Book Tatkal \u00b7 \u20b9'+tkFareN)
+          tkEnter:()=>{if(!(open&&!me.entered))return;
+            // the commitment gate: entering costs a locked fare - topped up
+            // with clearly-labelled demo money when the wallet is short
+            if(this.wallet().bal<tkFareN)this.walletCredit(tkFareN,'Demo top-up for Tatkal entry');
+            this.walletDebit(tkFareN,'Tatkal entry \u2014 fare locked until allotment');
+            try{localStorage.setItem('khaali-tklock',JSON.stringify({round:T.id,amt:tkFareN,settled:false}));}catch(e){}
+            (async()=>{try{await this.tfetch('/api/tatkal/enter',{method:'POST',
+              headers:{'content-type':'application/json'},
+              body:JSON.stringify({who,paid:true,
+                name:(S.auth&&(S.auth.fullName||S.auth.name))||'a visitor'})},6000);}catch(e){}
+              this.loadTk(true);})();},
+          tkEnterLabel:doneP?'':(open?(me.entered?'Booking received \u2713'
+              :(this.wallet().bal<tkFareN?('Add \u20b9'+tkFareN+' (demo) & book Tatkal')
+                :('Book Tatkal \u00b7 \u20b9'+tkFareN+' locks now')))
             :'Tatkal opens at 10:00 AM'),
           tkEnterStyle:{display:doneP?'none':'inline-block',border:'none',
             background:!open?'var(--k-d4d3ce)':me.entered?'var(--k-1f9d55)':'var(--k-d8385a)',
@@ -4440,10 +4462,10 @@ class Component extends DCLogic {
             return 'Not allotted this time \u2014 your entry was not among the 40 the quota could seat. '
               +tp+' berths went to travellers'
               +(tb?(', '+tb+' to the capped bot entries, considered like everyone else'):' \u2014 the bots won none')
-              +'. Nothing was charged.'
+              +'. Your locked \u20b9175 bounced straight back \u2014 it is in the wallet ledger.'
               +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no window needed.')
                 :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any window at all.'):''));})())
-            :open?(me.entered?('Booking received for '+((S.auth&&this.capFirst(S.auth.name))||'you')+'. Allotment runs when the window closes \u2014 clicking faster would not have helped.')
+            :open?(me.entered?('Booking received \u2014 \u20b9'+tkFareN+' locked from your wallet. It refunds the instant you are not allotted; allotment runs when the window closes.')
               :('Booking is open \u2014 one tap, one fare, no racing.'))
             :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
           tkStatusStyle:{display:(doneP&&me.won)?'none':'block',marginTop:10,

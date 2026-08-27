@@ -495,6 +495,7 @@ async function api(req, res, url) {
       if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one chit per person per round' });
       const used = G.month.get(who) || 0;
       if (used >= 4) return send(res, 409, { error: 'four Tatkal chits per month \u2014 all used' });
+      if (b.paid !== true) return send(res, 402, { error: 'the fare must be locked to enter' });
       R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now() });
       return send(res, 200, { ok: true, chit: R.sim.humans + R.real.length });
     }
@@ -548,7 +549,7 @@ async function api(req, res, url) {
       const feed = [];
       agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  tout bot-farm ' + a.id + ' (simulated) fired ' + a.tries + ' requests'));
       feed.push(humansIn + ' simulated ordinary travellers have booked so far');
-      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 ' + ((G.month.get(e.who) || 0)) + '/4 used this month)'));
+      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 \u20b9175 locked \u00b7 ' + ((G.month.get(e.who) || 0)) + '/4 used this month)'));
       const totalTries = R.sim.agents.reduce((s2, a) => s2 + a.tries, 0);
       const me = R.real.find(e => e.who === who) || null;
       const myWin = R.result ? (R.result.winners.real.find(w => w.who === who) || null) : null;
@@ -575,6 +576,7 @@ async function api(req, res, url) {
             'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' simulated travellers + ' + R.real.length + ' real ' + (R.real.length === 1 ? 'person' : 'people') + ' on this site',
             'identity filter: ' + totalTries + ' bot requests trace back to just 3 verified persons',
             'monthly cap: 3 agents \u00d7 4 chits = 12 chits stand',
+            'entry rule: fare locked to enter \u00b7 the farms floated \u20b9' + (12 * 175) + ' across their 12 entries \u00b7 not allotted = refunded instantly',
             'allotment: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths among ' + R.result.chits + ' equal entries \u00b7 replayable by anyone',
             'result: ' + R.result.winners.bots + ' bot berths \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
           ] : ['window is open \u2014 bookings are collecting', 'nothing is decided until allotment runs'],
