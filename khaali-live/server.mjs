@@ -575,9 +575,9 @@ async function api(req, res, url) {
             'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' simulated travellers + ' + R.real.length + ' real ' + (R.real.length === 1 ? 'person' : 'people') + ' on this site',
             'identity filter: ' + totalTries + ' bot requests trace back to just 3 verified persons',
             'monthly cap: 3 agents \u00d7 4 chits = 12 chits stand',
-            'draw: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths from ' + R.result.chits + ' chits',
+            'allotment: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths among ' + R.result.chits + ' equal entries \u00b7 replayable by anyone',
             'result: ' + R.result.winners.bots + ' bot berths \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
-          ] : ['window is open \u2014 chits are collecting', 'nothing is decided until the draw'],
+          ] : ['window is open \u2014 bookings are collecting', 'nothing is decided until allotment runs'],
         },
       });
     }

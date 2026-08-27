@@ -1299,7 +1299,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 <div style="max-width:1040px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">Fair Tatkal &#183; a market-design demo</div>
   <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Take away the starting gun</h1>
-  <div style="font:500 13.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:54em;margin-bottom:10px">Tatkal opens at 10:00:00 and the fastest click wins &#8212; so booking bots win. At peak, Railways says up to 80% of Tatkal traffic is non-human. Identity checks inside the race slow down humans, not machines. The fix finance discovered for its own bot war: stop rewarding <b>first</b>. Collect a window into one bowl, then draw.</div>
+  <div style="font:500 13.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:54em;margin-bottom:10px">Tatkal opens at 10:00:00 and the fastest click wins &#8212; so booking bots win. At peak, Railways says up to 80% of Tatkal traffic is non-human. Identity checks inside the race slow down humans, not machines. The fix finance discovered for its own bot war: stop rewarding <b>first</b>. Collect a window, then allot everyone at once &#8212; all equal, all audited.</div>
   <div style="font:600 13px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-bottom:18px">Below: the same morning, twice. {{ ftPeople }} real people and {{ ftAgents }} agent shops running {{ ftBots }} bot accounts, all wanting the same {{ ftBerths }} Tatkal berths.</div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;margin-bottom:26px">
     <div style="flex:1;min-width:300px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:20px 22px">
@@ -1334,7 +1334,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#e0a419;text-transform:uppercase;margin-bottom:8px">Backend &#183; what the algorithm is doing</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <button onClick="{{ tkOpen }}" style="{{ tkOpenStyle }}">Open the 10 AM window</button>
-        <button onClick="{{ tkDraw }}" style="{{ tkDrawStyle }}">Close &amp; run the draw</button>
+        <button onClick="{{ tkDraw }}" style="{{ tkDrawStyle }}">Close window &amp; allot</button>
         <button onClick="{{ tkReset }}" style="border:1px solid rgba(255,255,255,.25);background:transparent;color:#c8ccd4;font:700 11.5px/1 Manrope,sans-serif;padding:11px 13px;border-radius:7px;cursor:pointer;min-height:40px">Reset</button>
       </div>
       <sc-for list="{{ tkFeed }}" as="f" hint-placeholder-count="10">
@@ -4437,12 +4437,12 @@ class Component extends DCLogic {
             cursor:(open&&!me.entered)?'pointer':'default',minHeight:46},
           tkStatus:doneP?(me.won?'':(()=>{
             const tp=(me.result&&me.result.toPeople)||0,tb=40-tp;
-            return 'Not allotted this time \u2014 your entry was not among the 40 drawn. '
+            return 'Not allotted this time \u2014 your entry was not among the 40 the quota could seat. '
               +tp+' berths went to travellers'
-              +(tb?(', '+tb+' to the capped bot entries that stayed in the draw like everyone else'):' \u2014 the bots won none')
+              +(tb?(', '+tb+' to the capped bot entries, considered like everyone else'):' \u2014 the bots won none')
               +'. Nothing was charged.'
-              +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no lottery needed.')
-                :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any lottery.'):''));})())
+              +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no window needed.')
+                :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any window at all.'):''));})())
             :open?(me.entered?('Booking received for '+((S.auth&&this.capFirst(S.auth.name))||'you')+'. Allotment runs when the window closes \u2014 clicking faster would not have helped.')
               :('Booking is open \u2014 one tap, one fare, no racing.'))
             :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
@@ -4453,7 +4453,7 @@ class Component extends DCLogic {
             if(R2.free>0){this.setState({train:'16021',cls:'SL',allCls:false,from:0,to:13,dayIdx:1,
               pax:1,picks:[],classModal:true,onlyThis:true,hov:null});}
             else{this.setState({from:0,to:13,dayIdx:1,cls:'SL',allCls:false});this.go('hop');}},
-          tkAltLabel:(me.result&&me.result.free>0)?('Book this train normally \u2192 no draw needed')
+          tkAltLabel:(me.result&&me.result.free>0)?('Book this train normally \u2192')
             :'See the guaranteed seat-hop \u2192',
           tkAltStyle:{display:(doneP&&!me.won&&me.result&&(me.result.free>0||me.result.part>0))?'inline-block':'none',
             marginTop:12,border:'none',background:'var(--k-1f9d55)',color:'#fff',
