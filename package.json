@@ -1,0 +1,11 @@
+{
+  "name": "khaali",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "postinstall": "cd khaali-live && npm install",
+    "start": "node khaali-live/server.mjs",
+    "test": "node khaali-live/test.mjs"
+  }
+}
