@@ -1,85 +1,80 @@
 # khaali - 2 minute demo script
 
-Presenter-led. Around 320 words of speech, which fits two minutes at a normal
-pace. Screen directions in italics.
+Presenter-led. Around 325 words, which fits two minutes at a normal pace.
+Screen directions in italics.
 
-## 0:00 - 0:24 - on camera
+Every line was checked against Harry Dry's three rules: can I visualise it, can
+I falsify it, can nobody else say it. The audit is at the bottom.
 
-> Every day, people open IRCTC with the same hope. I just need one ticket.
->
-> But at ten in the morning, Tatkal is a race against bots. By IRCTC's own
-> figures, up to eighty percent of that traffic is not human. Money gets
-> deducted and you are left unsure whether you have a ticket or a refund
-> coming. And a berth that empties halfway down the route still isn't for sale
-> to the next person who needs it.
->
-> Hi, I'm Pranav, and I'm building khaali for that.
->
-> Three things: make the race fair, make the money clear, and sell the space
-> that is already empty.
->
-> Let me show you.
+## 0:00 - 0:22 - on camera
 
-## 0:24 - 0:32 - homepage
+> Ten in the morning. App open, details saved, thumb over the button. You lose
+> anyway.
+>
+> Eighty percent of the traffic you're racing isn't human. That's IRCTC's own
+> number.
+>
+> Or the money leaves your account, no ticket appears, and now you own a
+> screenshot and a customer care number.
+>
+> Meanwhile a berth that emptied at Bengaluru rides another hundred and
+> thirty-eight kilometres to Mysuru with nobody in it.
+>
+> I'm Pranav. I built khaali for those three.
 
-> A traveller starts by choosing the exact stretch they need. Not the train's
-> final destination. Their stretch.
+## 0:22 - 0:30 - homepage
+
+> You start by picking the stretch you're actually travelling. Not where the
+> train ends. Where you get off.
 
 *Pick the two stations and search.*
 
-## 0:32 - 0:58 - berth selection
+## 0:30 - 0:56 - berths
 
-> khaali checks availability station by station. If somebody gets off earlier,
-> that berth becomes available to the next traveller.
+> khaali checks every berth station by station. Green is yours the whole way.
+> Amber empties partway, and you pay only for the part you ride. When nothing
+> covers you end to end, it stitches two half-empty berths into one ticket and
+> tells you which station to move at.
 >
-> Green is free your whole way. Amber opens up partway, and it's priced only
-> for the part you actually use. When nothing covers you end to end, khaali
-> stitches two half-empty berths into one ticket and tells you exactly where
-> you change.
+> On this train tonight, 215 berths cover part of your trip. Nobody is allowed
+> to sell you one.
+
+*Scroll the coach. Hover an amber berth so its handover station shows.*
+
+## 0:56 - 1:22 - Fair Tatkal
+
+> Tatkal today is a speed race. khaali makes it a window, so clicking first
+> buys you nothing.
 >
-> On this train tonight, that's 215 berths nobody is currently allowed to sell
-> you.
-
-*Scroll the coach. Hover an amber berth so its handover station shows. If you
-have time, open Seat hop for one beat.*
-
-## 0:58 - 1:24 - Fair Tatkal
-
-> Now Tatkal. Today it is a speed race. khaali makes it a verified window
-> instead, so nobody wins by clicking first.
+> Then we score how each entry arrived. These three bot farms: nought point
+> nine five. Me: nought point nought four.
 >
-> Then we score how each entry arrived. Impossible booking speed, repeated
-> request patterns, bulk account activity. These three farms come out at nought
-> point nine five. I come out at nought point nought four.
->
-> The weights are printed right there, so you can check the arithmetic
-> yourself. And it never blocks a genuine traveller. The worst it does is count
-> you as one person, entering once. What it removes is the bulk advantage.
+> The weights are printed on the screen, so you can redo the arithmetic
+> yourself. It never blocks a person. The worst it does is count you as one
+> person entering once. What it takes away is buying in bulk.
 
-*Open the window, close it, and let the Sentinel panel land. Your own row sits
-above the three farms.*
+*Open the window, close it, let the Sentinel panel land. Your own row sits above
+the three farms.*
 
-## 1:24 - 1:42 - Saarthi
+## 1:22 - 1:38 - Saarthi
 
-> This is Saarthi, our multilingual assistant. A traveller just says it: I need
-> to go from Bengaluru to Mysuru tomorrow evening. It searches, explains the
-> waitlist, and answers in the same language they asked in.
+> Saarthi. I asked that in Kannada. It answered in Kannada, found the train, and
+> read the waitlist back to me.
 
-*Speak to it. Kannada or Hindi lands better than English here.*
+*Say it in Kannada or Hindi on camera first, then let the answer play.*
 
-## 1:42 - 1:56 - money
+## 1:38 - 1:54 - money
 
-> And after you pay, khaali says plainly where your money is. Your bank, the
-> gateway, us, or the railway. If it sticks, it names who is holding it. If no
-> berth comes, the refund is back in your wallet before you have closed the
-> screen.
+> And your money is never nowhere. Your bank, the gateway, us, the railway. It
+> names who is holding it, right now. No berth, no argument: the refund is in
+> your wallet before you close the tab.
 
 *The four-stage tracker, then the refund landing in the wallet.*
 
-## 1:56 - 2:00 - close
+## 1:54 - 2:00 - close
 
-> khaali does not create more trains. It makes the journey fairer for the
-> people already trying to travel.
+> khaali doesn't add one train, one coach, or one berth. It just sells the ones
+> already going empty.
 
 *End card with the demo login.*
 
@@ -139,3 +134,38 @@ Sources:
 - https://windowsnews.ai/article/irctc-blocks-30-million-suspicious-ids-still-smashes-online-booking-records-in-2025-26.428523
 - https://www.metroindia.net/news/articlenews/tatkal-tickets-vanish-in-seconds-33447
 - https://www.newsonair.gov.in/railways-announces-new-rules-for-tatkal-tickets-aadhaar-based-otp-authentication-must-from-july-1
+
+## The three-rule audit
+
+Harry Dry's test on every claim: can I visualise it, can I falsify it, can
+nobody else say it. Three noes means it is filler. Three yeses means it is
+yours.
+
+Lines that earn their place:
+
+| Line | Visualise | Falsify | Nobody else |
+|---|---|---|---|
+| a screenshot and a customer care number | yes | yes | shared problem, so no |
+| 138 kilometres to Mysuru with nobody in it | yes | yes | yes |
+| 215 berths cover part of your trip | yes | yes | yes |
+| these farms nought point nine five, me nought point nought four | yes | yes | yes |
+| it names who is holding it, right now | yes | yes | yes |
+| doesn't add one train, one coach, or one berth | yes | yes | yes |
+
+What was cut, and why:
+
+- **"Three commitments: fairer booking, clearer payments, better use of
+  capacity."** Three noes. You cannot picture "fairer booking", you cannot
+  prove it, and any booking startup could sign it. Zoomed in until each one hit
+  a concrete object: who is holding your money, clicking first buys you
+  nothing, the berth going empty.
+- **"Payments can be deducted while passengers are left unsure about the ticket
+  or refund."** Abstract. What do you actually hold in that moment? A
+  screenshot and a customer care number.
+- **"It makes the journey fairer for the people already trying to travel."**
+  The first half of that closer was doing real work by saying what khaali is
+  not. The second half was an adjective. Replaced with what it does instead.
+- **"Answers in the same language they asked in."** That is talking. "I asked
+  that in Kannada, it answered in Kannada" is pointing at something the viewer
+  just watched.
+
