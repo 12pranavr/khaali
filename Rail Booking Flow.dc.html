@@ -287,6 +287,48 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   .k-secthead>div{flex:none;white-space:nowrap}
 }
 
+/* ===== homepage clarity pass ===== */
+.k-topbar{backdrop-filter:blur(14px)}
+.k-hero{overflow:hidden}
+.k-hero-title{text-wrap:balance}
+.k-hero-copy{text-wrap:pretty}
+.k-herohelper{margin-top:12px;font:600 11.5px/1.45 Manrope,sans-serif;color:var(--k-fg-8a8a84)}
+.k-heroproof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;
+  margin-top:22px;padding-top:15px;border-top:1px solid var(--k-e6e5e0)}
+.k-heroproof>div{min-width:0;padding:0 12px;border-left:1px solid var(--k-e6e5e0)}
+.k-heroproof>div:first-child{padding-left:0;border-left:0}
+.k-heroproof b{display:block;font:700 11px/1.2 'IBM Plex Mono',monospace;letter-spacing:.08em;
+  color:var(--k-fg-d8385a);text-transform:uppercase}
+.k-heroproof span{display:block;margin-top:4px;font:600 11.5px/1.4 Manrope,sans-serif;color:var(--k-fg-5a5f6a)}
+@media (max-width:760px){
+  .k-hdr{min-height:58px!important;padding:9px 14px!important}
+  .k-nav{height:34px!important}
+  .k-burger{font-size:12px!important;letter-spacing:.02em}
+  .k-hero{border-radius:14px!important;box-shadow:0 14px 36px rgba(0,0,0,.18)!important}
+  .k-heroruled{padding:24px 18px 20px!important;background:
+    radial-gradient(circle at top right,rgba(193,58,38,.13),transparent 38%),
+    repeating-linear-gradient(0deg,rgba(244,239,230,.04) 0 1px,transparent 1px 5px)!important}
+  .k-hero-title{font-size:clamp(30px,9vw,38px)!important;line-height:1.04!important;margin-bottom:10px!important}
+  .k-hero-copy{font-size:14px!important;line-height:1.58!important}
+  .k-heroform{margin-top:22px!important;gap:11px!important}
+  .k-heroform>.k-stnwrap,.k-heroform>.k-calwrap,.k-heroform>.k-searchbtn{width:100%!important}
+  .k-heroform .k-stnwrap input{min-height:52px!important;border-radius:10px!important;padding:14px!important}
+  .k-heroform .k-calwrap>div:first-of-type{min-height:52px!important;border-radius:10px!important}
+  .k-searchbtn{min-height:54px!important;border-radius:10px!important;box-shadow:0 8px 18px rgba(193,58,38,.24)}
+  .k-herohelper{margin-top:13px;font-size:11px}
+  .k-heroproof{margin-top:18px;padding-top:14px}
+  .k-heroproof>div{padding:0 8px}
+  .k-heroproof b{font-size:9.5px}
+  .k-heroproof span{font-size:10.5px;line-height:1.35}
+}
+@media (max-width:390px){
+  .k-heroproof{grid-template-columns:1fr;gap:10px}
+  .k-heroproof>div{padding:0 0 0 11px;border-left:2px solid var(--k-d8385a)}
+  .k-heroproof>div:first-child{padding-left:11px;border-left:2px solid var(--k-d8385a)}
+  .k-heroproof b,.k-heroproof span{display:inline}
+  .k-heroproof span{margin-left:7px}
+}
+
 </style></helmet>
 
 <div style="min-height:100vh;background:var(--k-f2f2f5);color:var(--k-fg-14161a)">
@@ -367,8 +409,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div class="k-hero" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);padding:0;color:var(--k-fg-14161a);box-shadow:0 10px 30px rgba(40,45,90,.10)">
       <div class="k-heroruled" style="padding:40px 40px 36px;min-width:0">
         <div style="font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase;margin-bottom:16px">Bengaluru — Mysuru corridor</div>
-        <h1 style="margin:0 0 12px;font:600 clamp(32px,4vw,54px)/1.06 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Berths that are already empty</h1>
-        <p style="margin:0;font-size:15.5px;line-height:1.65;color:var(--k-fg-5a5f6a);max-width:34em">A berth booked only as far as Bengaluru sits empty for the rest of the run. Pick your two stations and we count those.</p>
+        <h1 class="k-hero-title" style="margin:0 0 12px;font:600 clamp(32px,4vw,54px)/1.06 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Berths that are already empty</h1>
+        <p class="k-hero-copy" style="margin:0;font-size:15.5px;line-height:1.65;color:var(--k-fg-5a5f6a);max-width:34em">A berth booked only as far as Bengaluru sits empty for the rest of the run. Pick your two stations and we count those.</p>
         <div class="k-heroform" style="margin-top:28px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
           <div class="k-stnwrap" style="position:relative">
             <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">From</div>
@@ -415,6 +457,12 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </div>
           </div>
           <button class="k-searchbtn" onClick="{{ goResults }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15px/1 Archivo,Manrope,sans-serif;padding:0 28px;border-radius:7px;cursor:pointer;min-height:48px">Search trains</button>
+        </div>
+        <div class="k-herohelper">Availability for your exact stretch · held for 5 minutes while you pay</div>
+        <div class="k-heroproof" aria-label="How khaali works">
+          <div><b>Choose</b><span>Your two stations</span></div>
+          <div><b>See</b><span>Berths free en route</span></div>
+          <div><b>Pay</b><span>Only for your stretch</span></div>
         </div>
       </div>
       <div class="k-heroright" style="position:relative;background:var(--k-101319);border-left:1px solid var(--k-e6e5e0);min-height:360px">
