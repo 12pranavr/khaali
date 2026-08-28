@@ -137,6 +137,11 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   .k-authwrap>button{padding:10px 10px!important;font:700 12px/1 Manrope,sans-serif!important}
   .k-namaste{display:none}
   .k-sortwrap{margin-left:0!important}
+  /* a flow that stacks downward must not keep pointing sideways */
+  .k-arrow{transform:rotate(90deg);margin:-3px 0!important;align-self:flex-start!important}
+  /* readable on glass held at arm's length, not just on a monitor */
+  .k-flowsub{font-size:11.5px!important;line-height:1.65!important}
+  .k-mono{font-size:11px!important;line-height:1.75!important;word-break:break-word}
 }
 @media (max-width:1040px){
   .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
@@ -1491,12 +1496,12 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <button onClick="{{ tkReset }}" style="border:1px solid rgba(255,255,255,.25);background:transparent;color:#c8ccd4;font:700 11.5px/1 Manrope,sans-serif;padding:11px 13px;border-radius:7px;cursor:pointer;min-height:40px">Reset</button>
       </div>
       <sc-for list="{{ tkFeed }}" as="f" hint-placeholder-count="10">
-        <div style="font:500 10.5px/1.7 'IBM Plex Mono',monospace;color:#aab3c0;border-bottom:1px dashed rgba(255,255,255,.07)">{{ f }}</div>
+        <div class="k-mono" style="font:500 10.5px/1.7 'IBM Plex Mono',monospace;color:#aab3c0;border-bottom:1px dashed rgba(255,255,255,.07)">{{ f }}</div>
       </sc-for>
       <div style="{{ tkAuditWrap }}">
         <div style="font:700 10px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#7fe3ae;text-transform:uppercase;margin:12px 0 7px">Audit log &#183; deterministic</div>
         <sc-for list="{{ tkAudit }}" as="a" hint-placeholder-count="5">
-          <div style="font:500 10.5px/1.8 'IBM Plex Mono',monospace;color:#dfe3ea">{{ a }}</div>
+          <div class="k-mono" style="font:500 10.5px/1.8 'IBM Plex Mono',monospace;color:#dfe3ea">{{ a }}</div>
         </sc-for>
         <div style="{{ tkSayWrap }}">
           <div style="font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#e0a419;text-transform:uppercase;margin-bottom:6px">In plain words</div>
@@ -1511,32 +1516,32 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch">
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-e0a419)">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif">10:00 &#183; the window opens</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">15 minutes. Requests only collect &#8212; nothing is processed on arrival, so there is no race to win.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">15 minutes. Requests only collect &#8212; nothing is processed on arrival, so there is no race to win.</div>
       </div>
-      <div style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
+      <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-d8385a)">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif">You book &amp; pay the fare</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">UPI &#183; scan the QR on your phone &#183; card &#183; netbanking &#183; wallet PIN. The &#8377;175 is <b>held</b>, not spent &#8212; it is what makes your entry real.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">UPI &#183; scan the QR on your phone &#183; card &#183; netbanking &#183; wallet PIN. The &#8377;175 is <b>held</b>, not spent &#8212; it is what makes your entry real.</div>
       </div>
-      <div style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
+      <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-e0a419)">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif">10:15 &#183; the window closes</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">A booking at second 1 and a booking at minute 14 sit in the bowl as perfect equals.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">A booking at second 1 and a booking at minute 14 sit in the bowl as perfect equals.</div>
       </div>
-      <div style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
+      <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-1f9d55)">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif">Allotment runs once</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Seeded and published &#8212; anyone can replay the draw and get the same 40 names. No discretion, no hidden priority.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Seeded and published &#8212; anyone can replay the draw and get the same 40 names. No discretion, no hidden priority.</div>
       </div>
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch;margin-top:10px">
       <div style="flex:1;min-width:230px;background:rgba(31,157,85,.08);border:1px solid var(--k-1f9d55);border-radius:10px;padding:13px 15px">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif;color:var(--k-fg-14663a)">&#10003; Allotted</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Your berth is named &#8212; S4/60, Lower &#8212; and the fare you already paid becomes the ticket. One tap prints the PNR. The bell rings to tell you.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Your berth is named &#8212; S4/60, Lower &#8212; and the fare you already paid becomes the ticket. One tap prints the PNR. The bell rings to tell you.</div>
       </div>
       <div style="flex:1;min-width:230px;background:rgba(224,164,25,.08);border:1px solid var(--k-e0a419);border-radius:10px;padding:13px 15px">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif;color:var(--k-fg-c2870a)">&#10007; Not allotted</div>
-        <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">The &#8377;175 bounces back <b>instantly</b> to whatever paid it &#8212; the bell rings with the receipt. Then the khaali part: the card shows the berths that need no window at all &#8212; book normally, or take the guaranteed seat-hop.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">The &#8377;175 bounces back <b>instantly</b> to whatever paid it &#8212; the bell rings with the receipt. Then the khaali part: the card shows the berths that need no window at all &#8212; book normally, or take the guaranteed seat-hop.</div>
       </div>
     </div>
     <div style="margin-top:14px;padding-top:13px;border-top:1px dashed var(--k-e6e5e0)">
@@ -1544,17 +1549,17 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch">
         <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px">
           <div style="font:700 12.5px/1.35 Manrope,sans-serif">3 farms fire ~500 requests</div>
-          <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">In 40 milliseconds. Under the starting gun this won everything. Here, speed buys nothing.</div>
+          <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">In 40 milliseconds. Under the starting gun this won everything. Here, speed buys nothing.</div>
         </div>
-        <div style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
+        <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
         <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px">
           <div style="font:700 12.5px/1.35 Manrope,sans-serif">Identity filter</div>
-          <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">500 requests trace back to 3 verified persons. Verification happened weeks ago, calmly &#8212; no OTP panic at 9:59.</div>
+          <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">500 requests trace back to 3 verified persons. Verification happened weeks ago, calmly &#8212; no OTP panic at 9:59.</div>
         </div>
-        <div style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
+        <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
         <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px">
           <div style="font:700 12.5px/1.35 Manrope,sans-serif">Cap &amp; fare</div>
-          <div style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">4 entries per person per month, each with money locked &#8212; 12 paid entries stand among ~150. The farm floats &#8377;2,100 a round to win a handful of berths. The business dies of arithmetic, not policing.</div>
+          <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">4 entries per person per month, each with money locked &#8212; 12 paid entries stand among ~150. The farm floats &#8377;2,100 a round to win a handful of berths. The business dies of arithmetic, not policing.</div>
         </div>
       </div>
     </div>
