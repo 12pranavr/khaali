@@ -17,6 +17,7 @@ import {
   cancelledOn, oddsOf, oddsOf2, trainByNo,
 } from './engine.mjs';
 import * as store from './store.mjs';
+import * as sentinel from './sentinel.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -542,9 +543,29 @@ async function api(req, res, url) {
         { id: 'C', tries: 60 + Math.floor(r() * 60) }];
       const humans = 120 + Math.floor(r() * 30);
       const arrivals = [];
-      agents.forEach(a => arrivals.push({ kind: 'agent', id: a.id, tries: a.tries, atMs: 3 + Math.floor(r() * 40) }));
-      for (let h = 0; h < humans; h++) arrivals.push({ kind: 'human', id: 'h' + h, atMs: 500 + Math.floor(r() * 40000) });
-      return { agents, humans, arrivals };
+      agents.forEach(a => {
+        a.atMs = 3 + Math.floor(r() * 40);
+        a.accounts = 22 + Math.floor(r() * 30);
+        // a script keeps time: gaps clustered tightly around one interval
+        const base = 12 + Math.floor(r() * 9);
+        a.gaps = [];
+        for (let g = 0; g < 6; g++) a.gaps.push(base + Math.floor(r() * 3));
+        a.signals = { atMs: a.atMs, tries: a.tries, accounts: a.accounts,
+          payReuse: true, actions: 0, gaps: a.gaps };
+        arrivals.push({ kind: 'agent', id: a.id, tries: a.tries, atMs: a.atMs });
+      });
+      const hpeople = [];
+      for (let h = 0; h < humans; h++) {
+        const atMs = 500 + Math.floor(r() * 40000);
+        // a person browses first and their taps are anything but regular
+        const gaps = [900 + Math.floor(r() * 5200), 1400 + Math.floor(r() * 9000),
+          700 + Math.floor(r() * 3100), 2600 + Math.floor(r() * 11000)];
+        hpeople.push({ id: 'h' + h,
+          signals: { atMs, tries: 1, accounts: 1, payReuse: false,
+            actions: 3 + Math.floor(r() * 9), gaps } });
+        arrivals.push({ kind: 'human', id: 'h' + h, atMs });
+      }
+      return { agents, humans, hpeople, arrivals };
     };
 
     if (p === '/api/tatkal/open' && req.method === 'POST') {
@@ -562,7 +583,9 @@ async function api(req, res, url) {
       const used = G.month.get(who) || 0;
       if (used >= 4) return send(res, 409, { error: 'four Tatkal chits per month \u2014 all used' });
       if (b.paid !== true) return send(res, 402, { error: 'the fare must be locked to enter' });
-      R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now() });
+      R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now(),
+        signals: { atMs: Math.max(0, Date.now() - R.openedAt), tries: 1, accounts: 1,
+          payReuse: false, actions: 4, gaps: [] } });
       return send(res, 200, { ok: true, chit: R.sim.humans + R.real.length });
     }
     if (p === '/api/tatkal/paysession' && req.method === 'POST') {
@@ -578,8 +601,22 @@ async function api(req, res, url) {
       if (!G.pays) G.pays = new Map();
       let sid = '';
       for (let i = 0; i < 18; i++) sid += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+      // the same six signals the farms are judged on, measured on a real
+      // person: when they arrived, how much they did first, how regular their
+      // taps were. Nothing here is asked for; it is all already happening.
+      if (!R.hits) R.hits = new Map();
+      R.hits.set(who, (R.hits.get(who) || 0) + 1);
+      const cs = (b && typeof b.sig === 'object' && b.sig) || {};
+      const sig = {
+        atMs: Math.max(0, Date.now() - R.openedAt),
+        tries: R.hits.get(who),
+        accounts: 1,
+        payReuse: false,
+        actions: Math.max(0, Math.min(99, +cs.actions || 0)),
+        gaps: Array.isArray(cs.gaps) ? cs.gaps.slice(0, 12).map(Number).filter(g => g > 0) : [],
+      };
       G.pays.set(sid, { id: sid, who, name: String(b.name || 'Traveller').slice(0, 60),
-        round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending' });
+        round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending', sig });
       return send(res, 200, { ok: true, payId: sid, amount: 175, msLeft: 300000 });
     }
 
@@ -587,8 +624,28 @@ async function api(req, res, url) {
       const R = G.round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'no open window' });
       R.state = 'done'; R.closedAt = Date.now();
+      // Sentinel runs on EVERY entrant, farms and people alike. A scorer that
+      // only ever sees the entries you already suspect is a label, not a model.
+      const scored = sentinel.scoreRound([
+        ...R.sim.agents.map(a => ({ id: a.id, kind: 'bot', signals: a.signals })),
+        ...(R.sim.hpeople || []).map(h => ({ id: h.id, kind: 'human', signals: h.signals })),
+        ...R.real.map(e => ({ id: e.who, kind: 'real', name: e.name, signals: e.signals || {} })),
+      ]);
+      const byId = new Map(scored.map(x => [x.id, x]));
+      R.scored = scored;
+
+      // The identity check and the monthly cap already stand. Sentinel can only
+      // take chits AWAY from an entry that behaves like a farm; it can never
+      // hand one more, and it can never take a real person below one. Worst
+      // case for a human who trips every signal is being counted as one person
+      // entering once, which is what they are.
+      const chitsFor = id => {
+        const sc = byId.get(id);
+        return Math.max(1, Math.min(4, sc ? sc.chits : 4));
+      };
       const bowl = [];
-      R.sim.agents.forEach(a => { for (let c = 0; c < 4; c++) bowl.push({ kind: 'bot', id: a.id }); });
+      R.sim.agents.forEach(a => { const n = chitsFor(a.id);
+        for (let c = 0; c < n; c++) bowl.push({ kind: 'bot', id: a.id }); });
       for (let h = 0; h < R.sim.humans; h++) bowl.push({ kind: 'human', id: 'h' + h });
       R.real.forEach((e, i) => bowl.push({ kind: 'real', id: e.who, name: e.name, ix: i }));
       const r = mulb(R.seed ^ 0x9e3779b9);
@@ -606,8 +663,17 @@ async function api(req, res, url) {
       // only a WIN consumes a monthly chit - losing must cost a human
       // nothing, while the per-round identity limit still starves bot farms
       realWinners.forEach(w => G.month.set(w.id, (G.month.get(w.id) || 0) + 1));
+      const botChits = R.sim.agents.reduce((a2, a) => a2 + chitsFor(a.id), 0);
       R.result = {
         chits: bowl.length,
+        sentinel: {
+          model: sentinel.MODEL.version,
+          capChits: R.sim.agents.length * 4,
+          botChits,
+          stripped: R.sim.agents.length * 4 - botChits,
+          flagged: scored.filter(x => x.band !== 'clear').length,
+          cleared: scored.filter(x => x.band === 'clear').length,
+        },
         counts: { free: av.counts.free, part: av.counts.part },
         winners: { bots: winners.filter(w => w.kind === 'bot').length,
           humans: winners.filter(w => w.kind === 'human').length,
@@ -630,7 +696,12 @@ async function api(req, res, url) {
       const text = await narrate('tk|' + R.id + '|' + R.seed,
         NARR_RULES + ' You are explaining the morning\u2019s Tatkal allotment to the traveller who just watched it run.',
         'Facts: ' + tries + ' automated booking attempts came from just 3 agent operations; the identity check and a '
-        + 'limit of 4 paid entries per person per month reduced them to 12 standing entries. '
+        + 'limit of 4 paid entries per person per month reduced them to '
+        + (R.result.sentinel ? R.result.sentinel.capChits : 12) + ' standing entries. '
+        + (R.result.sentinel ? ('A behavioural scorer called Sentinel then read six published signals on every entrant '
+          + '(arrival time, request volume, accounts per origin, payment reuse, how much they did in the app, and timing regularity) '
+          + 'and weighted the farm entries down from ' + R.result.sentinel.capChits + ' to ' + R.result.sentinel.botChits
+          + ', stripping ' + R.result.sentinel.stripped + '. No entrant was reduced below one entry. ') : '')
         + R.sim.humans + ' ordinary travellers entered. ' + R.result.chits + ' equal entries competed for 40 berths. '
         + 'Result: ' + people + ' berths went to real travellers and ' + bots + ' to bot entries. '
         + 'Entries that were not allotted were refunded instantly and in full. '
@@ -668,6 +739,30 @@ async function api(req, res, url) {
           feed: feed.slice(-14),
           agents: R.sim.agents.map(a => ({ id: a.id, tries: a.tries, chits: 4 })),
           totalTries, humans: R.sim.humans, realChits: R.real.length,
+          sentinel: (() => {
+            const rows = R.scored || [];
+            const find = id => rows.find(x => x.id === id) || null;
+            const mine = find(who);
+            return {
+              model: sentinel.MODEL.version,
+              ran: rows.length > 0,
+              bands: sentinel.MODEL.bands,
+              weights: sentinel.MODEL.weights,
+              bias: sentinel.MODEL.bias,
+              // one row per farm, with the arithmetic that produced the verdict
+              farms: R.sim.agents.map(a => {
+                const sc = find(a.id);
+                return { id: a.id, tries: a.tries, accounts: a.accounts,
+                  p: sc ? sc.p : null, band: sc ? sc.band : null,
+                  chits: sc ? Math.max(1, Math.min(4, sc.chits)) : 4,
+                  parts: sc ? sc.parts : [], why: sc ? sc.why : [] };
+              }),
+              // and the traveller's own, because a scorer you cannot see
+              // pointed at yourself is not transparency
+              me: mine ? { p: mine.p, band: mine.band, why: mine.why, parts: mine.parts } : null,
+              summary: R.result ? R.result.sentinel : null,
+            };
+          })(),
           bowl: R.result ? R.result.chits : (R.sim.humans + 12 + R.real.length),
           seed: R.seed,
           result: R.result ? { bots: R.result.winners.bots,
@@ -677,9 +772,15 @@ async function api(req, res, url) {
             'window open ' + Math.round((R.closedAt - R.openedAt) / 1000) + 's \u00b7 ' + totalTries + ' bot requests + ' + R.sim.humans + ' simulated travellers + ' + R.real.length + ' real ' + (R.real.length === 1 ? 'person' : 'people') + ' on this site',
             'identity filter: ' + totalTries + ' bot requests trace back to just 3 verified persons',
             'monthly cap: 3 agents \u00d7 4 chits = 12 chits stand',
+            'sentinel ' + R.result.sentinel.model + ': scored all ' + R.scored.length
+              + ' entrants on 6 published signals · ' + R.result.sentinel.flagged
+              + ' flagged, ' + R.result.sentinel.cleared + ' cleared',
+            'behavioural weighting: ' + R.result.sentinel.capChits + ' farm chits → '
+              + R.result.sentinel.botChits + ' · ' + R.result.sentinel.stripped
+              + ' stripped · no entrant reduced below one',
             'entry rule: fare locked to enter \u00b7 the farms floated \u20b9' + (12 * 175) + ' across their 12 entries \u00b7 not allotted = refunded instantly',
             'allotment: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths among ' + R.result.chits + ' equal entries \u00b7 replayable by anyone',
-            'result: ' + R.result.winners.bots + ' bot berths \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
+            'result: ' + R.result.winners.bots + ' bot berth' + (R.result.winners.bots === 1 ? '' : 's') + ' \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
           ] : ['window is open \u2014 bookings are collecting', 'nothing is decided until allotment runs'],
         },
       });
@@ -774,7 +875,7 @@ async function api(req, res, url) {
       if (!R || R.state !== 'open' || R.id !== tq.round)
         return send(res, 409, { error: 'the window closed before payment \u2014 nothing was charged' });
       tq.status = 'paid';
-      if (!R.real.some(e => e.who === tq.who)) R.real.push({ who: tq.who, name: tq.name, at: Date.now() });
+      if (!R.real.some(e => e.who === tq.who)) R.real.push({ who: tq.who, name: tq.name, at: Date.now(), signals: tq.sig || {} });
       return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
     }
     const h = store.getHold(mPay[1]);

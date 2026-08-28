@@ -3,6 +3,7 @@ import assert from 'assert';
 import * as S from './store.mjs';
 import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin } from './engine.mjs';
 import { TRAINS, ST } from './data.mjs';
+import * as sentinel from './sentinel.mjs';
 import fs from 'fs';
 
 const D = '2026-08-21';
@@ -249,6 +250,69 @@ t('expired holds release automatically', () => {
   assert.strictEqual(S.getHold(held.hold.id).status, 'expired');
   assert.strictEqual(S.availability('16022', D, 'SL', 13, 11).berths.find(b => b.idx === pick2[0]).k, 'free');
 });
+
+
+console.log('\nsentinel: behavioural scoring');
+const BOTSIG = { atMs: 12, tries: 190, accounts: 34, payReuse: true, actions: 0,
+  gaps: [14, 15, 14, 16, 14, 15] };
+const HUMANSIG = { atMs: 18400, tries: 1, accounts: 1, payReuse: false, actions: 7,
+  gaps: [2300, 8100, 1400, 9600] };
+
+t('a farm scores high and a person scores low', () => {
+  const b = sentinel.score(BOTSIG), h = sentinel.score(HUMANSIG);
+  assert.ok(b.p > 0.85, 'farm scored ' + b.p);
+  assert.ok(h.p < 0.15, 'person scored ' + h.p);
+});
+
+t('the score is reproducible by hand from the published weights', () => {
+  const r = sentinel.score(BOTSIG);
+  const z = r.parts.reduce((a, p) => a + p.add, sentinel.MODEL.bias);
+  const p = 1 / (1 + Math.exp(-z));
+  assert.ok(Math.abs(p - r.p) < 0.002, 'recomputed ' + p + ' vs reported ' + r.p);
+});
+
+t('no entrant is ever reduced below one entry', () => {
+  const worst = sentinel.score({ atMs: 0, tries: 99999, accounts: 500,
+    payReuse: true, actions: 0, gaps: [10, 10, 10, 10] });
+  assert.ok(worst.chits >= 1, 'chits ' + worst.chits);
+  assert.ok(worst.chits < sentinel.MODEL.chits.clear, 'a farm kept full weight');
+});
+
+t('a clear entry keeps its full weight', () => {
+  assert.strictEqual(sentinel.score(HUMANSIG).chits, sentinel.MODEL.chits.clear);
+});
+
+t('too few gaps leaves cadence neutral rather than guessing', () => {
+  const f = sentinel.features({ atMs: 9000, tries: 1, gaps: [500, 500] });
+  assert.strictEqual(f.cadence, 0);
+});
+
+t('every feature stays inside 0..1', () => {
+  for (const sig of [BOTSIG, HUMANSIG, {}, { atMs: -5, tries: 0, accounts: 0 }]) {
+    const f = sentinel.features(sig);
+    for (const k of Object.keys(f)) {
+      assert.ok(f[k] >= 0 && f[k] <= 1, k + ' = ' + f[k]);
+    }
+  }
+});
+
+t('a slow, browsing, single-request entry cannot be flagged', () => {
+  const r = sentinel.score({ atMs: 30000, tries: 1, accounts: 1,
+    payReuse: false, actions: 10, gaps: [3000, 9000, 1200, 7000] });
+  assert.strictEqual(r.band, 'clear');
+});
+
+t('people and farms go through the same function', () => {
+  const rows = sentinel.scoreRound([
+    { id: 'A', kind: 'bot', signals: BOTSIG },
+    { id: 'me', kind: 'real', name: 'Pranav', signals: HUMANSIG },
+  ]);
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].band, 'challenge');
+  assert.strictEqual(rows[1].band, 'clear');
+  assert.ok(rows[1].why[0].indexOf('nothing') >= 0, rows[1].why[0]);
+});
+
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
