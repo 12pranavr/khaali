@@ -1,86 +1,103 @@
 # khaali - 2 minute demo script
 
-Presenter-led. Around 305 words, which fits two minutes at a normal pace.
+Presenter-led. Around 315 words, which fits two minutes at a normal pace.
 Screen directions in italics.
 
 ## What leads, and what follows
 
-The order is deliberate. A judge watching fifty videos decides what this is in
-the first ten seconds, so the thing nobody else can say goes first.
+A judge watching fifty videos decides what this is in the first ten seconds,
+so the thing nobody else can say goes first.
 
 **Tier 1, the thing khaali owns.** Interval berths and seat hop. It is the
 name, it is the architecture, and it is the only part a competitor cannot ship
-next week by adding a feature. 44 seconds.
+next week by adding a feature. Roughly 46 seconds.
 
 **Tier 2, the thing that proves the engineering.** Fair Tatkal and Sentinel.
-42 seconds.
+Roughly 40 seconds.
 
 **Tier 3, normal.** Saarthi and the money tracker. Both good, neither
 category-defining. Keep them short and do not argue for them. 26 seconds.
 
-**Not in the video at all.** Waitlist odds, the wallet, favourites, the live
-map. Good work, wrong format. They need more than ten seconds to land.
+**Not in the video at all.** Waitlist odds, the wallet page, favourites, the
+live map. Good work, wrong format. They need more than ten seconds to land.
 
-The problem is split rather than stacked: the empty berth at the top, the
-Tatkal race at 0:44. Three problems in a row before anything is shown is where
-attention goes.
+The problems are split rather than stacked. The empty berth opens, the Tatkal
+race arrives at 0:46, and the cancellation and refund problems appear where
+they are solved rather than in the opening. Three or four problems in a row
+before anything is shown is where attention goes.
 
-## 0:00 - 0:14 - on camera
+## 0:00 - 0:18 - on camera
 
-> A berth empties at Bengaluru and rides another hundred and thirty-eight
-> kilometres to Mysuru with nobody in it. Somebody at Maddur is on the waitlist
-> for that same train.
+> Right now, a berth is riding from Bengaluru to Mysuru with nobody in it. A
+> hundred and thirty-eight kilometres. Paid for. Empty.
 >
-> I'm Pranav. Khaali is the word for empty. That's the whole product.
-
-## 0:14 - 0:44 - the seat map (tier 1)
-
-> You start by picking the stretch you're actually travelling. Not where the
-> train ends. Where you get off.
+> And someone at Maddur is waitlisted for that same train.
 >
-> khaali checks every berth station by station. Green is yours the whole way.
-> Amber empties partway, and you pay only for the part you ride. When nothing
-> covers you end to end, it stitches two half-empty berths into one ticket and
-> tells you which station to move at.
+> I'm Pranav. Khaali means empty. That's the whole product.
+
+Say "right now", not "imagine". Imagine tells them it is hypothetical and they
+relax. Right now says it is happening while you speak, and it is true: that
+berth is on tonight's Kaveri Express.
+
+## 0:18 - 0:46 - the seat map (tier 1)
+
+> You pick the stretch you're actually travelling. Not where the train ends.
+> Where you get off.
 >
-> On this train tonight, 215 berths cover part of your trip. Nobody is allowed
-> to sell you one.
+> khaali reads every berth, station by station. Green is free your whole way.
+> Amber empties partway, and you pay only for the part you ride. It shows you
+> exactly where yours starts and where it ends.
+>
+> When no single berth covers you, it stitches two half-empty ones into a
+> single ticket and tells you which station to move at.
+>
+> On this train tonight, 215 berths like that. Not one of them is for sale
+> anywhere else.
 
 *Pick the stations, search, scroll the coach, hover an amber berth so its
 handover station shows.*
 
-## 0:44 - 1:00 - the second problem
+## 0:46 - 1:02 - the second problem
 
-> The other half. Ten in the morning. App open, details saved, thumb over the
+> Then there's ten in the morning. App open, details saved, thumb on the
 > button. You lose anyway.
 >
 > Eighty percent of the traffic you're racing isn't human. That's IRCTC's own
 > number.
 
-## 1:00 - 1:26 - Fair Tatkal (tier 2)
+## 1:02 - 1:26 - Fair Tatkal (tier 2)
 
-> khaali makes it a window, so clicking first buys you nothing. Then we score
-> how each entry arrived.
+> khaali makes Tatkal a window, so clicking first buys you nothing. Then it
+> scores how every entry arrived. The timing, the request pattern, how many
+> accounts sit behind one card.
 >
 > These three bot farms: nought point nine five. Me: nought point nought four.
 >
-> The weights are printed right there, so you can redo the arithmetic yourself.
-> It never blocks a person. The worst it does is count you as one person
-> entering once. What it takes away is buying in bulk.
+> The weights are printed on screen. You can redo the maths yourself. And it
+> never blocks a person. The worst it does is count you as one person,
+> entering once.
 
 *Open the window, close it, let the Sentinel panel land. Your own row sits above
 the three farms.*
 
-## 1:26 - 1:38 - Saarthi (tier 3)
+## 1:26 - 1:40 - Saarthi (tier 3)
 
-> Saarthi. I asked that in Kannada. It answered in Kannada and found the train.
+> This is Saarthi. Jarvis for your ticket.
+>
+> *[ask in three languages]*
+>
+> Is my train cancelled. How long is the wait. Where's my PNR. It answers in
+> whatever language you asked in.
 
-*Say it on camera first, then let the answer play.*
+*The cancellation and delay questions are real actions in the code, so ask one
+of them live rather than describing it.*
 
-## 1:38 - 1:52 - money (tier 3)
+## 1:40 - 1:52 - money (tier 3)
 
-> And your money is never nowhere. Bank, gateway, us, railway. It names who is
-> holding it right now. No berth, no argument: the refund is in your wallet
+> And your money is never nowhere. Bank, gateway, us, railway. It names who's
+> holding it, right now.
+>
+> No berth, train cancelled, or three hours late: the refund is in your wallet
 > before you close the tab.
 
 *The four-stage tracker, then the refund landing in the wallet.*
@@ -92,8 +109,27 @@ the three farms.*
 
 *End card with the demo login.*
 
-The open and the close are one loop: empty berth at the top, "sells the ones
-already going empty" at the bottom. Land it and stop. No thank-you after it.
+The open and the close are one loop: a berth going empty at the top, selling
+the ones already going empty at the bottom. Land it and stop. No thank-you
+after it.
+
+## Three lines that must not be said
+
+These came up in drafting and each one is wrong.
+
+**"We use OpenAI to filter out bot bookings."** OpenAI has never seen a bot
+entry in khaali. It writes sentences. The filtering is Sentinel, a scoring
+model with six signals and printed weights. The true version is also the
+stronger one: IRCTC already announced an AI anti-bot system, so "we use AI to
+catch bots" is the crowded claim, and "here are my weights, redo the maths" is
+the one nobody else is making.
+
+**"More than four hours late."** It is three hours everywhere in the product.
+Saying four on camera while the screen shows three is the kind of mismatch a
+judge catches.
+
+**"Lakhs of rupees going missing."** There is no source for that figure. Keep
+the experience, drop the number: money leaves, no ticket appears.
 
 ## Spare line
 
