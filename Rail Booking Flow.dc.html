@@ -603,7 +603,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <span>{{ f.value }}</span>
           <span style="font-size:9px;opacity:.6;line-height:1">&#9660;</span>
         </div>
-        <div style="{{ f.panel }}">
+        <div class="k-dropdown" style="{{ f.panel }}">
           <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
             <div onClick="{{ o.onClick }}" style="{{ o.style }}"><span>{{ o.label }}</span><span style="{{ o.tickStyle }}">&#10003;</span></div>
           </sc-for>
@@ -618,7 +618,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <span>{{ resSortLabel }}</span>
           <span style="font-size:9px;opacity:.6;line-height:1">&#9660;</span>
         </div>
-        <div style="{{ resSortPanel }}">
+        <div class="k-dropdown" style="{{ resSortPanel }}">
           <sc-for list="{{ resSortOpts }}" as="o" hint-placeholder-count="4">
             <div onClick="{{ o.onClick }}" style="{{ o.style }}"><span>{{ o.label }}</span><span style="{{ o.tickStyle }}">&#10003;</span></div>
           </sc-for>
@@ -829,7 +829,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
           <div style="{{ f.wrap }}">
             <div class="k-fchip" onClick="{{ f.onToggle }}" style="{{ f.style }}">{{ f.label }} ▾</div>
-            <div style="{{ f.panel }}">
+            <div class="k-dropdown" style="{{ f.panel }}">
               <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
                 <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</div>
               </sc-for>
