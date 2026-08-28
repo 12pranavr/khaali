@@ -1,36 +1,43 @@
 # khaali - 2 minute demo script
 
-Presenter-led. Around 325 words, which fits two minutes at a normal pace.
+Presenter-led. Around 305 words, which fits two minutes at a normal pace.
 Screen directions in italics.
 
-Every line was checked against Harry Dry's three rules: can I visualise it, can
-I falsify it, can nobody else say it. The audit is at the bottom.
+## What leads, and what follows
 
-## 0:00 - 0:22 - on camera
+The order is deliberate. A judge watching fifty videos decides what this is in
+the first ten seconds, so the thing nobody else can say goes first.
 
-> Ten in the morning. App open, details saved, thumb over the button. You lose
-> anyway.
->
-> Eighty percent of the traffic you're racing isn't human. That's IRCTC's own
-> number.
->
-> Or the money leaves your account, no ticket appears, and now you own a
-> screenshot and a customer care number.
->
-> Meanwhile a berth that emptied at Bengaluru rides another hundred and
-> thirty-eight kilometres to Mysuru with nobody in it.
->
-> I'm Pranav. I built khaali for those three.
+**Tier 1, the thing khaali owns.** Interval berths and seat hop. It is the
+name, it is the architecture, and it is the only part a competitor cannot ship
+next week by adding a feature. 44 seconds.
 
-## 0:22 - 0:30 - homepage
+**Tier 2, the thing that proves the engineering.** Fair Tatkal and Sentinel.
+42 seconds.
+
+**Tier 3, normal.** Saarthi and the money tracker. Both good, neither
+category-defining. Keep them short and do not argue for them. 26 seconds.
+
+**Not in the video at all.** Waitlist odds, the wallet, favourites, the live
+map. Good work, wrong format. They need more than ten seconds to land.
+
+The problem is split rather than stacked: the empty berth at the top, the
+Tatkal race at 0:44. Three problems in a row before anything is shown is where
+attention goes.
+
+## 0:00 - 0:14 - on camera
+
+> A berth empties at Bengaluru and rides another hundred and thirty-eight
+> kilometres to Mysuru with nobody in it. Somebody at Maddur is on the waitlist
+> for that same train.
+>
+> I'm Pranav. Khaali is the word for empty. That's the whole product.
+
+## 0:14 - 0:44 - the seat map (tier 1)
 
 > You start by picking the stretch you're actually travelling. Not where the
 > train ends. Where you get off.
-
-*Pick the two stations and search.*
-
-## 0:30 - 0:56 - berths
-
+>
 > khaali checks every berth station by station. Green is yours the whole way.
 > Amber empties partway, and you pay only for the part you ride. When nothing
 > covers you end to end, it stitches two half-empty berths into one ticket and
@@ -39,44 +46,62 @@ I falsify it, can nobody else say it. The audit is at the bottom.
 > On this train tonight, 215 berths cover part of your trip. Nobody is allowed
 > to sell you one.
 
-*Scroll the coach. Hover an amber berth so its handover station shows.*
+*Pick the stations, search, scroll the coach, hover an amber berth so its
+handover station shows.*
 
-## 0:56 - 1:22 - Fair Tatkal
+## 0:44 - 1:00 - the second problem
 
-> Tatkal today is a speed race. khaali makes it a window, so clicking first
-> buys you nothing.
+> The other half. Ten in the morning. App open, details saved, thumb over the
+> button. You lose anyway.
 >
-> Then we score how each entry arrived. These three bot farms: nought point
-> nine five. Me: nought point nought four.
+> Eighty percent of the traffic you're racing isn't human. That's IRCTC's own
+> number.
+
+## 1:00 - 1:26 - Fair Tatkal (tier 2)
+
+> khaali makes it a window, so clicking first buys you nothing. Then we score
+> how each entry arrived.
 >
-> The weights are printed on the screen, so you can redo the arithmetic
-> yourself. It never blocks a person. The worst it does is count you as one
-> person entering once. What it takes away is buying in bulk.
+> These three bot farms: nought point nine five. Me: nought point nought four.
+>
+> The weights are printed right there, so you can redo the arithmetic yourself.
+> It never blocks a person. The worst it does is count you as one person
+> entering once. What it takes away is buying in bulk.
 
 *Open the window, close it, let the Sentinel panel land. Your own row sits above
 the three farms.*
 
-## 1:22 - 1:38 - Saarthi
+## 1:26 - 1:38 - Saarthi (tier 3)
 
-> Saarthi. I asked that in Kannada. It answered in Kannada, found the train, and
-> read the waitlist back to me.
+> Saarthi. I asked that in Kannada. It answered in Kannada and found the train.
 
-*Say it in Kannada or Hindi on camera first, then let the answer play.*
+*Say it on camera first, then let the answer play.*
 
-## 1:38 - 1:54 - money
+## 1:38 - 1:52 - money (tier 3)
 
-> And your money is never nowhere. Your bank, the gateway, us, the railway. It
-> names who is holding it, right now. No berth, no argument: the refund is in
-> your wallet before you close the tab.
+> And your money is never nowhere. Bank, gateway, us, railway. It names who is
+> holding it right now. No berth, no argument: the refund is in your wallet
+> before you close the tab.
 
 *The four-stage tracker, then the refund landing in the wallet.*
 
-## 1:54 - 2:00 - close
+## 1:52 - 2:00 - close
 
 > khaali doesn't add one train, one coach, or one berth. It just sells the ones
 > already going empty.
 
 *End card with the demo login.*
+
+The open and the close are one loop: empty berth at the top, "sells the ones
+already going empty" at the bottom. Land it and stop. No thank-you after it.
+
+## Spare line
+
+Cut for time, kept because it is strong. Trade it for the Saarthi beat if you
+would rather lead harder on the money problem:
+
+> Or the money leaves your account, no ticket appears, and now you own a
+> screenshot and a customer care number.
 
 ## Before you record
 
@@ -92,8 +117,9 @@ The deployed site sleeps when idle. Open it once so the instance is warm.
 If you use the scan-to-pay QR, record it in one unbroken take with both phones
 in frame. That is the beat people assume is faked.
 
-If you run long, the Saarthi beat at 1:24 is the one to shorten. The voice
-input is visible on screen without narration.
+If you run long, cut from the top of tier 3 down. Saarthi at 1:26 is twelve
+seconds and the voice is audible without narration, so it survives on screen
+with no script at all.
 
 ## Numbers, and what is behind them
 
