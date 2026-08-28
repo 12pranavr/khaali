@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
+<style>/* a phone reached this page BY scanning - it has no one to re-share to */
+@media (max-width:700px){#qrCol{display:none}}</style>
 </head>
 <body>
 
@@ -30,7 +32,7 @@
     <div id="detail" style="margin:16px 0"></div>
 
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
-      <div>
+      <div id="qrCol">
         <div class="qr" id="qr"></div>
         <div class="muted" style="margin-top:8px;max-width:220px">
           Scan with another phone to open this same payment on that device.

@@ -2060,7 +2060,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,payMethod:'upi',payCard:'',payBank:'',payFlight:-1,payStuck:false,tkDeadline:0,tkTick:0,tkStep:'details',tkMethod:'upi',tkPin:'',tkUpi:'',tkCard:'',tkBank:'',tkPayBusy:false,tkPayErr:null,tkFlight:-1,tkFail:false,tkStuck:false,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,payMethod:'upi',payCard:'',payBank:'',payFlight:-1,payStuck:false,notices:[],tkDeadline:0,tkTick:0,tkStep:'details',tkMethod:'upi',tkPin:'',tkUpi:'',tkCard:'',tkBank:'',tkPayBusy:false,tkPayErr:null,tkFlight:-1,tkFail:false,tkStuck:false,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -2309,6 +2309,15 @@ class Component extends DCLogic {
           if((L.method==='wallet'||!L.method)&&!won){
             this.walletCredit(L.amt,'Tatkal not allotted \u2014 fare refunded instantly');
           }
+          // ring the bell either way - the traveller may be on any page
+          const notice=won
+            ?{t:'Tatkal allotted \u2014 a berth is yours',
+              sub:'Open Fair Tatkal to get your ticket. Your \u20b9'+L.amt+' already covers it.',
+              page:'tatkal'}
+            :{t:'Tatkal not allotted \u2014 \u20b9'+L.amt+' refunded',
+              sub:'Instantly, to your '+via+'. Nothing to claim, nothing to chase.',
+              page:won?'tatkal':'wallet'};
+          this.setState({notices:[notice].concat(this.state.notices||[]).slice(0,6)});
           // UPI and card refunds return to the source, so the wallet ledger
           // stays out of it - the status line says where the money went
           void via;
@@ -4244,6 +4253,10 @@ class Component extends DCLogic {
       ...(()=>{
         const favNos=this.favs();
         const items=[];
+        (S.notices||[]).forEach(n=>items.push({t:n.t,sub:n.sub,
+          onClick:()=>{this.setState({bellOpen:false,
+            notices:(this.state.notices||[]).filter(x=>x!==n)});
+            this.go(n.page||'wallet');}}));
         (S.walletEvents||[]).slice(0,3).forEach(ev=>items.push({
           t:'\u20b9'+ev.amount+' credited to your wallet',
           sub:ev.note+(ev.pnr?' \u00b7 PNR '+ev.pnr:'')+' \u00b7 tap to open wallet',
