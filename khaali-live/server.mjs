@@ -14,7 +14,7 @@ import { GEO } from './geo.mjs';
 const QRCode = createRequire(import.meta.url)('qrcode');
 import {
   serves, stopIdxs, sMin, hhmm, plat, liveOf, fare, journeyKm, stationByCode,
-  cancelledOn, oddsOf, oddsOf2,
+  cancelledOn, oddsOf, oddsOf2, trainByNo,
 } from './engine.mjs';
 import * as store from './store.mjs';
 
@@ -64,6 +64,41 @@ function lanBase(req) {
 // ----------------------------------------------------------------- Saarthi --
 // Multilingual booking copilot backed by Sarvam AI. The key never reaches the
 // browser; without one the endpoint degrades to a friendly notice.
+// OpenAI writes sentences about numbers other code computed. It never
+// decides an allotment, a price, or a probability - so a missing key or a
+// dead quota costs the product nothing but prose.
+const OPENAI_KEY = process.env.OPENAI_API_KEY
+  || (() => { try { return fs.readFileSync(path.join(DIR, '.openai-key'), 'utf8').trim(); } catch { return ''; } })();
+const narrCache = new Map();
+
+async function narrate(cacheKey, system, user, maxTokens = 170) {
+  if (narrCache.has(cacheKey)) return narrCache.get(cacheKey);
+  if (!OPENAI_KEY) return '';
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 12000);
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', signal: ac.signal,
+      headers: { authorization: 'Bearer ' + OPENAI_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', temperature: 0.4, max_tokens: maxTokens,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      }),
+    });
+    if (!r.ok) return '';
+    const j = await r.json();
+    const out = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+    if (out) { narrCache.set(cacheKey, out); if (narrCache.size > 300) narrCache.delete(narrCache.keys().next().value); }
+    return out;
+  } catch { return ''; }
+  finally { clearTimeout(t); }
+}
+
+const NARR_RULES = 'You are khaali, an Indian railway booking product. Write plain, warm, '
+  + 'concrete English for an ordinary traveller. Never invent a number: use only the figures given, '
+  + 'and never contradict them. No markdown, no bullet points, no preamble, no exclamation marks. '
+  + 'Two sentences, at most 45 words total.';
+
 const SARVAM_KEY = process.env.SARVAM_KEY
   || (() => { try { return fs.readFileSync(path.join(DIR, '.sarvam-key'), 'utf8').trim(); } catch { return ''; } })();
 
@@ -274,7 +309,7 @@ async function api(req, res, url) {
   if (p === '/api/health') {
     return send(res, 200, {
       ok: true, up: Math.round(process.uptime()),
-      sarvam: !!SARVAM_KEY, openai: !!process.env.OPENAI_API_KEY,
+      sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size,
     });
   }
 
@@ -552,6 +587,23 @@ async function api(req, res, url) {
       G.round = null;
       return send(res, 200, { ok: true });
     }
+    if (p === '/api/tatkal/explain') {
+      const R = G.round;
+      if (!R || !R.result) return send(res, 200, { text: '' });
+      const tries = R.sim.agents.reduce((a, x) => a + x.tries, 0);
+      const bots = R.result.winners.bots;
+      const people = 40 - bots;
+      const text = await narrate('tk|' + R.id + '|' + R.seed,
+        NARR_RULES + ' You are explaining the morning\u2019s Tatkal allotment to the traveller who just watched it run.',
+        'Facts: ' + tries + ' automated booking attempts came from just 3 agent operations; the identity check and a '
+        + 'limit of 4 paid entries per person per month reduced them to 12 standing entries. '
+        + R.sim.humans + ' ordinary travellers entered. ' + R.result.chits + ' equal entries competed for 40 berths. '
+        + 'Result: ' + people + ' berths went to real travellers and ' + bots + ' to bot entries. '
+        + 'Entries that were not allotted were refunded instantly and in full. '
+        + 'Explain what this shows about removing the 10am race. Do not use the words lottery, luck or draw.');
+      return send(res, 200, { text, id: R.id });
+    }
+
     if (p === '/api/tatkal/state') {
       const who = q.get('who') || 'guest';
       const R = G.round;
@@ -599,6 +651,27 @@ async function api(req, res, url) {
       });
     }
     return send(res, 404, { error: 'no such tatkal endpoint' });
+  }
+
+  // A sentence about a probability the maths already fixed. Only ever asked
+  // for genuinely full trains, so the spend stays in fractions of a rupee.
+  if (p === '/api/odds/explain') {
+    const no = q.get('train'), date = q.get('date') || TODAY(), cls = q.get('cls') || 'SL';
+    const from = +q.get('from'), to = +q.get('to');
+    if (!no || !(from >= 0 && to >= 0 && from !== to)) return send(res, 400, { error: 'bad params' });
+    const o = oddsOf2(no, date, cls, { from, to, quota: q.get('quota') || 'General' });
+    const tr = trainByNo(no);
+    const av = store.availability(no, date, cls, from, to);
+    const text = await narrate('odds|' + no + '|' + date + '|' + cls + '|' + from + '|' + to,
+      NARR_RULES + ' You are telling a traveller whether to wait on this waitlist or take a certain seat instead.',
+      'Train ' + no + ' ' + ((tr && tr.name) || '') + ' from ' + ST[from].n + ' to ' + ST[to].n + ' on ' + date + '. '
+      + 'Chance of a confirmed berth: ' + o.pct + ' percent. Chance of at least RAC, meaning they board: ' + o.pctRAC + ' percent. '
+      + 'Waitlist type ' + o.type + '. About ' + o.clears + ' of the queue clears before charting. '
+      + 'Reasons the demand is what it is: ' + (o.why.join('; ') || 'ordinary weekday demand') + '. '
+      + 'On this same train ' + av.counts.free + ' berths are free the whole way right now and '
+      + av.counts.part + ' more free up part of the way. '
+      + 'Give the honest verdict, and if a certain seat exists say plainly that waiting is unnecessary.');
+    return send(res, 200, { text, pct: o.pct, pctRAC: o.pctRAC });
   }
 
   if (p === '/api/counts') {

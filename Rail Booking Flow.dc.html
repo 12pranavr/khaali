@@ -1327,6 +1327,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <div style="{{ r.subStyle }}">{{ r.sub }}</div>
         <div style="{{ r.racStyle }}">{{ r.rac }}</div>
         <div style="{{ r.whyStyle }}">{{ r.why }}</div>
+      <div style="{{ r.sayStyle }}">{{ r.say }}</div>
         <button onClick="{{ r.onBtn }}" style="{{ r.btnStyle }}">{{ r.btnLabel }}</button>
       </div>
       <div style="{{ r.pctStyle }}">{{ r.pct }}</div>
@@ -1497,6 +1498,11 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <sc-for list="{{ tkAudit }}" as="a" hint-placeholder-count="5">
           <div style="font:500 10.5px/1.8 'IBM Plex Mono',monospace;color:#dfe3ea">{{ a }}</div>
         </sc-for>
+        <div style="{{ tkSayWrap }}">
+          <div style="font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#e0a419;text-transform:uppercase;margin-bottom:6px">In plain words</div>
+          <div style="font:500 12px/1.7 Manrope,sans-serif;color:#fff">{{ tkSay }}</div>
+          <div style="font:500 9.5px/1.6 'IBM Plex Mono',monospace;color:#8b90a0;margin-top:7px">written by OpenAI from the audit above &#183; it reads the numbers, it never decides them</div>
+        </div>
       </div>
     </div>
   </div>
@@ -2082,7 +2088,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,payMethod:'upi',payCard:'',payBank:'',payFlight:-1,payStuck:false,notices:[],tkDeadline:0,tkTick:0,tkStep:'details',tkMethod:'upi',tkPin:'',tkUpi:'',tkCard:'',tkBank:'',tkPayBusy:false,tkPayErr:null,tkFlight:-1,tkFail:false,tkStuck:false,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,payMethod:'upi',payCard:'',payBank:'',payFlight:-1,payStuck:false,notices:[],tkSay:null,oddsSay:{},tkDeadline:0,tkTick:0,tkStep:'details',tkMethod:'upi',tkPin:'',tkUpi:'',tkCard:'',tkBank:'',tkPayBusy:false,tkPayErr:null,tkFlight:-1,tkFail:false,tkStuck:false,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -2136,6 +2142,17 @@ class Component extends DCLogic {
       const j=await this.tfetch('/api/odds2?from='+f+'&to='+t2+'&date='+d+'&cls='+c
         +'&quota='+encodeURIComponent(q2)+(w!=='0'?('&wl='+w):''),null,9000).then(r=>r.json());
       this.setState({odds2:{key,data:j}});
+      // only genuinely full trains get a sentence - certainty needs no essay
+      // the interesting decision is 'wait, or take the certain seat?' - that
+      // lives on the sold-out-full-way rows as much as the truly full ones
+      const full=(j.trains||[]).filter(x=>x.band==='odds'||x.band==='hop').slice(0,2);
+      for(const x of full){
+        if((this.state.oddsSay||{})[x.no])continue;
+        this.tfetch('/api/odds/explain?train='+x.no+'&from='+f+'&to='+t2+'&cls='+c
+          +'&date='+d+'&quota='+encodeURIComponent(q2),null,14000).then(r=>r.json())
+          .then(y=>{if(y&&y.text)this.setState({oddsSay:Object.assign({},this.state.oddsSay,{[x.no]:y.text})});})
+          .catch(()=>{});
+      }
     }catch(e){
       // park an empty answer so the render loop does not hammer a dead server
       this.setState({odds2:{key,data:{trains:[]},err:true}});
@@ -2315,6 +2332,13 @@ class Component extends DCLogic {
       const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
       const j=await this.tfetch('/api/tatkal/state?who='+encodeURIComponent(who),null,6000).then(r=>r.json());
       this.setState({tk:j});
+      // once the numbers are final, ask the narrator to word them - once
+      if(j.phase==='done'&&(!this.state.tkSay||this.state.tkSay.id!==j.id)&&!this._tkSayBusy){
+        this._tkSayBusy=true;
+        this.tfetch('/api/tatkal/explain',null,14000).then(r=>r.json())
+          .then(x=>{if(x&&x.text)this.setState({tkSay:{id:x.id,text:x.text}});})
+          .catch(()=>{}).finally(()=>{this._tkSayBusy=false;});
+      }
       // paid from the scanned phone: close the checkout on this screen too
       if(this.state.tkModal&&this.state.tkStep==='pay'&&j.customer&&j.customer.entered){
         clearInterval(this._tkc);this._tkc=null;
@@ -4363,6 +4387,11 @@ class Component extends DCLogic {
             racStyle:{display:(b==='hop'||b==='odds')?'block':'none',
               font:'600 12px/1.5 Manrope,sans-serif',
               color:b==='hop'?'var(--k-fg-8a8a84)':C[1],marginTop:6},
+            say:(S.oddsSay||{})[t.no]||'',
+            sayStyle:{display:((S.oddsSay||{})[t.no])?'block':'none',marginTop:7,
+              padding:'10px 13px',borderRadius:8,background:'var(--k-fafaf8)',
+              border:'1px solid var(--k-eeede9)',
+              font:'600 12px/1.65 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
             why:((b==='odds'||b==='hop')&&o.why.length)?('Why: '+o.why.join(' \u00b7 ')):'',
             whyStyle:{display:((b==='odds'||b==='hop')&&o.why.length)?'block':'none',
               font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:4},
@@ -4977,6 +5006,9 @@ class Component extends DCLogic {
           tkFeed:(T.backend&&T.backend.feed)||['press Open the 10 AM window to start a round','the feed will show every arrival: bot bursts and human chits alike'],
           tkAuditWrap:{display:(T.backend&&T.backend.audit)?'block':'none'},
           tkAudit:(T.backend&&T.backend.audit)||[],
+          tkSay:S.tkSay&&S.tkSay.id===T.id?S.tkSay.text:'',
+          tkSayWrap:{display:(S.tkSay&&S.tkSay.id===T.id&&S.tkSay.text)?'block':'none',
+            marginTop:13,paddingTop:12,borderTop:'1px dashed rgba(255,255,255,.14)'},
         };})(),
       ...(()=>{
         const BERTHS=40,AGENTS=3,BOTSPER=16,HUMANS=153;
