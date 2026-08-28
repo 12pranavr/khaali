@@ -104,14 +104,44 @@ of them live rather than describing it.*
 
 ## 1:52 - 2:00 - close
 
-> khaali doesn't add one train, one coach, or one berth. It just sells the ones
-> already going empty.
+> Same train. Same coach. Same berth.
+>
+> Someone's sitting in it now.
 
 *End card with the demo login.*
 
-The open and the close are one loop: a berth going empty at the top, selling
-the ones already going empty at the bottom. Land it and stop. No thank-you
-after it.
+Three hard stops, then release. Land it and stop. No thank-you after it.
+
+The opening carries two characters, the empty berth and the person waitlisted
+at Maddur, and this resolves both: it calls back to the exact berth, and the
+last thing on screen is a human being in a seat rather than a transaction. It
+also pays off the name without stating it, since the audience was told at 0:14
+that khaali means empty.
+
+The earlier version, "khaali doesn't add one train, one coach, or one berth, it
+just sells the ones already going empty," answered the berth and left the
+person on the platform. It also put a shopkeeper's verb at the emotional peak,
+and "just" shrinks whatever follows it.
+
+### Alternate closes
+
+Same structure, different last frame. All three pass visualise, falsify and
+own.
+
+The name payoff stated outright, more elegant and less human:
+
+> Same train. Same coach. Same berth. It's just not empty anymore.
+
+The thesis restated, if the judges want the argument back at the end:
+
+> Not one more train. Not one more coach. Not one more berth. Just the ones
+> already going empty, sold to the people already waiting.
+
+Second person, the most emotional and the least precise, since berths do not
+leave, trains do:
+
+> khaali doesn't add a single berth. It just stops the empty ones leaving
+> without you.
 
 ## Three lines that must not be said
 
