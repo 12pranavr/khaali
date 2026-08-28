@@ -71,6 +71,37 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY
   || (() => { try { return fs.readFileSync(path.join(DIR, '.openai-key'), 'utf8').trim(); } catch { return ''; } })();
 const narrCache = new Map();
 
+// Identity is proved, not claimed. The browser sends its Supabase access
+// token; we ask Supabase whose it is. A verified token is remembered for ten
+// minutes so this costs one round trip per session, not per tap.
+const SUPA_URL = process.env.SUPABASE_URL || 'https://bqzbdajkrtbuovhjimvp.supabase.co';
+const SUPA_ANON = process.env.SUPABASE_ANON_KEY || 'sb_publishable_RGMBcLx0VUY1-5vfm___-Q_5ryOV-y0';
+const tokenCache = new Map();                       // token -> { email, at }
+
+async function whoIs(req) {
+  const h = String(req.headers.authorization || '');
+  const tok = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  if (!tok) return null;
+  const hit = tokenCache.get(tok);
+  if (hit && Date.now() - hit.at < 600000) return hit.email;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(SUPA_URL + '/auth/v1/user', {
+      signal: ac.signal,
+      headers: { apikey: SUPA_ANON, authorization: 'Bearer ' + tok },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const email = j && j.email;
+    if (!email) return null;
+    tokenCache.set(tok, { email, at: Date.now() });
+    if (tokenCache.size > 500) tokenCache.delete(tokenCache.keys().next().value);
+    return email;
+  } catch { return null; }
+  finally { clearTimeout(t); }
+}
+
 async function narrate(cacheKey, system, user, maxTokens = 170) {
   if (narrCache.has(cacheKey)) return narrCache.get(cacheKey);
   if (!OPENAI_KEY) return '';
@@ -536,9 +567,12 @@ async function api(req, res, url) {
     }
     if (p === '/api/tatkal/paysession' && req.method === 'POST') {
       let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+      const signedIn = await whoIs(req);
+      if (!signedIn) return send(res, 401, { needsAuth: true,
+        error: 'Sign in to enter the Tatkal window — entries are capped per person.' });
       const R = G.round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
-      const who = String(b.who || 'guest').slice(0, 80);
+      const who = signedIn;
       if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one entry per person per round' });
       if ((G.month.get(who) || 0) >= 4) return send(res, 409, { error: 'four Tatkal entries per month \u2014 all used' });
       if (!G.pays) G.pays = new Map();
@@ -689,6 +723,11 @@ async function api(req, res, url) {
 
   if (p === '/api/hold' && req.method === 'POST') {
     const b = await readBody(req);
+    // holding a berth takes it away from everyone else, so it needs a name
+    // the server has checked - not one the request simply asserts
+    const signedIn = await whoIs(req);
+    if (!signedIn) return send(res, 401, { ok: false, needsAuth: true,
+      error: 'Sign in to hold a berth — a hold takes it off the board for everyone else.' });
     const cxh = cancelledOn(String(b.train || ''), b.date || TODAY());
     if (cxh) return send(res, 409, { ok: false, error: 'This train is cancelled on that date \u2014 ' + cxh.reason + '.' });
     const segsIn = Array.isArray(b.segs)
@@ -697,7 +736,7 @@ async function api(req, res, url) {
     const r = store.hold({
       train: b.train, date: b.date || TODAY(), cls: b.cls || 'SL',
       from: +b.from, to: +b.to, berthIdxs: (b.berthIdxs || []).map(Number),
-      pax: +b.pax || (b.berthIdxs || []).length, who: b.who, fees: +b.fees || 0,
+      pax: +b.pax || (b.berthIdxs || []).length, who: signedIn, fees: +b.fees || 0,
       segs: segsIn, hop: !!b.hop,
     });
     return send(res, r.ok ? 200 : 409, r);
