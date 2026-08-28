@@ -1056,8 +1056,51 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <div style="{{ holdTimerStyle }}">{{ holdTimer }}</div>
           <div style="font-size:12.5px;color:var(--k-fg-8a8a84);margin-bottom:16px">Nobody else can take these berths until the timer runs out.</div>
         </div>
-        <button onClick="{{ goTicket }}" style="border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 15px/1 Manrope,sans-serif;padding:17px 34px;border-radius:6px;cursor:pointer;min-height:48px">{{ payLabel }}</button>
+        <div style="{{ payPickWrap }}">
+          <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin:2px 0 9px">How would you like to pay?</div>
+          <sc-for list="{{ payMethods }}" as="pm" hint-placeholder-count="4">
+            <div onClick="{{ pm.onClick }}" style="{{ pm.style }}">
+              <span style="{{ pm.radio }}"></span>
+              <span style="font:700 13px/1.3 Manrope,sans-serif">{{ pm.label }}</span>
+              <span style="margin-left:auto;font:500 10.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ pm.hint }}</span>
+            </div>
+          </sc-for>
+          <div style="{{ payUpiPane }}">Scan the QR beside this panel with any UPI app, or pay from the phone you are holding.</div>
+          <div style="{{ payCardPane }}">
+            <input inputmode="numeric" value="{{ payCard }}" onChange="{{ setPayCard }}" placeholder="4111 1111 1111 1111" style="width:100%;max-width:280px;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:600 13.5px/1.3 'IBM Plex Mono',monospace;outline:none"></input>
+            <div style="font:500 10.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:6px">Test card only &#183; nothing is stored anywhere.</div>
+          </div>
+          <div style="{{ payBankPane }}">
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <sc-for list="{{ payBanks }}" as="pb" hint-placeholder-count="5">
+                <div onClick="{{ pb.onClick }}" style="{{ pb.style }}">{{ pb.n }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <button onClick="{{ goTicket }}" style="{{ payBtnStyle }}">{{ payLabel }}</button>
         <div style="font-size:12.5px;color:var(--k-fg-8a8a84);margin-top:10px">{{ payCaption }}</div>
+        <div style="{{ payTrackWrap }}">
+          <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:11px">Where your money is</div>
+          <sc-for list="{{ payStages }}" as="ps" hint-placeholder-count="4">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch">
+                <div style="{{ ps.dot }}">{{ ps.mark }}</div>
+                <div style="{{ ps.rail }}"></div>
+              </div>
+              <div style="padding-bottom:12px">
+                <div style="{{ ps.titleStyle }}">{{ ps.title }}</div>
+                <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ ps.sub }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="{{ payHoldingStyle }}">{{ payHolding }}</div>
+          <div style="{{ payStuckStyle }}">
+            <div style="font:700 12.5px/1.4 Manrope,sans-serif;color:var(--k-fg-a71f3d);margin-bottom:5px">Money left your account, no ticket came back</div>
+            <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:var(--k-fg-8a4a12)">It is with the payment gateway &#8212; not with khaali and not with Indian Railways. RBI&#8217;s rules give it T+5 days to auto-reverse; after that your bank owes you &#8377;100 a day, payable without you even asking.</div>
+            <div onClick="{{ payClaim }}" style="display:inline-block;margin-top:10px;background:var(--k-14663a,#14663a);color:#fff;font:700 12px/1 Manrope,sans-serif;padding:11px 16px;border-radius:7px;cursor:pointer">Claim it back now &#8594;</div>
+          </div>
+        </div>
         <div style="{{ wpBlockStyle }}">
           <div style="font:700 13px/1.3 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ wpHead }}</div>
           <div style="{{ wpBalStyle }}">{{ wpBalLine }}</div>
@@ -1329,6 +1372,95 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <button onClick="{{ tkPay }}" style="{{ tkPayStyle }}">{{ tkPayLabel }}</button>
       </div>
       <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:12px">{{ tkMonthLine }}</div>
+      <div style="{{ tkCheckoutWrap }}">
+        <div style="width:min(960px,96vw);max-height:calc(100vh - 32px);overflow:hidden;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-wrap:wrap;background:var(--k-fff)">
+          <div style="flex:1 1 320px;min-width:300px;background:var(--k-14161a);color:#fff;padding:24px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto">
+            <div style="display:flex;align-items:baseline;margin-bottom:3px">
+              <div style="font:700 15px/1.2 Manrope,sans-serif">khaali</div>
+              <div style="margin-left:auto;font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#7fe3ae;border:1px solid #1f9d55;border-radius:999px;padding:5px 9px">SIMULATED</div>
+            </div>
+            <div style="font:400 10.5px/1.6 'IBM Plex Mono',monospace;color:#8b90a0;margin-bottom:18px">Tatkal &#183; 16021 Kaveri Express &#183; {{ tkDateLine }}</div>
+            <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#e0a419;text-transform:uppercase;margin-bottom:13px">Where your money is</div>
+            <sc-for list="{{ tkStages }}" as="st" hint-placeholder-count="4">
+              <div style="display:flex;gap:11px;align-items:flex-start;margin-bottom:2px">
+                <div style="flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch">
+                  <div style="{{ st.dot }}">{{ st.mark }}</div>
+                  <div style="{{ st.rail }}"></div>
+                </div>
+                <div style="padding-bottom:14px">
+                  <div style="{{ st.titleStyle }}">{{ st.title }}</div>
+                  <div style="font:500 11px/1.6 Manrope,sans-serif;color:#8b90a0">{{ st.sub }}</div>
+                </div>
+              </div>
+            </sc-for>
+            <div style="{{ tkHoldingStyle }}">{{ tkHolding }}</div>
+            <div style="{{ tkStuckStyle }}">
+              <div style="font:700 12.5px/1.4 Manrope,sans-serif;color:#ffb4a2;margin-bottom:5px">Your money did not reach the railway</div>
+              <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#dfe3ea">It is sitting with the payment gateway, not with khaali and not with Indian Railways. Under RBI&#8217;s rules for failed transactions it must auto-reverse within T+5 days &#8212; after that your bank owes you &#8377;100 for every extra day, and it is supposed to pay that without being asked.</div>
+              <button onClick="{{ tkClaim }}" style="margin-top:11px;border:none;background:#1f9d55;color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 16px;border-radius:7px;cursor:pointer;min-height:42px">Claim it back now &#8594;</button>
+            </div>
+          </div>
+          <div style="flex:1 1 380px;min-width:300px;background:var(--k-fff);padding:22px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto">
+            <div style="display:flex;align-items:center;margin-bottom:16px">
+              <div>
+                <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount payable</div>
+                <div style="font:700 24px/1.2 Manrope,sans-serif;margin-top:4px">{{ tkFare }}</div>
+              </div>
+              <div onClick="{{ tkCheckoutClose }}" style="margin-left:auto;cursor:pointer;font-size:20px;line-height:1;color:var(--k-fg-8a8a84);padding:4px 6px">&#215;</div>
+            </div>
+            <div style="{{ tkMethodsWrap }}">
+              <sc-for list="{{ tkPayMethods }}" as="m" hint-placeholder-count="4">
+                <div onClick="{{ m.onClick }}" style="{{ m.headStyle }}">
+                  <span style="{{ m.radio }}"></span>
+                  <span style="font:700 13.5px/1.3 Manrope,sans-serif">{{ m.label }}</span>
+                  <span style="margin-left:auto;font:500 10.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ m.hint }}</span>
+                </div>
+              </sc-for>
+              <div style="border:1px solid var(--k-e6e5e0);border-radius:10px;padding:15px;margin-top:11px;background:var(--k-fafaf8)">
+                <div style="{{ tkUpiPane }}">
+                  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+                    <div style="flex:none;background:#fff;border-radius:9px;padding:8px;line-height:0"><img src="{{ qrSrc }}" width="124" height="124" style="display:block" alt="Payment QR"/></div>
+                    <div style="flex:1;min-width:150px">
+                      <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a)">Scan with any UPI app</div>
+                      <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">GPay &#183; PhonePe &#183; Paytm &#183; BHIM</div>
+                      <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:7px">or type your UPI ID</div>
+                    </div>
+                  </div>
+                  <input value="{{ tkUpi }}" onChange="{{ setTkUpi }}" placeholder="yourname@bank" style="width:100%;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:600 13px/1.3 Manrope,sans-serif;outline:none;margin-top:9px"></input>
+                </div>
+                <div style="{{ tkCardPane }}">
+                  <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">Card number</div>
+                  <input inputmode="numeric" value="{{ tkCard }}" onChange="{{ setTkCard }}" placeholder="4111 1111 1111 1111" style="width:100%;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:600 13.5px/1.3 'IBM Plex Mono',monospace;outline:none"></input>
+                  <div style="font:500 10.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:6px">Test card only &#183; nothing is stored</div>
+                </div>
+                <div style="{{ tkBankPane }}">
+                  <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Choose your bank</div>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap">
+                    <sc-for list="{{ tkBanks }}" as="b" hint-placeholder-count="5">
+                      <div onClick="{{ b.onClick }}" style="{{ b.style }}">{{ b.n }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="{{ tkWalletPane }}">
+                  <div style="font:600 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin-bottom:7px">{{ tkWalletLine }}</div>
+                  <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">6-digit wallet PIN</div>
+                  <input type="password" inputmode="numeric" value="{{ tkPin }}" onChange="{{ setTkPin }}" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" style="width:160px;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 17px/1 'IBM Plex Mono',monospace;letter-spacing:.32em;text-align:center;outline:none;margin-top:6px"></input>
+                  <div style="font:500 10.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:6px">Demo PIN 123456</div>
+                </div>
+              </div>
+              <div style="{{ tkPayErrStyle }}">{{ tkPayErr }}</div>
+              <button onClick="{{ tkPayNow }}" style="{{ tkPayNowStyle }}">{{ tkPayNowLabel }}</button>
+              <div onClick="{{ tkFailDemo }}" style="{{ tkFailDemoStyle }}">Demo: what if the payment fails halfway?</div>
+            </div>
+            <div style="{{ tkDoneWrap }}">
+              <div style="font:700 34px/1 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ tkDoneMark }}</div>
+              <div style="font:700 17px/1.3 Manrope,sans-serif;margin-top:10px">{{ tkDoneHead }}</div>
+              <div style="font:500 12.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);margin-top:6px;max-width:32em">{{ tkDoneSub }}</div>
+              <button onClick="{{ tkCheckoutClose }}" style="margin-top:16px;border:none;background:var(--k-d8385a);color:#fff;font:700 13.5px/1 Manrope,sans-serif;padding:14px 20px;border-radius:8px;cursor:pointer;min-height:46px">{{ tkDoneBtn }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div style="{{ tkModalWrap }}">
         <div style="width:min(410px,92vw);background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:calc(100vh - 40px);overflow-y:auto">
           <div style="display:flex;align-items:center;margin-bottom:8px">
@@ -1346,34 +1478,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
             </div>
             <button onClick="{{ tkToPay }}" style="width:100%;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">Continue to payment &#8594;</button>
           </div>
-          <div style="{{ tkStepPay }}">
-            <div style="display:flex;align-items:baseline;margin-bottom:12px">
-              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount payable</div>
-              <div style="margin-left:auto;font:700 20px/1 Manrope,sans-serif">{{ tkFare }}</div>
-            </div>
-            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px">
-              <sc-for list="{{ tkMethods }}" as="m" hint-placeholder-count="3">
-                <div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</div>
-              </sc-for>
-            </div>
-            <div style="{{ tkWalletPane }}">
-              <div style="font:600 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin-bottom:8px">{{ tkWalletLine }}</div>
-              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">6-digit wallet PIN</div>
-              <input type="password" inputmode="numeric" value="{{ tkPin }}" onChange="{{ setTkPin }}" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" style="width:170px;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:700 18px/1 'IBM Plex Mono',monospace;letter-spacing:.34em;text-align:center;outline:none;margin-top:6px"></input>
-            </div>
-            <div style="{{ tkUpiPane }}">
-              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">UPI ID</div>
-              <input value="{{ tkUpi }}" onChange="{{ setTkUpi }}" placeholder="yourname@bank" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin-top:6px"></input>
-            </div>
-            <div style="{{ tkCardPane }}">
-              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Card number &#183; test card only</div>
-              <input inputmode="numeric" value="{{ tkCard }}" onChange="{{ setTkCard }}" placeholder="4111 1111 1111 1111" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14px/1.3 'IBM Plex Mono',monospace;outline:none;margin-top:6px"></input>
-            </div>
-            <div style="{{ tkPayErrStyle }}">{{ tkPayErr }}</div>
-            <button onClick="{{ tkPayNow }}" style="{{ tkPayNowStyle }}">{{ tkPayNowLabel }}</button>
-            <div onClick="{{ tkBackToDetails }}" style="{{ tkBackStyle }}">&#8592; Back to details</div>
-            <div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb);font:500 10.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);text-align:center">Simulated gateway &#183; no real money moves. Your seat is locked only after payment succeeds &#8212; and refunded to this same method if you are not allotted.</div>
-          </div>
+          <div style="{{ tkStepPay }}"></div>
         </div>
       </div>
     </div>
@@ -1955,7 +2060,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,tkStep:'details',tkMethod:'wallet',tkPin:'',tkUpi:'',tkCard:'',tkPayBusy:false,tkPayErr:null,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,payMethod:'upi',payCard:'',payBank:'',payFlight:-1,payStuck:false,tkStep:'details',tkMethod:'upi',tkPin:'',tkUpi:'',tkCard:'',tkBank:'',tkPayBusy:false,tkPayErr:null,tkFlight:-1,tkFail:false,tkStuck:false,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -2102,7 +2207,25 @@ class Component extends DCLogic {
       return 'Passenger '+(i+1);
     });
   }
-  tkConfirmPaid(method){
+  tkRunPayment(fail){
+    const S=this.state;
+    this.setState({tkPayBusy:true,tkPayErr:null,tkFlight:0,tkFail:!!fail,tkStuck:false});
+    const step=(n,ms)=>new Promise(r=>setTimeout(()=>{this.setState({tkFlight:n});r();},ms));
+    (async()=>{
+      await step(1,700);                       // bank -> gateway
+      if(fail){
+        // the money leaves the bank, the gateway takes it, khaali never hears
+        await new Promise(r=>setTimeout(r,900));
+        this.setState({tkPayBusy:false,tkStuck:true,tkFlight:2});
+        return;
+      }
+      await step(2,650);                       // gateway -> khaali
+      this.tkConfirmPaid(this.state.tkMethod,true);
+      await step(3,600);                       // entry recorded, railway next
+      this.setState({tkPayBusy:false});
+    })();
+  }
+  tkConfirmPaid(method,keepOpen){
     const S=this.state,T=S.tk||{};
     const fare=this.fare('SL',Math.abs(this.ST[13].km-this.ST[0].km));
     const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
@@ -2118,7 +2241,7 @@ class Component extends DCLogic {
     const label={wallet:'khaali wallet',upi:'UPI',card:'card'}[method]||'wallet';
     try{localStorage.setItem('khaali-tklock',
       JSON.stringify({round:T.id,amt:fare,settled:false,method:method,label:label}));}catch(e){}
-    this.setState({tkModal:false,tkStep:'details',tkPin:'',tkCard:''});
+    if(!keepOpen)this.setState({tkModal:false,tkStep:'details',tkPin:'',tkCard:''});
     (async()=>{try{await this.tfetch('/api/tatkal/enter',{method:'POST',
       headers:{'content-type':'application/json'},
       body:JSON.stringify({who,paid:true,name:nm})},6000);}catch(e){}
@@ -2943,6 +3066,31 @@ class Component extends DCLogic {
       :'Could not lock those berths ('+why+').';
     this.setState({holdBusy:false,holdErr:msg,page:'seats'});
     this.syncAv();
+  }
+  /** Pay, showing the traveller which of the three parties holds the money
+      at each step - and where it stopped if it stopped. */
+  async payWithStages(){
+    const S=this.state;
+    if(!S.holdId||S.payFlight>=0)return;
+    this.setState({payFlight:0,payStuck:false,holdErr:null});
+    await new Promise(r=>setTimeout(r,450));
+    this.setState({payFlight:1});
+    await new Promise(r=>setTimeout(r,500));
+    try{
+      const r=await this.tfetch('/api/pay/'+this.state.holdId,{method:'POST'},8000);
+      const j=await r.json();
+      if(!r.ok||!j.ok)throw new Error(j.error||j.reason||'payment failed');
+      this.setState({payFlight:2});
+      await new Promise(r2=>setTimeout(r2,420));
+      this.setState({payFlight:3});
+      await new Promise(r2=>setTimeout(r2,320));
+      this.setState({payFlight:-1});
+      this.commitBooking(j.booking.pnr,j.booking.amount);
+    }catch(e){
+      // the money left, the ticket did not arrive: say exactly where it stopped
+      this.setState({payStuck:true,payFlight:2,holdErr:String(e&&e.message||e)});
+      this.syncAv();
+    }
   }
   async payHold(){
     const S=this.state;if(!S.holdId)return;
@@ -4525,37 +4673,121 @@ class Component extends DCLogic {
           tkWalletLine:(()=>{const b2=this.wallet().bal;
             return b2>=tkFareN?('Wallet balance \u20b9'+b2+' \u2014 ready')
               :('Wallet \u20b9'+b2+' \u2014 \u20b9'+tkFareN+' demo money is added automatically');})(),
-          tkStepDetails:{display:S.tkStep==='pay'?'none':'block'},
-          tkStepPay:{display:S.tkStep==='pay'?'block':'none'},
-          tkToPay:()=>this.setState({tkStep:'pay',tkPayErr:null,tkPin:'',
+          tkStepDetails:{display:'block'},
+          tkStepPay:{display:'none'},
+          tkCheckoutWrap:{display:(S.tkModal&&S.tkStep==='pay')?'flex':'none',
+            position:'fixed',inset:0,zIndex:150,background:'rgba(12,10,8,.72)',
+            alignItems:'center',justifyContent:'center',padding:16},
+          tkCheckoutClose:()=>this.setState({tkModal:false,tkStep:'details',
+            tkFlight:-1,tkFail:false,tkStuck:false,tkPin:'',tkPayErr:null}),
+          tkToPay:()=>this.setState({tkStep:'pay',tkPayErr:null,tkPin:'',tkFlight:-1,
+            tkFail:false,tkStuck:false,
             tkName:String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller')}),
-          tkBackToDetails:()=>this.setState({tkStep:'details',tkPayErr:null}),
-          tkBackStyle:{display:S.tkPayBusy?'none':'block',marginTop:10,textAlign:'center',
-            font:'600 11.5px/1.4 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer'},
-          tkMethods:[['wallet','khaali wallet'],['upi','UPI'],['card','Card']].map(([k,l])=>({
-            label:l,onClick:()=>this.setState({tkMethod:k,tkPayErr:null}),
-            style:{font:'700 12px/1 Manrope,sans-serif',padding:'11px 14px',borderRadius:8,cursor:'pointer',
-              border:'1px solid '+(S.tkMethod===k?'var(--k-d8385a)':'var(--k-d4d3ce)'),
-              background:S.tkMethod===k?'var(--k-fdf3f5)':'var(--k-fff)',
-              color:S.tkMethod===k?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'}})),
-          tkWalletPane:{display:S.tkMethod==='wallet'?'block':'none'},
-          tkUpiPane:{display:S.tkMethod==='upi'?'block':'none'},
-          tkCardPane:{display:S.tkMethod==='card'?'block':'none'},
+          // --- the money tracker -------------------------------------------
+          ...(()=>{
+            const F=S.tkFlight,stuck=S.tkStuck;
+            const stamp=i=>{const d=this.simNowDate();
+              d.setSeconds(d.getSeconds()+i);
+              return d.toTimeString().slice(0,8);};
+            const defs=[
+              ['Your bank','\u20b9'+tkFareN+' debited from your '+({upi:'UPI',card:'card',netbanking:'bank account',wallet:'khaali wallet'}[S.tkMethod]||'account')],
+              ['Payment gateway','payment authorised and confirmed'],
+              ['khaali','your entry recorded in the Tatkal window'],
+              ['Indian Railways','berth allotted when the window closes'],
+            ];
+            const stages=defs.map(([title,sub],i)=>{
+              const failedHere=stuck&&i===2;
+              const doneS=F>i||(F===3&&i===3);
+              const active=F===i&&!failedHere;
+              const col=failedHere?'#ff6b57':doneS?'#1f9d55':active?'#e0a419':'rgba(255,255,255,.16)';
+              return {
+                dot:{width:20,height:20,borderRadius:'50%',flex:'none',
+                  background:(doneS||failedHere)?col:'transparent',
+                  border:'2px solid '+col,color:'#fff',
+                  font:'700 11px/17px Manrope,sans-serif',textAlign:'center'},
+                mark:failedHere?'\u2715':doneS?'\u2713':'',
+                rail:{width:2,flex:1,minHeight:14,background:doneS?'#1f9d55':'rgba(255,255,255,.13)'},
+                title:title,
+                titleStyle:{font:'700 13px/1.4 Manrope,sans-serif',
+                  color:failedHere?'#ff9d8c':(doneS||active)?'#fff':'#6a7080'},
+                sub:failedHere?'no PNR issued \u2014 the money never arrived here'
+                  :(doneS?sub+' \u00b7 '+stamp(i):(active?'in progress\u2026':sub)),
+              };});
+            const holder=stuck?'the payment gateway \u2014 not khaali, not the railway'
+              :F>=3?'nobody \u2014 it has become your entry'
+              :F>=2?'khaali, held against your entry'
+              :F>=1?'the payment gateway'
+              :F>=0?'your bank, on its way out':'';
+            return {
+              tkStages:stages,
+              tkHolding:'Right now your money is with: '+holder,
+              tkHoldingStyle:{display:F>=0&&!stuck?'block':'none',marginTop:6,
+                padding:'12px 14px',borderRadius:9,background:'rgba(255,255,255,.06)',
+                font:'600 12px/1.6 Manrope,sans-serif',color:'#dfe3ea'},
+              tkStuckStyle:{display:stuck?'block':'none',marginTop:6,padding:'14px 16px',
+                borderRadius:10,background:'rgba(255,107,87,.10)',border:'1px solid rgba(255,107,87,.45)'},
+            };})(),
+          tkClaim:()=>{
+            if(S.tkMethod==='wallet')this.walletCredit(tkFareN,'Failed booking \u2014 refund claimed');
+            this.setState({tkStuck:false,tkFail:false,tkFlight:-1,tkModal:false,tkStep:'details',
+              srvNote:'\u20b9'+tkFareN+' refund claimed \u2014 in a real integration this files the bank dispute with the RBI reference attached.'});},
+          // --- the method rows ---------------------------------------------
+          tkMethodsWrap:{display:S.tkFlight>=0?'none':'block'},
+          tkPayMethods:[['upi','UPI','GPay, PhonePe, Paytm'],['card','Cards','Visa, RuPay, Mastercard'],
+            ['netbanking','Netbanking','all major banks'],['wallet','khaali wallet','instant, no OTP']]
+            .map(([k,label,hint])=>({
+              label,hint,border:S.tkMethod===k?'var(--k-d8385a)':'var(--k-e6e5e0)',
+              onClick:()=>this.setState({tkMethod:k,tkPayErr:null}),
+              headStyle:{display:'flex',alignItems:'center',gap:10,padding:'13px 15px',cursor:'pointer',
+                borderRadius:10,marginBottom:8,
+                border:'1px solid '+(S.tkMethod===k?'var(--k-d8385a)':'var(--k-e6e5e0)'),
+                background:S.tkMethod===k?'var(--k-fdf3f5)':'var(--k-fff)'},
+              radio:{width:15,height:15,borderRadius:'50%',flex:'none',
+                border:'2px solid '+(S.tkMethod===k?'var(--k-d8385a)':'var(--k-c9c9c2)'),
+                background:S.tkMethod===k?'var(--k-d8385a)':'transparent',
+                boxShadow:S.tkMethod===k?'inset 0 0 0 2.5px var(--k-fff)':'none'},
+            })),
           tkPin:S.tkPin||'',
           setTkPin:e=>this.setState({tkPin:String(e.target.value||'').replace(/[^0-9]/g,'').slice(0,6),tkPayErr:null}),
-          tkUpi:S.tkUpi||'',setTkUpi:e=>this.setState({tkUpi:e.target.value,tkPayErr:null}),
+          tkUpi:S.tkUpi||'',
+          setTkUpi:e=>this.setState({tkUpi:e.target.value,tkPayErr:null}),
           tkCard:S.tkCard||'',
           setTkCard:e=>this.setState({tkCard:String(e.target.value||'').replace(/[^0-9 ]/g,'').slice(0,19),tkPayErr:null}),
+          tkUpiPane:{display:S.tkMethod==='upi'?'block':'none'},
+          tkCardPane:{display:S.tkMethod==='card'?'block':'none'},
+          tkBankPane:{display:S.tkMethod==='netbanking'?'block':'none'},
+          tkWalletPane:{display:S.tkMethod==='wallet'?'block':'none'},
+          tkQrStyle:{flex:'none',width:132,height:132,padding:6,background:'#fff',
+            borderRadius:8,border:'1px solid var(--k-e6e5e0)',
+            display:'grid',gridTemplateColumns:'repeat(20,1fr)',gridAutoRows:'1fr'},
+          tkQrCells:(()=>{const r=this.rng(90210);const out=[];
+            for(let y=0;y<20;y++)for(let x=0;x<20;x++){
+              const finder=(a,b)=>a<6&&b<6||a<6&&b>13||a>13&&b<6;
+              const on=finder(x,y)?((x===0||x===5||y===0||y===5||(x>1&&x<4&&y>1&&y<4)
+                ||(x>14&&x<17&&y>1&&y<4)||(x>1&&x<4&&y>14&&y<17)
+                ||(x===14||x===19)||(y===14||y===19))?true:false):r()<0.48;
+              out.push({background:on?'#14161a':'transparent'});}
+            return out;})(),
+          tkBanks:['HDFC','SBI','ICICI','Axis','Kotak'].map(n=>({n,
+            onClick:()=>this.setState({tkBank:n,tkPayErr:null}),
+            style:{font:'700 11.5px/1 Manrope,sans-serif',padding:'10px 13px',borderRadius:7,cursor:'pointer',
+              border:'1px solid '+(S.tkBank===n?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+              background:S.tkBank===n?'var(--k-fdf3f5)':'var(--k-fff)',
+              color:S.tkBank===n?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'}})),
           tkPayErr:S.tkPayErr||'',
           tkPayErrStyle:{display:S.tkPayErr?'block':'none',marginTop:10,padding:'10px 13px',borderRadius:7,
             background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
             font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
-          tkPayNowLabel:S.tkPayBusy?'Contacting your bank\u2026':('Pay '+('\u20b9'+tkFareN)+' securely'),
+          tkPayNowLabel:S.tkPayBusy?'Contacting your bank\u2026':('Pay \u20b9'+tkFareN),
           tkPayNowStyle:{width:'100%',marginTop:13,border:'none',
             background:S.tkPayBusy?'var(--k-d4d3ce)':'var(--k-1f9d55)',
             color:S.tkPayBusy?'var(--k-fg-8a8a84)':'#fff',
-            font:'700 14.5px/1 Manrope,sans-serif',padding:15,borderRadius:8,
-            cursor:S.tkPayBusy?'default':'pointer',minHeight:48},
+            font:'700 15px/1 Manrope,sans-serif',padding:16,borderRadius:9,
+            cursor:S.tkPayBusy?'default':'pointer',minHeight:50},
+          tkFailDemoStyle:{marginTop:12,textAlign:'center',cursor:'pointer',
+            font:'600 11.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',
+            textDecoration:'underline'},
+          tkFailDemo:()=>{if(!S.tkPayBusy)this.tkRunPayment(true);},
           tkPayNow:()=>{if(S.tkPayBusy)return;
             const M=S.tkMethod;
             if(M==='wallet'&&String(S.tkPin||'').length!==6)
@@ -4563,12 +4795,21 @@ class Component extends DCLogic {
             if(M==='wallet'&&String(S.tkPin)!==this.walletPin())
               return this.setState({tkPayErr:'Incorrect PIN \u2014 nothing was paid.',tkPin:''});
             if(M==='upi'&&!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(S.tkUpi||'').trim()))
-              return this.setState({tkPayErr:'That UPI ID does not look right \u2014 try name@bank.'});
+              return this.setState({tkPayErr:'Enter a UPI ID like name@bank, or scan the QR.'});
             if(M==='card'&&String(S.tkCard||'').replace(/\D/g,'').length<12)
               return this.setState({tkPayErr:'Enter a test card number, at least 12 digits.'});
-            this.setState({tkPayBusy:true,tkPayErr:null});
-            // the gateway takes a moment, exactly like the real one
-            setTimeout(()=>{this.setState({tkPayBusy:false},()=>this.tkConfirmPaid(M));},1400);},
+            if(M==='netbanking'&&!S.tkBank)
+              return this.setState({tkPayErr:'Pick your bank to continue.'});
+            this.tkRunPayment(false);},
+          // --- the finish pane ---------------------------------------------
+          tkDoneWrap:{display:(S.tkFlight>=0&&!S.tkPayBusy&&(S.tkFlight>=3||S.tkStuck))?'block':'none',
+            paddingTop:8},
+          tkDoneMark:S.tkStuck?'\u2715':'\u2713',
+          tkDoneHead:S.tkStuck?'Booking failed \u2014 but your money is traceable'
+            :'Payment successful',
+          tkDoneSub:S.tkStuck?'The gateway took your money and khaali never received it. The panel on the left names who is holding it and what you are owed \u2014 no seven-day silence.'
+            :'Your entry is in the Tatkal window and the fare is held. Allotment runs when the window closes \u2014 booking faster would not have changed anything.',
+          tkDoneBtn:S.tkStuck?'Back to booking':'Done',
           tkConfirmEnter:()=>{if(!(open&&!me.entered))return;
             const nm=String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller');
             // the typed name becomes traveller 1, so the eventual ticket and
@@ -5053,9 +5294,82 @@ class Component extends DCLogic {
           travNote:mine?'Passenger 1 is prefilled from your profile \u2014 edit it if you are booking for someone else.'
             :'Sign in and your name fills itself. Names print on the ticket.',
         };})(),
+      ...(()=>{
+        const F=S.payFlight,stuck=S.payStuck;
+        const amt=(S.hold&&S.hold.amount)||0;
+        const mname={upi:'UPI',card:'card',netbanking:'bank account',wallet:'khaali wallet'}[S.payMethod]||'account';
+        const defs=[
+          ['Your '+(S.payMethod==='wallet'?'khaali wallet':'bank'),'\u20b9'+money(amt)+' debited from your '+mname],
+          ['Payment gateway','payment authorised and confirmed'],
+          ['khaali','berths released to you against the payment'],
+          ['Indian Railways','PNR issued and printed on your ticket'],
+        ];
+        return {
+          payPickWrap:{display:(S.holdId&&F<0)?'block':'none',margin:'2px 0 16px',
+            padding:'14px 16px',borderRadius:10,background:'var(--k-fafaf8)',
+            border:'1px solid var(--k-eeede9)',maxWidth:340},
+          payMethods:[['upi','UPI','scan or pay here'],['card','Card','Visa, RuPay'],
+            ['netbanking','Netbanking','all major banks'],['wallet','khaali wallet','instant, no OTP']]
+            .map(([k,label,hint])=>({label,hint,
+              onClick:()=>this.setState({payMethod:k}),
+              style:{display:'flex',alignItems:'center',gap:9,padding:'11px 13px',cursor:'pointer',
+                borderRadius:9,marginBottom:7,
+                border:'1px solid '+(S.payMethod===k?'var(--k-d8385a)':'var(--k-e6e5e0)'),
+                background:S.payMethod===k?'var(--k-fdf3f5)':'var(--k-fff)'},
+              radio:{width:14,height:14,borderRadius:'50%',flex:'none',
+                border:'2px solid '+(S.payMethod===k?'var(--k-d8385a)':'var(--k-c9c9c2)'),
+                background:S.payMethod===k?'var(--k-d8385a)':'transparent',
+                boxShadow:S.payMethod===k?'inset 0 0 0 2.5px var(--k-fff)':'none'}})),
+          payUpiPane:{display:S.payMethod==='upi'?'block':'none',
+            font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-5a5f6a)',marginTop:4},
+          payCardPane:{display:S.payMethod==='card'?'block':'none',marginTop:4},
+          payBankPane:{display:S.payMethod==='netbanking'?'block':'none',marginTop:4},
+          payCard:S.payCard||'',
+          setPayCard:e=>this.setState({payCard:String(e.target.value||'').replace(/[^0-9 ]/g,'').slice(0,19)}),
+          payBanks:['HDFC','SBI','ICICI','Axis','Kotak'].map(n=>({n,
+            onClick:()=>this.setState({payBank:n}),
+            style:{font:'700 11.5px/1 Manrope,sans-serif',padding:'9px 12px',borderRadius:7,cursor:'pointer',
+              border:'1px solid '+(S.payBank===n?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+              background:S.payBank===n?'var(--k-fdf3f5)':'var(--k-fff)',
+              color:S.payBank===n?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'}})),
+          payBtnStyle:{display:F<0?'inline-block':'none',border:'none',
+            background:'var(--k-d8385a)',color:'var(--k-fg-fff)',
+            font:'700 15px/1 Manrope,sans-serif',padding:'17px 34px',borderRadius:6,
+            cursor:'pointer',minHeight:48},
+          payTrackWrap:{display:F>=0?'block':'none',marginTop:4,padding:'16px 18px',
+            borderRadius:11,background:'var(--k-fafaf8)',border:'1px solid var(--k-eeede9)',maxWidth:360},
+          payStages:defs.map(([title,sub],i)=>{
+            const failedHere=stuck&&i===2;
+            const doneS=F>i;
+            const active=F===i&&!failedHere;
+            const col=failedHere?'var(--k-d8385a)':doneS?'var(--k-1f9d55)':active?'var(--k-e0a419)':'var(--k-d4d3ce)';
+            return {
+              dot:{width:19,height:19,borderRadius:'50%',flex:'none',
+                background:(doneS||failedHere)?col:'transparent',border:'2px solid '+col,
+                color:'#fff',font:'700 10.5px/16px Manrope,sans-serif',textAlign:'center'},
+              mark:failedHere?'\u2715':doneS?'\u2713':'',
+              rail:{width:2,flex:1,minHeight:12,background:doneS?'var(--k-1f9d55)':'var(--k-e6e5e0)'},
+              title:title,
+              titleStyle:{font:'700 12.5px/1.4 Manrope,sans-serif',
+                color:failedHere?'var(--k-fg-d8385a)':(doneS||active)?'var(--k-fg-14161a)':'var(--k-fg-a8a8a2)'},
+              sub:failedHere?'no PNR issued \u2014 the money never reached here'
+                :(doneS?sub:(active?'in progress\u2026':sub))};}),
+          payHolding:'Right now your money is with: '+(stuck?'the payment gateway'
+            :F>=3?'nobody \u2014 it has become your ticket'
+            :F>=2?'khaali, against your berths'
+            :F>=1?'the payment gateway':'your bank, on its way out'),
+          payHoldingStyle:{display:(F>=0&&!stuck)?'block':'none',marginTop:2,
+            font:'600 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-5a5f6a)'},
+          payStuckStyle:{display:stuck?'block':'none',marginTop:6,padding:'13px 15px',
+            borderRadius:9,background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)'},
+          payClaim:()=>{const a=(S.hold&&S.hold.amount)||0;
+            this.walletCredit(a,'Failed booking \u2014 refund claimed from the gateway');
+            this.setState({payFlight:-1,payStuck:false,
+              srvNote:'\u20b9'+money(a)+' claimed back to your wallet \u2014 in a real integration this files the bank dispute with the RBI reference attached.'});},
+        };})(),
       goBookings:()=>this.go('bookings'),
       goTicket:()=>{
-        if(S.holdId)return this.payHold();
+        if(S.holdId)return this.payWithStages();
         if(S.srvOn)return this.startHold();
         const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:nPax,dayIdx:S.dayIdx,
           picks:S.picks.slice(),pnr:'451'+String(7829063+S.dayIdx*13+S.seed+parseInt(tr.no)).slice(0,7),
