@@ -142,6 +142,23 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   /* readable on glass held at arm's length, not just on a monitor */
   .k-flowsub{font-size:11.5px!important;line-height:1.65!important}
   .k-mono{font-size:11px!important;line-height:1.75!important;word-break:break-word}
+
+  /* Saarthi never covers a primary action: a circle, lifted clear of any
+     fixed action bar, and always beneath it in z-order */
+  .k-chatfab{padding:0!important;width:52px;height:52px;justify-content:center;
+    right:14px!important;bottom:14px!important}
+  .k-chatfab span{display:none}
+  /* clear the bar by its real height, whatever the page puts in it */
+  body:has(.k-actionbar) .k-chatfab{bottom:calc(var(--k-barh,134px) + 14px)!important}
+
+  /* the swap belongs over the seam between the fields, not off the card */
+  .k-swap{justify-self:center!important;margin:-26px auto -26px!important}
+  .k-swap2{margin:-22px auto -22px!important}
+
+  /* a sliced label is worse than a short one */
+  .k-segchip{font-size:9px!important;letter-spacing:0!important}
+  /* the chart already scrolls sideways; give it room so labels read whole */
+  .k-chart{min-width:700px!important}
 }
 @media (max-width:1040px){
   .k-searchgrid{grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr)!important}
@@ -403,7 +420,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 </div>
 </sc-if>
 
-<div onClick="{{ toggleChat }}" style="{{ chatFab }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Ask Saarthi</span></div>
+<div class="k-chatfab" onClick="{{ toggleChat }}" style="{{ chatFab }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Ask Saarthi</span></div>
 <div style="{{ chatPanel }}">
   <div style="flex:none;background:var(--k-1a1e26);color:#f4efe6;padding:13px 16px;display:flex;align-items:center;gap:11px">
     <div style="position:relative;width:40px;height:40px;flex:none">
@@ -935,7 +952,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
         <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:9px">{{ packNote }}</div>
       </div>
       <div style="overflow-x:auto">
-        <div style="min-width:560px;position:relative;padding-bottom:4px">
+        <div class="k-chart" style="min-width:560px;position:relative;padding-bottom:4px">
           <div style="position:relative;height:20px;margin-left:30px">
             <sc-for list="{{ storyStations }}" as="ss" hint-placeholder-count="6">
               <span style="{{ ss.style }}">{{ ss.n }}</span>
@@ -1002,7 +1019,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   </div>
 
   <sc-if value="{{ hasPicks }}" hint-placeholder-val="{{ false }}">
-  <div style="position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--k-fff);border-top:1px solid var(--k-e6e5e0);box-shadow:0 -6px 24px rgba(16,19,25,.08)">
+  <div class="k-actionbar" style="position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--k-fff);border-top:1px solid var(--k-e6e5e0);box-shadow:0 -6px 24px rgba(16,19,25,.08)">
     <div style="max-width:1240px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
         <div style="font:700 15px/1.3 Manrope,sans-serif">{{ pickSummary }}</div>
@@ -3229,6 +3246,11 @@ class Component extends DCLogic {
     window.scrollTo(0,0);this.syncAv();}
   componentDidUpdate(){
     this.syncUrl();                              // catches every route change
+    // tell the CSS how tall the fixed action bar actually is, so the Saarthi
+    // button can sit clear of it instead of over the primary action
+    try{const bar=document.querySelector('.k-actionbar');
+      document.documentElement.style.setProperty('--k-barh',
+        (bar?Math.round(bar.getBoundingClientRect().height):0)+'px');}catch(e){}
     // If the current journey runs against the chosen train's direction, fix the
     // journey rather than showing an empty board: swap the stations when the
     // reverse works, otherwise ride the train's own corridor endpoints.
@@ -4260,7 +4282,7 @@ class Component extends DCLogic {
       chatKey:e=>{if(e.key==='Enter')this.sendChat();},
       sendChat:()=>this.sendChat(),
       chatQ:S.chatQ||'',
-      chatFab:{position:'fixed',right:22,bottom:22,zIndex:70,display:S.chatOpen?'none':'flex',
+      chatFab:{position:'fixed',right:22,bottom:22,zIndex:40,display:S.chatOpen?'none':'flex',
         alignItems:'center',gap:9,background:'var(--k-d8385a)',color:'#fff',
         font:'700 14px/1 Archivo,Manrope,sans-serif',padding:'15px 22px',borderRadius:999,
         cursor:'pointer',boxShadow:'0 10px 28px rgba(158,45,28,.35)'},
@@ -4680,6 +4702,7 @@ class Component extends DCLogic {
         const LV=[0,3,4,11],BD=[12,13,21,22];   // leavers end at Ramanagara; boarders start there
         const step=S.packStep||1;
         const col=i=>COL[i%COL.length];
+        const shortName=n2=>n2.length>11?n2.slice(0,9)+'\u2026':n2;
         const seg=(a,b,bg,txt,dash)=>({style:{position:'absolute',left:POS[a]+'%',
           width:(POS[b]-POS[a])+'%',top:0,bottom:0,borderRadius:6,
           background:dash?'rgba(31,157,85,.10)':bg,
@@ -4690,9 +4713,9 @@ class Component extends DCLogic {
         const rows=[];
         if(step===1){
           P.forEach((p,i)=>{const sg=[];
-            if(p[0]>0)sg.push(seg(0,p[0],null,'no one until '+STN[p[0]],true));
+            if(p[0]>0)sg.push(seg(0,p[0],null,'empty till '+shortName(STN[p[0]]),true));
             sg.push(seg(p[0],p[1],col(i)));
-            if(p[1]<5)sg.push(seg(p[1],5,null,'no one after '+STN[p[1]],true));
+            if(p[1]<5)sg.push(seg(p[1],5,null,'empty after '+shortName(STN[p[1]]),true));
             rows.push({n:i+1,segs:sg});});
         }else{
           const merged=LV.map((li,k)=>({li,bi:BD[k]}));
