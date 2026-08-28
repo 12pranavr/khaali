@@ -155,6 +155,19 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   .k-swap{justify-self:center!important;margin:-26px auto -26px!important}
   .k-swap2{margin:-22px auto -22px!important}
 
+  /* the header was a quarter of the screen before any content: the wordmark
+     keeps its name and loses its tagline, the seconds-clock steps aside, and
+     the bands tighten */
+  .k-brandsub{display:none}
+  /* the global search bar costs a whole band; the home hero and the results
+     bar both carry their own search, so on phones it stands down */
+  .k-hdrsearch{display:none!important}
+  .k-clockwrap{display:none!important}
+  .k-hdr{padding:9px 14px!important;gap:12px!important}
+  .k-hdrsearch{padding:8px 12px!important}
+  .k-nav{height:38px!important}
+  .k-burger{padding:7px 0!important}
+
   /* a sliced label is worse than a short one */
   .k-segchip{font-size:9px!important;letter-spacing:0!important}
   /* the chart already scrolls sideways; give it room so labels read whole */
@@ -234,7 +247,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   <div class="k-hdr" style="max-width:1240px;margin:0 auto;padding:13px 22px;display:flex;align-items:center;gap:22px">
     <div onClick="{{ goHome }}" style="cursor:pointer;flex:none;display:flex;flex-direction:column;gap:2px">
       <div style="font:800 24px/1 Manrope,sans-serif;letter-spacing:-.035em">khaali<span style="color:var(--k-fg-d8385a)">.</span></div>
-      <div style="font:500 8px/1 'IBM Plex Mono',monospace;letter-spacing:.15em;color:var(--k-fg-9a9a94);text-transform:uppercase">rail booking prototype</div>
+      <div class="k-brandsub" style="font:500 8px/1 'IBM Plex Mono',monospace;letter-spacing:.15em;color:var(--k-fg-9a9a94);text-transform:uppercase">rail booking prototype</div>
     </div>
     <div class="k-hdrsearch" style="position:relative;flex:1;max-width:560px">
       <div style="{{ searchBoxStyle }}">
@@ -271,7 +284,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           <div style="{{ bellEmpty }}">All clear \u2014 none of your \u2605 trains are cancelled in the next 7 days. Star a train to watch it here.</div>
         </div>
       </div>
-      <div style="{{ clockWrap }}">
+      <div class="k-clockwrap" style="{{ clockWrap }}">
         <div class="k-clocktime" style="{{ clockTime }}">{{ clockTimeText }}</div>
         <div class="k-clockdate" style="{{ clockDate }}">{{ clockDateText }} · <span style="{{ clockTag }}">{{ clockTagText }}</span></div>
       </div>
