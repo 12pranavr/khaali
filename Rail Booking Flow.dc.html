@@ -60,7 +60,7 @@ a{color:var(--k-fg-d8385a);text-decoration:none}a:hover{color:var(--k-fg-a71f3d)
   --k-fg-5a5f6a:#c9c4b8; --k-fg-6a6d75:#b3aea4; --k-fg-8a8a84:#98938b; --k-fg-9a9a94:#7c7871;
   --k-fg-a8a8a2:#6f6b64; --k-fg-b8b8b2:#5f5b55; --k-fg-c9c9c2:#4a4740;
   --k-fg-8b90a0:#aab3d9; --k-fg-9a9ea8:#c3cbe8; --k-fg-c8ccd4:#d5dbee; --k-fg-dfe3ea:#dfe3f2; --k-fg-c3c7d0:#c3cbe8;
-  --k-d8385a:#d4581e; --k-fg-d8385a:#f08a4e; --k-a71f3d:#b3480f; --k-fg-a71f3d:#f5a878;
+  --k-d8385a:#b8460f; --k-fg-d8385a:#f08a4e; --k-a71f3d:#b3480f; --k-fg-a71f3d:#f5a878;
   --k-e8455f:#e06a2e; --k-fdf3f5:#241811; --k-fff8f9:#241811; --k-e2ccd3:#3a2a1f;
   --k-fg-1f3f8f:#8fa2f0; --k-1f3f8f:#5563c8; --k-eaf0fd:#161c33;
   --k-fdf0e3:#241c10; --k-fg-8a4a12:#e8b45c;
@@ -1365,8 +1365,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
 <div style="max-width:1040px;margin:0 auto;padding:32px 22px 80px">
   <div style="margin-bottom:6px;font:600 11.5px/1 'IBM Plex Mono',monospace;letter-spacing:.26em;color:var(--k-fg-d8385a);text-transform:uppercase">Fair Tatkal &#183; a market-design demo</div>
   <h1 style="margin:0 0 8px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Take away the starting gun</h1>
-  <div style="font:500 13.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:54em;margin-bottom:10px">Tatkal opens at 10:00:00 and the fastest click wins &#8212; so booking bots win. At peak, Railways says up to 80% of Tatkal traffic is non-human. Identity checks inside the race slow down humans, not machines. The fix finance discovered for its own bot war: stop rewarding <b>first</b>. Collect a window, then allot everyone at once &#8212; all equal, all audited.</div>
-  <div style="font:600 13px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-bottom:18px">Below: the same morning, twice. {{ ftPeople }} real people and {{ ftAgents }} agent shops running {{ ftBots }} bot accounts, all wanting the same {{ ftBerths }} Tatkal berths.</div>
+  <div style="font:500 13.5px/1.7 Manrope,sans-serif;color:var(--k-fg-5a5f6a);max-width:54em;margin-bottom:10px">Tatkal opens at 10:00:00 and the fastest click wins, so bots win &#8212; Railways says up to 80% of peak Tatkal traffic is non-human. khaali removes the race instead of policing it: bookings collect in a window, then everyone is allotted at once.</div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;margin-bottom:26px">
     <div style="flex:1;min-width:300px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:12px;padding:20px 22px">
       <div style="font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-14663a);text-transform:uppercase;margin-bottom:10px">Live &#183; what the customer sees</div>
@@ -3391,14 +3390,20 @@ class Component extends DCLogic {
     const byDep=this.TRAINS.slice().sort((a,b)=>
       (this.sMin(a,this.stopIdxs(a)[0],'d')%1440)-(this.sMin(b,this.stopIdxs(b)[0],'d')%1440));
     const seeAll=p=>()=>this.go(p);
+    // A rail is a sample, not an inventory: twelve cards is about as far as
+    // anyone drags sideways, and See All carries the rest to a page built for
+    // browsing. Uncapped, these four rails rendered 235 cards and one of them
+    // ran thirty thousand pixels wide.
+    const RAIL=12;
     const rails=[
-      running.length?{title:'Running now through '+S.city,onSeeAll:seeAll('map'),cards:running.map(mkCard)}:null,
+      running.length?{title:'Running now through '+S.city,onSeeAll:seeAll('map'),
+        cards:running.slice(0,RAIL).map(mkCard)}:null,
       {title:'Seats wide open · book fast',onSeeAll:seeAll('results'),
-        cards:withFree.slice(0,24).map(o=>mkCard(o.x))},
+        cards:withFree.slice(0,RAIL).map(o=>mkCard(o.x))},
       {title:'Filling fast · few berths left',onSeeAll:seeAll('results'),
-        cards:withFree.slice(-24).reverse().map(o=>mkCard(o.x))},
+        cards:withFree.slice(-RAIL).reverse().map(o=>mkCard(o.x))},
       {title:'Every train on this corridor · '+this.TRAINS.length+' services',
-        onSeeAll:seeAll('showtimes'),cards:byDep.map(mkCard)}
+        onSeeAll:seeAll('showtimes'),cards:byDep.slice(0,RAIL).map(mkCard)}
     ].filter(r=>r&&r.cards.length);
     // no two neighbouring cards in a row may show the same photograph
     rails.forEach((rr,ri)=>{
