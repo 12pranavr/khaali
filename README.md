@@ -5,6 +5,11 @@
 A rail booking prototype for the Bangarpet to Mysuru corridor, built for the
 Build What Moves India hackathon.
 
+**Live: https://khaali-production.up.railway.app**
+
+Sign in with the demo account below. The scan-to-pay QR works on the deployed
+site, so you can open a booking on a laptop and settle it from your phone.
+
 ---
 
 ## The problem
@@ -51,6 +56,8 @@ npm install && npm start
 
 Then open the printed `http://192.168.x.x:5173` address. Use the LAN address
 rather than `localhost` if you want to test the scan-to-pay flow from a phone.
+
+If you only want to look at it, the deployed site above needs none of this.
 
 Tests:
 
