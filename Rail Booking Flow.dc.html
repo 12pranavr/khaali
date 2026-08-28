@@ -179,6 +179,13 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   .k-heroform .k-stnwrap input{width:100%!important;min-width:0!important;box-sizing:border-box}
   .k-heroform>.k-searchbtn{text-align:center}
 
+  /* stacked on a phone, the checkout's panes each scrolled inside a card
+     that clipped them - so the methods below the fold were unreachable.
+     The card scrolls as one sheet instead. */
+  .k-checkout{max-height:calc(100vh - 24px)!important;overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch}
+  .k-checkout [data-copane]{max-height:none!important;overflow:visible!important}
+
   /* the swap is a control, not a seam artefact: solid face, clear ring */
   .k-swap,.k-swap2{background:var(--k-fff)!important;
     box-shadow:0 0 0 4px var(--k-fff),0 4px 14px rgba(16,19,25,.22)!important}
@@ -1428,8 +1435,8 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       </div>
       <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:12px">{{ tkMonthLine }}</div>
       <div style="{{ tkCheckoutWrap }}">
-        <div style="width:min(960px,96vw);max-height:calc(100vh - 32px);overflow:hidden;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-wrap:wrap;background:var(--k-fff)">
-          <div style="flex:1 1 320px;min-width:300px;background:var(--k-14161a);color:#fff;padding:24px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto">
+        <div class="k-checkout" style="width:min(960px,96vw);max-height:calc(100vh - 32px);overflow:hidden;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-wrap:wrap;background:var(--k-fff)">
+          <div style="flex:1 1 320px;min-width:300px;background:var(--k-14161a);color:#fff;padding:24px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto" data-copane="1">
             <div style="display:flex;align-items:baseline;margin-bottom:3px">
               <div style="font:700 15px/1.2 Manrope,sans-serif">khaali</div>
               <div style="margin-left:auto;font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#7fe3ae;border:1px solid #1f9d55;border-radius:999px;padding:5px 9px">SIMULATED</div>
@@ -1455,7 +1462,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
               <button onClick="{{ tkClaim }}" style="margin-top:11px;border:none;background:#1f9d55;color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 16px;border-radius:7px;cursor:pointer;min-height:42px">Claim it back now &#8594;</button>
             </div>
           </div>
-          <div style="flex:1 1 380px;min-width:300px;background:var(--k-fff);padding:22px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto">
+          <div style="flex:1 1 380px;min-width:300px;background:var(--k-fff);padding:22px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto" data-copane="1">
             <div style="display:flex;align-items:center;margin-bottom:16px">
               <div>
                 <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount payable</div>
