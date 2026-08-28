@@ -129,6 +129,15 @@ async function load() {
 
 function done(pnr) {
   stop();
+  if (pnr === 'TQ-ENTRY') {
+    $('#panel').innerHTML = `<div class="banner ok">Payment received. Tatkal entry confirmed.</div>
+      <h2 style="margin:10px 0 4px">You are in the window</h2>
+      <div class="muted">Your berth is allotted when the window closes \u2014 watch the Fair Tatkal page.
+      Not allotted means an instant full refund.</div>
+      <a class="btn" href="/fair-tatkal" style="display:block;text-align:center;margin-top:14px;
+        text-decoration:none">Back to Fair Tatkal</a>`;
+    return;
+  }
   $('#panel').innerHTML = `<div class="banner ok">Payment received. Booking confirmed.</div>
     <h2 style="margin:10px 0 4px">PNR ${pnr}</h2>
     <div class="muted">These berths are now yours. Everyone else sees them as taken.</div>

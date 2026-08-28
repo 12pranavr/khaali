@@ -2226,7 +2226,8 @@ class Component extends DCLogic {
   }
   tkStartClock(){
     clearInterval(this._tkc);
-    this.setState({tkDeadline:Date.now()+300000});
+    if(!this.state.tkDeadline||this.state.tkDeadline<Date.now())
+      this.setState({tkDeadline:Date.now()+300000});
     this._tkc=setInterval(()=>{
       const S=this.state;
       if(!S.tkModal||S.tkStep!=='pay'){clearInterval(this._tkc);this._tkc=null;return;}
@@ -2271,13 +2272,17 @@ class Component extends DCLogic {
       if(this.wallet().bal<fare)this.walletCredit(fare,'Demo top-up for Tatkal payment');
       this.walletDebit(fare,'Tatkal entry \u2014 paid, held until allotment');
     }
-    const label={wallet:'khaali wallet',upi:'UPI',card:'card'}[method]||'wallet';
+    const label={wallet:'khaali wallet',upi:'UPI',card:'card',netbanking:'bank account'}[method]||'wallet';
     try{localStorage.setItem('khaali-tklock',
       JSON.stringify({round:T.id,amt:fare,settled:false,method:method,label:label}));}catch(e){}
     if(!keepOpen)this.setState({tkModal:false,tkStep:'details',tkPin:'',tkCard:''});
-    (async()=>{try{await this.tfetch('/api/tatkal/enter',{method:'POST',
-      headers:{'content-type':'application/json'},
-      body:JSON.stringify({who,paid:true,name:nm})},6000);}catch(e){}
+    // the session is the single source of truth: paying it creates the entry
+    (async()=>{try{
+      if(S.tkPayId)await this.tfetch('/api/pay/'+S.tkPayId,{method:'POST'},8000);
+      else await this.tfetch('/api/tatkal/enter',{method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({who,paid:true,name:nm})},6000);
+    }catch(e){}
       this.loadTk(true);})();
   }
   async loadTk(force){
@@ -2288,6 +2293,13 @@ class Component extends DCLogic {
       const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
       const j=await this.tfetch('/api/tatkal/state?who='+encodeURIComponent(who),null,6000).then(r=>r.json());
       this.setState({tk:j});
+      // paid from the scanned phone: close the checkout on this screen too
+      if(this.state.tkModal&&this.state.tkStep==='pay'&&j.customer&&j.customer.entered){
+        clearInterval(this._tkc);this._tkc=null;
+        try{if(!localStorage.getItem('khaali-tklock')||JSON.parse(localStorage.getItem('khaali-tklock')).round!==j.id)
+          localStorage.setItem('khaali-tklock',JSON.stringify({round:j.id,amt:175,settled:false,method:'upi',label:'UPI'}));}catch(e){}
+        this.setState({tkModal:false,tkStep:'details',tkDeadline:0,tkFlight:-1,tkPin:''});
+      }
       // settle the fare lock exactly once per round, the moment allotment runs
       try{
         const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
@@ -4693,12 +4705,20 @@ class Component extends DCLogic {
           tkDep:this.toHHMM(this.sMin(tkTr,0,'d')),tkArr:this.toHHMM(this.sMin(tkTr,13,'a')),
           tkFare:'\u20b9'+tkFareN,
           tkEnter:()=>{if(!(open&&!me.entered))return;
-            // signed in already: the profile knows the name, so go to money
             const pre=this.paxNamesFor(1)[0];
-            this.setState({tkModal:true,tkStep:'pay',tkPayErr:null,tkPin:'',
-              tkFlight:-1,tkFail:false,tkStuck:false,
-              tkName:String(S.tkName||'').trim()||(pre==='Passenger 1'?'Traveller':pre)},
-              ()=>this.tkStartClock());},
+            const nm=String(S.tkName||'').trim()||(pre==='Passenger 1'?'Traveller':pre);
+            // a real payment session on the server: its id is what the QR
+            // encodes, so a phone that scans it lands on the same live bill
+            (async()=>{
+              let sid=null,ms=300000;
+              try{const r=await this.tfetch('/api/tatkal/paysession',{method:'POST',
+                headers:{'content-type':'application/json'},
+                body:JSON.stringify({who,name:nm})},6000);
+                const j=await r.json();if(r.ok&&j.ok){sid=j.payId;ms=j.msLeft||300000;}}catch(e){}
+              this.setState({tkModal:true,tkStep:'pay',tkPayErr:null,tkPin:'',
+                tkFlight:-1,tkFail:false,tkStuck:false,tkPayId:sid,
+                tkDeadline:Date.now()+ms,tkName:nm},()=>this.tkStartClock());
+            })();},
           tkModalWrap:{display:(S.tkModal&&S.tkStep==='details'&&open&&!me.entered)?'flex':'none',
             position:'fixed',inset:0,zIndex:140,background:'rgba(20,16,10,.55)',
             alignItems:'center',justifyContent:'center',padding:20},
@@ -4820,8 +4840,9 @@ class Component extends DCLogic {
             color:S.tkPayBusy?'var(--k-fg-8a8a84)':'#fff',
             font:'700 15px/1 Manrope,sans-serif',padding:16,borderRadius:9,
             cursor:S.tkPayBusy?'default':'pointer',minHeight:50},
-          tkQrSrc:'/api/qr?d='+encodeURIComponent('upi://pay?pa=khaali@demo&pn=khaali%20rail&am='
-            +tkFareN+'&cu=INR&tn=Tatkal%2016021'),
+          tkQrSrc:S.tkPayId
+            ?('/api/qr?d='+encodeURIComponent((S.lanBase||location.origin)+'/pay/'+S.tkPayId))
+            :'',
           ...(()=>{const left=Math.max(0,Math.round(((S.tkDeadline||0)-Date.now())/1000));
             const mm=Math.floor(left/60),ss=String(left%60).padStart(2,'0');
             return {

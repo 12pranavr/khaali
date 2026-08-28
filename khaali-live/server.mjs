@@ -499,6 +499,21 @@ async function api(req, res, url) {
       R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now() });
       return send(res, 200, { ok: true, chit: R.sim.humans + R.real.length });
     }
+    if (p === '/api/tatkal/paysession' && req.method === 'POST') {
+      let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+      const R = G.round;
+      if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
+      const who = String(b.who || 'guest').slice(0, 80);
+      if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one entry per person per round' });
+      if ((G.month.get(who) || 0) >= 4) return send(res, 409, { error: 'four Tatkal entries per month \u2014 all used' });
+      if (!G.pays) G.pays = new Map();
+      let sid = '';
+      for (let i = 0; i < 18; i++) sid += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+      G.pays.set(sid, { id: sid, who, name: String(b.name || 'Traveller').slice(0, 60),
+        round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending' });
+      return send(res, 200, { ok: true, payId: sid, amount: 175, msLeft: 300000 });
+    }
+
     if (p === '/api/tatkal/draw' && req.method === 'POST') {
       const R = G.round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'no open window' });
@@ -617,6 +632,20 @@ async function api(req, res, url) {
 
   const mHold = p.match(/^\/api\/hold\/([a-f0-9]+)$/);
   if (mHold) {
+    // a Tatkal payment session answers the same protocol pay.html speaks,
+    // minus the berths - the seat does not exist until allotment
+    const tq = global.__tk && global.__tk.pays && global.__tk.pays.get(mHold[1]);
+    if (tq) {
+      if (req.method === 'DELETE') { tq.status = 'cancelled'; return send(res, 200, { ok: true }); }
+      const msLeft = Math.max(0, tq.expiresAt - Date.now());
+      return send(res, 200, {
+        id: tq.id, status: tq.status === 'pending' && msLeft <= 0 ? 'expired' : tq.status,
+        msLeft, amount: tq.amount, fees: 0, fullPrice: tq.amount,
+        train: '16021 \u00b7 Tatkal entry', from: 0, to: 13, pax: 1,
+        journeyKm: journeyKm(0, 13), berths: [], tatkal: true,
+        pnr: tq.status === 'paid' ? 'TQ-ENTRY' : undefined,
+      });
+    }
     if (req.method === 'DELETE') return send(res, 200, store.release(mHold[1]));
     const h = store.getHold(mHold[1]);
     return h ? send(res, 200, h) : send(res, 404, { error: 'unknown hold' });
@@ -624,6 +653,18 @@ async function api(req, res, url) {
 
   const mPay = p.match(/^\/api\/pay\/([a-f0-9]+)$/);
   if (mPay && req.method === 'POST') {
+    const tq = global.__tk && global.__tk.pays && global.__tk.pays.get(mPay[1]);
+    if (tq) {
+      if (tq.status === 'paid') return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
+      if (tq.status !== 'pending' || Date.now() > tq.expiresAt)
+        return send(res, 410, { error: 'payment session expired \u2014 nothing was charged' });
+      const G2 = global.__tk, R = G2.round;
+      if (!R || R.state !== 'open' || R.id !== tq.round)
+        return send(res, 409, { error: 'the window closed before payment \u2014 nothing was charged' });
+      tq.status = 'paid';
+      if (!R.real.some(e => e.who === tq.who)) R.real.push({ who: tq.who, name: tq.name, at: Date.now() });
+      return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
+    }
     const h = store.getHold(mPay[1]);
     if (!h) return send(res, 404, { error: 'unknown hold' });
     if (h.msLeft <= 0) return send(res, 410, { error: 'expired' });
