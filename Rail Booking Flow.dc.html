@@ -162,6 +162,26 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
   /* the global search bar costs a whole band; the home hero and the results
      bar both carry their own search, so on phones it stands down */
   .k-hdrsearch{display:none!important}
+
+  /* a panel with a hard-coded width, anchored to a control in the middle of
+     the header, walks straight off a narrow screen - so it spans instead */
+  .k-dropdown{position:fixed!important;left:10px!important;right:10px!important;
+    top:auto!important;width:auto!important;max-width:none!important;
+    max-height:min(62vh,460px)!important;z-index:120!important}
+
+  /* the hero form stacked to three different widths inside one card, which
+     is what reads as "sizes not matching" - every control now fills it */
+  /* 40px of desktop padding on a 312px panel left a third of the card empty */
+  .k-heroruled{padding:22px 18px 24px!important}
+  .k-heroform{gap:10px!important}
+  .k-heroform>.k-stnwrap,.k-heroform>.k-calwrap,.k-heroform>.k-searchbtn{
+    flex:1 1 100%!important;width:100%!important;min-width:0!important}
+  .k-heroform .k-stnwrap input{width:100%!important;min-width:0!important;box-sizing:border-box}
+  .k-heroform>.k-searchbtn{text-align:center}
+
+  /* the swap is a control, not a seam artefact: solid face, clear ring */
+  .k-swap,.k-swap2{background:var(--k-fff)!important;
+    box-shadow:0 0 0 4px var(--k-fff),0 4px 14px rgba(16,19,25,.22)!important}
   .k-clockwrap{display:none!important}
   .k-hdr{padding:9px 14px!important;gap:12px!important}
   .k-hdrsearch{padding:8px 12px!important}
@@ -273,7 +293,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       <div onClick="{{ goWallet }}" title="khaali wallet" style="{{ walletChip }}">&#8377;{{ walletBal }}</div>
       <div style="position:relative;flex:none">
         <div onClick="{{ toggleBell }}" style="{{ bellBtn }}">&#128276;<span style="{{ bellBadge }}">{{ bellCount }}</span></div>
-        <div style="{{ bellPanel }}">
+        <div class="k-dropdown" style="{{ bellPanel }}">
           <div style="font:700 13px/1.3 Manrope,sans-serif;padding:14px 16px 10px;border-bottom:1px solid var(--k-f0efeb)">Service alerts \u00b7 your favourites</div>
           <sc-for list="{{ bellItems }}" as="a" hint-placeholder-count="3">
             <div onClick="{{ a.onClick }}" style="padding:11px 16px;border-bottom:1px solid var(--k-f7f6f3);cursor:pointer">
