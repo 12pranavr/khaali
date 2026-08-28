@@ -1,98 +1,104 @@
 # khaali - 2 minute demo script
 
-Around 345 words of voiceover, which is tight for two minutes. Screen
-directions in italics.
+Presenter-led. Around 320 words of speech, which fits two minutes at a normal
+pace. Screen directions in italics.
 
-## 0:00 - 0:15 - problem, part one
+## 0:00 - 0:24 - on camera
 
-> At ten in the morning, up to eighty percent of the traffic hitting Tatkal is
-> not human. That's IRCTC's own figure. They've blocked more than two and a
-> half crore fake accounts and it still happens. You were never slow. You were
-> queuing behind software.
-
-*The 10:00 stampede, requests flooding in.*
-
-## 0:15 - 0:28 - problem, part two
-
-> On those same trains, berths ride empty. Not unsold ones. A berth booked
-> Bengaluru to Mysuru belongs to nobody after Mysuru, and it still isn't for
-> sale.
-
-*Cut to a coach with dashed amber berths.*
-
-## 0:28 - 0:40 - Saarthi
-
-> khaali handles both. You can just ask it, in whatever language you actually
-> speak, in whatever spelling you actually use.
-
-*Speak to Saarthi in Kannada or Hindi. Show it resolving Bengaluru correctly.*
-
-## 0:40 - 0:58 - the seat map
-
-> 16021 Kaveri Express tonight. Green is free your whole way. Dashed amber is
-> free for your stretch only, because someone boards after you get off. This
-> train has 215 berths in that second category. That's the inventory nobody
-> currently offers you.
-
-*Scroll the coach, hover a dashed berth to show its label.*
-
-## 0:58 - 1:20 - Fair Tatkal
-
-> Tatkal we rebuilt as a window instead of a race. Everyone who enters pays
-> the same locked fare. One entry per verified identity, four a month. In this
-> run, three bot farms fired thousands of requests and came out of it holding
-> twelve entries between them. Then the berths get allotted.
-
-*Split view, the bot traffic collapsing into 12 standing entries.*
-
-## 1:20 - 1:36 - where the AI sits
-
-> Then Sentinel scores every entrant on six signals: when they arrived, how
-> hard they hit, how many accounts sit behind one origin, whether one card is
-> settling several identities, how much they did in the app, and how regular
-> their timing was. The farms come out at nought point nine five. I come out
-> at nought point nought four. It weights them down without ever blocking a
-> person.
+> Every day, people open IRCTC with the same hope. I just need one ticket.
 >
-> The weights are printed right there. You can redo the arithmetic by hand.
+> But at ten in the morning, Tatkal is a race against bots. By IRCTC's own
+> figures, up to eighty percent of that traffic is not human. Money gets
+> deducted and you are left unsure whether you have a ticket or a refund
+> coming. And a berth that empties halfway down the route still isn't for sale
+> to the next person who needs it.
+>
+> Hi, I'm Pranav, and I'm building khaali for that.
+>
+> Three things: make the race fair, make the money clear, and sell the space
+> that is already empty.
+>
+> Let me show you.
 
-*The Sentinel panel: the three farms flagged, your own row cleared, and the
-per-signal contributions under each.*
+## 0:24 - 0:32 - homepage
 
-## 1:30 - 1:42 - the money tracker
+> A traveller starts by choosing the exact stretch they need. Not the train's
+> final destination. Their stretch.
 
-> While you're paying, this shows where your money actually is. Your bank,
-> then the gateway, then us, then the railway. If it sticks somewhere, it
-> names which one is holding it.
+*Pick the two stations and search.*
 
-*The four stages ticking over, then the stuck state.*
+## 0:32 - 0:58 - berth selection
 
-## 1:42 - 1:53 - auto refund
+> khaali checks availability station by station. If somebody gets off earlier,
+> that berth becomes available to the next traveller.
+>
+> Green is free your whole way. Amber opens up partway, and it's priced only
+> for the part you actually use. When nothing covers you end to end, khaali
+> stitches two half-empty berths into one ticket and tells you exactly where
+> you change.
+>
+> On this train tonight, that's 215 berths nobody is currently allowed to sell
+> you.
 
-> If you aren't allotted a berth, the money is in your wallet before you've
-> closed the screen. Same if the train is cancelled, or runs more than three
-> hours late, or if you booked twice by accident.
+*Scroll the coach. Hover an amber berth so its handover station shows. If you
+have time, open Seat hop for one beat.*
 
-*Refund lands, wallet balance updates.*
+## 0:58 - 1:24 - Fair Tatkal
 
-## 1:53 - 2:00 - close
+> Now Tatkal. Today it is a speed race. khaali makes it a verified window
+> instead, so nobody wins by clicking first.
+>
+> Then we score how each entry arrived. Impossible booking speed, repeated
+> request patterns, bulk account activity. These three farms come out at nought
+> point nine five. I come out at nought point nought four.
+>
+> The weights are printed right there, so you can check the arithmetic
+> yourself. And it never blocks a genuine traveller. The worst it does is count
+> you as one person, entering once. What it removes is the bulk advantage.
 
-> And then you're back here, with that balance, buying one of the berths that
-> was going to travel empty anyway.
+*Open the window, close it, and let the Sentinel panel land. Your own row sits
+above the three farms.*
 
-*Back to the coach map, tap a dashed berth, ticket issues. End card with the
-demo login.*
+## 1:24 - 1:42 - Saarthi
 
-## Notes before you record
+> This is Saarthi, our multilingual assistant. A traveller just says it: I need
+> to go from Bengaluru to Mysuru tomorrow evening. It searches, explains the
+> waitlist, and answers in the same language they asked in.
 
-If you run long, shorten the Saarthi beat at 0:28. The voice input is visible
-on screen without narration.
+*Speak to it. Kannada or Hindi lands better than English here.*
 
-Load your actual demo train and date first and swap in the real berth count.
-The 215 figure is seeded per train per date.
+## 1:42 - 1:56 - money
 
-Record the QR scan in one unbroken take with both phones in frame if you use
-it. That's the beat people assume is faked.
+> And after you pay, khaali says plainly where your money is. Your bank, the
+> gateway, us, or the railway. If it sticks, it names who is holding it. If no
+> berth comes, the refund is back in your wallet before you have closed the
+> screen.
+
+*The four-stage tracker, then the refund landing in the wallet.*
+
+## 1:56 - 2:00 - close
+
+> khaali does not create more trains. It makes the journey fairer for the
+> people already trying to travel.
+
+*End card with the demo login.*
+
+## Before you record
+
+Load your actual demo train and date first. The 215 figure is seeded per train
+per date, and the three farm scores shift slightly each round, so read the real
+numbers off the screen.
+
+Run one Tatkal round and reset it before you roll, so the window opens clean
+rather than showing a finished result.
+
+The deployed site sleeps when idle. Open it once so the instance is warm.
+
+If you use the scan-to-pay QR, record it in one unbroken take with both phones
+in frame. That is the beat people assume is faked.
+
+If you run long, the Saarthi beat at 1:24 is the one to shorten. The voice
+input is visible on screen without narration.
 
 ## Numbers, and what is behind them
 
@@ -100,34 +106,33 @@ Verified and safe to say on camera:
 
 - Up to 80 percent of peak Tatkal traffic is non-human, per IRCTC's own data.
 - More than 2.5 crore fake IRCTC accounts blocked or deactivated. One report
-  puts the figure at 30 million suspicious IDs for 2025-26.
+  puts it at 30 million suspicious IDs for 2025-26.
 - Aadhaar OTP authentication became mandatory for Tatkal in July 2025, and
   agents are barred from the first 30 minutes of the window.
 
 Not verified, do not put a figure on screen:
 
 - There is no citable national statistic for how many reserved berths travel
-  empty. Searches for a CAG audit turned up nothing usable. Use khaali's own
-  on-screen count instead, which a judge can see behind you.
+  empty. Use khaali's own on-screen count instead, which a judge can see behind
+  you.
 
 Safe to claim about the AI, and worth getting the order right:
 
-- Bot filtering is Sentinel, a logistic model over six behavioural signals
-  with published weights, in `khaali-live/sentinel.mjs`. It is not an LLM, and
-  saying so is the point: every score can be recomputed by hand.
-- It sits ON TOP of the arithmetic floor (one entry per verified identity,
-  four a month). Say the floor first, then the model. A model with no
-  auditable floor underneath is the thing khaali argues against.
-- It can weight an entry down. It can never block a person. The worst case for
-  a real traveller is being counted as one person entering once.
-- OpenAI writes prose only. It never touches a price, a probability, an
-  allotment, or a Sentinel score.
+- Bot filtering is Sentinel, a logistic model over six behavioural signals with
+  published weights, in `khaali-live/sentinel.mjs`. It is not an LLM, and saying
+  so is the point: every score can be recomputed by hand.
+- It sits on top of the arithmetic floor: one entry per verified identity, four
+  a month. Say the floor first, then the model. A model with no auditable floor
+  underneath is the thing khaali argues against.
+- It can weight an entry down. It can never block a person.
+- Sarvam powers Saarthi's speech. OpenAI writes prose only, and never touches a
+  price, a probability, an allotment, or a Sentinel score.
 
 Do not claim:
 
 - Sentinel is not trained on real labelled traffic. The weights are hand-set
-  from reasoning about each signal and published so they can be argued with.
-  If asked, say that plainly.
+  from reasoning about each signal and published so they can be argued with. If
+  asked, say that plainly.
 
 Sources:
 
