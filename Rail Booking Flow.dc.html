@@ -2208,6 +2208,22 @@ class Component extends DCLogic {
     });
   }
   /** The gateway's own five-minute window, ticking once a second. */
+  /** An allotted Tatkal entry is already paid for: hold the berth the draw
+      gave it, settle that hold against the fare taken at entry, and print
+      the ticket. No second payment, ever. */
+  async tkIssueTicket(berthIdx){
+    const b=this.berths('SL','16021')[berthIdx];
+    if(!b)return;
+    this._c={};
+    const st=this.stateOf(b,0,13);
+    await new Promise(done2=>this.setState({train:'16021',cls:'SL',allCls:false,
+      from:0,to:13,dayIdx:1,pax:1,
+      picks:[{key:b.coach+'-'+b.no,idx:b.idx,no:b.no,coach:b.coach,type:b.type,k:st.k,at:st.at}],
+      page:'confirm',routeOpen:true,classModal:false,srvNote:null},done2));
+    window.scrollTo(0,0);
+    await this.startHold();
+    if(this.state.holdId)await this.payHold();          // the entry fare covers it
+  }
   tkStartClock(){
     clearInterval(this._tkc);
     this.setState({tkDeadline:Date.now()+300000});
@@ -2278,9 +2294,8 @@ class Component extends DCLogic {
         if(L&&!L.settled&&j.phase==='done'&&j.id===L.round){
           const won=!!(j.customer&&j.customer.won);
           const via=L.label||'khaali wallet';
-          if(L.method==='wallet'||!L.method){
-            this.walletCredit(L.amt,won?'Tatkal allotted \u2014 payment released toward the ticket'
-              :'Tatkal not allotted \u2014 fare refunded instantly');
+          if((L.method==='wallet'||!L.method)&&!won){
+            this.walletCredit(L.amt,'Tatkal not allotted \u2014 fare refunded instantly');
           }
           // UPI and card refunds return to the source, so the wallet ledger
           // stays out of it - the status line says where the money went
@@ -4890,17 +4905,10 @@ class Component extends DCLogic {
           tkWinStyle:{display:(doneP&&me.won)?'block':'none',marginTop:8,padding:'14px 16px',
             borderRadius:10,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-1f9d55)'},
           tkWinHead:tkB?('Berth '+tkB.coach+'/'+tkB.no+' \u00b7 '+this.typeName(tkB.type)+' \u00b7 tomorrow\u2019s 16021'):'Berth allotted',
-          tkWinSub:'Your booking was allotted a real berth. Pay within 5 minutes and the ticket is yours \u2014 same as any khaali booking.',
-          tkPay:()=>{if(me.berthIdx==null)return;
-            const b=this.berths('SL','16021')[me.berthIdx];
-            if(!b)return;
-            this._c={};
-            const st=this.stateOf(b,0,13);
-            this.setState({train:'16021',cls:'SL',allCls:false,from:0,to:13,dayIdx:1,pax:1,
-              picks:[{key:b.coach+'-'+b.no,idx:b.idx,no:b.no,coach:b.coach,type:b.type,k:st.k,at:st.at}],
-              page:'confirm',routeOpen:true,classModal:false},()=>this.startHold());
-            window.scrollTo(0,0);},
-          tkPayLabel:'Continue to payment \u2192',
+          tkWinSub:'Your booking was allotted a real berth. The \u20b9'+tkFareN
+            +' you paid to enter covers this ticket \u2014 there is nothing more to pay.',
+          tkPay:()=>{if(me.berthIdx==null)return;this.tkIssueTicket(me.berthIdx);},
+          tkPayLabel:'Get my ticket \u2192',
           tkPayStyle:{border:'none',background:'var(--k-1f9d55)',color:'#fff',
             font:'700 13px/1 Manrope,sans-serif',padding:'12px 18px',borderRadius:7,
             cursor:'pointer',minHeight:42},
