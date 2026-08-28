@@ -1,13 +1,13 @@
-Indian Railways sells a berth as one indivisible thing for the whole run. A berth booked Bangarpet to Bengaluru rides the remaining 138 km to Mysuru empty, while someone at Maddur sees WAITLISTED. khaali sells that emptiness.
+Indian Railways sells a berth as one indivisible thing. A berth booked Bangarpet to Bengaluru rides the remaining 138 km to Mysuru empty, while someone at Maddur sees WAITLISTED. khaali sells that emptiness.
 
-Every berth is an interval: fourteen stations, thirteen legs, a thirteen-bit occupancy mask. Availability for your two stations is one bitwise AND. Green is free your whole way. Amber frees up en route and costs only the stretch it covers, priced by distance. When no single berth covers you, seat-hop stitches two half-empty berths into one ticket: same train, one berth change.
+Every berth is an interval: fourteen stations, thirteen legs, a thirteen-bit mask, and availability is one bitwise AND. Green is free your whole way. Amber frees up en route and costs only the stretch it covers. When no berth covers you, seat-hop stitches two half-empty ones into one ticket on the same train.
 
-Waitlist odds stay honest: GNWL, RLWL and TQWL from boarding geometry, RAC as its own outcome, no model in the number.
+Waitlist odds stay honest: quota type from boarding geometry, RAC as its own outcome, no model in the number.
 
-Fair Tatkal replaces the 10 a.m. race with a window. Same locked fare for everyone, one entry per verified identity, four a month, and only a win consumes a slot, so losing costs nothing. Sentinel scores how each entry arrived on six published signals, including arrival time, requests per origin and accounts per card. It is a logistic model, not an LLM: every score is recomputable by hand from the weights on screen. It strips bulk buying and never blocks a person.
+Fair Tatkal replaces the 10 a.m. race with a window. One locked fare, one entry per verified identity, four a month, and only a win consumes a slot. Sentinel scores how each entry arrived on six published signals, including arrival time and accounts per card. A logistic model, not an LLM, so every score is recomputable by hand from the weights on screen. It strips bulk buying and never blocks a person.
 
-The payment tracker names who is holding your money. Refunds reach the wallet automatically on non-allotment, cancellation, three-hour delays and duplicates.
+Saarthi, built on Sarvam AI, runs all of it by voice: ask in Kannada, Hindi or Tamil, and it answers in the same script and checks cancellations and PNRs.
 
-GapSeat and RailChart surface vacant berths only after charting, four hours before departure. khaali sells the same emptiness sixty days earlier.
+khaali finds the seat; AI protects how it is handed out. Sarvam does language, Sentinel does behaviour, neither decides a price or an allotment.
 
-Locking is compare-and-swap. 33 tests pass.
+The payment tracker names who holds your money, and refunds reach the wallet on non-allotment, cancellation, delays and duplicates.
