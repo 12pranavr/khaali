@@ -1337,15 +1337,43 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
           </div>
           <div style="font:600 20px/1.2 'Cormorant Garamond',Georgia,serif;margin-bottom:3px">Kaveri Express &#183; 16021</div>
           <div style="font:400 11.5px/1.6 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-bottom:16px">{{ tkDateLine }} &#183; {{ tkDep }} Bangarpet &#8594; {{ tkArr }} Mysuru &#183; Sleeper</div>
-          <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Passenger name &#183; as on ID</div>
-          <input value="{{ tkName }}" onChange="{{ setTkName }}" placeholder="Who is travelling?" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 14px"></input>
-          <div style="border:1px solid var(--k-e6e5e0);border-radius:9px;padding:13px 15px;margin-bottom:14px;background:var(--k-fafaf8)">
-            <div style="display:flex;font:600 12.5px/1.6 Manrope,sans-serif"><span>Tatkal fare</span><span style="margin-left:auto">{{ tkFare }}</span></div>
-            <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Locks from your wallet now &#183; refunded instantly if you are not allotted</div>
-            <div style="font:600 11px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin-top:2px">{{ tkWalletLine }}</div>
+          <div style="{{ tkStepDetails }}">
+            <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Passenger name &#183; as on ID</div>
+            <input value="{{ tkName }}" onChange="{{ setTkName }}" placeholder="Who is travelling?" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 14px"></input>
+            <div style="border:1px solid var(--k-e6e5e0);border-radius:9px;padding:13px 15px;margin-bottom:14px;background:var(--k-fafaf8)">
+              <div style="display:flex;font:600 12.5px/1.6 Manrope,sans-serif"><span>Tatkal fare</span><span style="margin-left:auto">{{ tkFare }}</span></div>
+              <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Paid now to enter &#183; refunded to the same method the instant you are not allotted</div>
+            </div>
+            <button onClick="{{ tkToPay }}" style="width:100%;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">Continue to payment &#8594;</button>
           </div>
-          <button onClick="{{ tkConfirmEnter }}" style="width:100%;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">Lock {{ tkFare }} &amp; book</button>
-          <div style="margin-top:11px;text-align:center;font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84)">Allotment runs when the window closes &#8212; booking faster changes nothing.</div>
+          <div style="{{ tkStepPay }}">
+            <div style="display:flex;align-items:baseline;margin-bottom:12px">
+              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount payable</div>
+              <div style="margin-left:auto;font:700 20px/1 Manrope,sans-serif">{{ tkFare }}</div>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px">
+              <sc-for list="{{ tkMethods }}" as="m" hint-placeholder-count="3">
+                <div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</div>
+              </sc-for>
+            </div>
+            <div style="{{ tkWalletPane }}">
+              <div style="font:600 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin-bottom:8px">{{ tkWalletLine }}</div>
+              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">6-digit wallet PIN</div>
+              <input type="password" inputmode="numeric" value="{{ tkPin }}" onChange="{{ setTkPin }}" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" style="width:170px;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:700 18px/1 'IBM Plex Mono',monospace;letter-spacing:.34em;text-align:center;outline:none;margin-top:6px"></input>
+            </div>
+            <div style="{{ tkUpiPane }}">
+              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">UPI ID</div>
+              <input value="{{ tkUpi }}" onChange="{{ setTkUpi }}" placeholder="yourname@bank" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin-top:6px"></input>
+            </div>
+            <div style="{{ tkCardPane }}">
+              <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Card number &#183; test card only</div>
+              <input inputmode="numeric" value="{{ tkCard }}" onChange="{{ setTkCard }}" placeholder="4111 1111 1111 1111" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 14px/1.3 'IBM Plex Mono',monospace;outline:none;margin-top:6px"></input>
+            </div>
+            <div style="{{ tkPayErrStyle }}">{{ tkPayErr }}</div>
+            <button onClick="{{ tkPayNow }}" style="{{ tkPayNowStyle }}">{{ tkPayNowLabel }}</button>
+            <div onClick="{{ tkBackToDetails }}" style="{{ tkBackStyle }}">&#8592; Back to details</div>
+            <div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb);font:500 10.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);text-align:center">Simulated gateway &#183; no real money moves. Your seat is locked only after payment succeeds &#8212; and refunded to this same method if you are not allotted.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1927,7 +1955,7 @@ class Component extends DCLogic {
   state = {page:'home',from:5,to:11,train:'16021',cls:'SL',quota:'General',pax:1,seed:7,dayIdx:0,
            auth:(()=>{try{return JSON.parse(localStorage.getItem('khaali-auth')||'null');}catch(e){return null;}})(),
            authOpen:false,authMode:'in',authMenu:false,aName:'',aPhone:'',aEmail:'',aPass:'',aErr:null,aBusy:false,
-           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,
+           wlTyped:'',odds2:null,navOpen:false,packStep:1,ftSeed:1,tkModal:false,tkName:null,tkStep:'details',tkMethod:'wallet',tkPin:'',tkUpi:'',tkCard:'',tkPayBusy:false,tkPayErr:null,
            travNames:(()=>{try{return JSON.parse(localStorage.getItem('khaali-copax')||'[]');}catch(e){return[];}})(),
            profOpen:false,pName:'',pFull:'',pPhone:'',pAddr:'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false,
            routeOpen:true,classModal:false,countModal:false,hov:null,picks:[],slot:null,
@@ -2074,6 +2102,28 @@ class Component extends DCLogic {
       return 'Passenger '+(i+1);
     });
   }
+  tkConfirmPaid(method){
+    const S=this.state,T=S.tk||{};
+    const fare=this.fare('SL',Math.abs(this.ST[13].km-this.ST[0].km));
+    const who=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest';
+    const nm=String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller');
+    try{const a=(this.state.travNames||[]).slice();a[0]=nm;
+      localStorage.setItem('khaali-copax',JSON.stringify(a));
+      this.setState({travNames:a});}catch(e){}
+    // wallet money is real money here; UPI and card charge outside the wallet
+    if(method==='wallet'){
+      if(this.wallet().bal<fare)this.walletCredit(fare,'Demo top-up for Tatkal payment');
+      this.walletDebit(fare,'Tatkal entry \u2014 paid, held until allotment');
+    }
+    const label={wallet:'khaali wallet',upi:'UPI',card:'card'}[method]||'wallet';
+    try{localStorage.setItem('khaali-tklock',
+      JSON.stringify({round:T.id,amt:fare,settled:false,method:method,label:label}));}catch(e){}
+    this.setState({tkModal:false,tkStep:'details',tkPin:'',tkCard:''});
+    (async()=>{try{await this.tfetch('/api/tatkal/enter',{method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({who,paid:true,name:nm})},6000);}catch(e){}
+      this.loadTk(true);})();
+  }
   async loadTk(force){
     if(this._tkBusy)return;
     if(!force&&this._tkAt&&Date.now()-this._tkAt<1100)return;
@@ -2087,8 +2137,14 @@ class Component extends DCLogic {
         const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
         if(L&&!L.settled&&j.phase==='done'&&j.id===L.round){
           const won=!!(j.customer&&j.customer.won);
-          this.walletCredit(L.amt,won?'Tatkal allotted \u2014 fare lock released toward payment'
-            :'Tatkal not allotted \u2014 locked fare refunded instantly');
+          const via=L.label||'khaali wallet';
+          if(L.method==='wallet'||!L.method){
+            this.walletCredit(L.amt,won?'Tatkal allotted \u2014 payment released toward the ticket'
+              :'Tatkal not allotted \u2014 fare refunded instantly');
+          }
+          // UPI and card refunds return to the source, so the wallet ledger
+          // stays out of it - the status line says where the money went
+          void via;
           L.settled=true;localStorage.setItem('khaali-tklock',JSON.stringify(L));
         }
       }catch(e){}
@@ -4469,6 +4525,50 @@ class Component extends DCLogic {
           tkWalletLine:(()=>{const b2=this.wallet().bal;
             return b2>=tkFareN?('Wallet balance \u20b9'+b2+' \u2014 ready')
               :('Wallet \u20b9'+b2+' \u2014 \u20b9'+tkFareN+' demo money is added automatically');})(),
+          tkStepDetails:{display:S.tkStep==='pay'?'none':'block'},
+          tkStepPay:{display:S.tkStep==='pay'?'block':'none'},
+          tkToPay:()=>this.setState({tkStep:'pay',tkPayErr:null,tkPin:'',
+            tkName:String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller')}),
+          tkBackToDetails:()=>this.setState({tkStep:'details',tkPayErr:null}),
+          tkBackStyle:{display:S.tkPayBusy?'none':'block',marginTop:10,textAlign:'center',
+            font:'600 11.5px/1.4 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer'},
+          tkMethods:[['wallet','khaali wallet'],['upi','UPI'],['card','Card']].map(([k,l])=>({
+            label:l,onClick:()=>this.setState({tkMethod:k,tkPayErr:null}),
+            style:{font:'700 12px/1 Manrope,sans-serif',padding:'11px 14px',borderRadius:8,cursor:'pointer',
+              border:'1px solid '+(S.tkMethod===k?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+              background:S.tkMethod===k?'var(--k-fdf3f5)':'var(--k-fff)',
+              color:S.tkMethod===k?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'}})),
+          tkWalletPane:{display:S.tkMethod==='wallet'?'block':'none'},
+          tkUpiPane:{display:S.tkMethod==='upi'?'block':'none'},
+          tkCardPane:{display:S.tkMethod==='card'?'block':'none'},
+          tkPin:S.tkPin||'',
+          setTkPin:e=>this.setState({tkPin:String(e.target.value||'').replace(/[^0-9]/g,'').slice(0,6),tkPayErr:null}),
+          tkUpi:S.tkUpi||'',setTkUpi:e=>this.setState({tkUpi:e.target.value,tkPayErr:null}),
+          tkCard:S.tkCard||'',
+          setTkCard:e=>this.setState({tkCard:String(e.target.value||'').replace(/[^0-9 ]/g,'').slice(0,19),tkPayErr:null}),
+          tkPayErr:S.tkPayErr||'',
+          tkPayErrStyle:{display:S.tkPayErr?'block':'none',marginTop:10,padding:'10px 13px',borderRadius:7,
+            background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
+            font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+          tkPayNowLabel:S.tkPayBusy?'Contacting your bank\u2026':('Pay '+('\u20b9'+tkFareN)+' securely'),
+          tkPayNowStyle:{width:'100%',marginTop:13,border:'none',
+            background:S.tkPayBusy?'var(--k-d4d3ce)':'var(--k-1f9d55)',
+            color:S.tkPayBusy?'var(--k-fg-8a8a84)':'#fff',
+            font:'700 14.5px/1 Manrope,sans-serif',padding:15,borderRadius:8,
+            cursor:S.tkPayBusy?'default':'pointer',minHeight:48},
+          tkPayNow:()=>{if(S.tkPayBusy)return;
+            const M=S.tkMethod;
+            if(M==='wallet'&&String(S.tkPin||'').length!==6)
+              return this.setState({tkPayErr:'Enter your 6-digit wallet PIN (demo PIN: 123456).'});
+            if(M==='wallet'&&String(S.tkPin)!==this.walletPin())
+              return this.setState({tkPayErr:'Incorrect PIN \u2014 nothing was paid.',tkPin:''});
+            if(M==='upi'&&!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(S.tkUpi||'').trim()))
+              return this.setState({tkPayErr:'That UPI ID does not look right \u2014 try name@bank.'});
+            if(M==='card'&&String(S.tkCard||'').replace(/\D/g,'').length<12)
+              return this.setState({tkPayErr:'Enter a test card number, at least 12 digits.'});
+            this.setState({tkPayBusy:true,tkPayErr:null});
+            // the gateway takes a moment, exactly like the real one
+            setTimeout(()=>{this.setState({tkPayBusy:false},()=>this.tkConfirmPaid(M));},1400);},
           tkConfirmEnter:()=>{if(!(open&&!me.entered))return;
             const nm=String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller');
             // the typed name becomes traveller 1, so the eventual ticket and
@@ -4498,10 +4598,12 @@ class Component extends DCLogic {
             return 'Not allotted this time \u2014 your entry was not among the 40 the quota could seat. '
               +tp+' berths went to travellers'
               +(tb?(', '+tb+' to the capped bot entries, considered like everyone else'):' \u2014 the bots won none')
-              +'. Your locked \u20b9175 bounced straight back \u2014 it is in the wallet ledger.'
+              +'. Your \u20b9175 has already bounced back to your '
+              +(()=>{try{const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
+                return (L&&L.label)||'khaali wallet';}catch(e){return 'khaali wallet';}})()+'.'
               +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no window needed.')
                 :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any window at all.'):''));})())
-            :open?(me.entered?('Booking received \u2014 \u20b9'+tkFareN+' locked from your wallet. It refunds the instant you are not allotted; allotment runs when the window closes.')
+            :open?(me.entered?('Payment successful \u00b7 \u20b9'+tkFareN+' held'+(()=>{try{const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');return L&&L.label?(' on your '+L.label):'';}catch(e){return '';}})()+'. Allotment runs when the window closes \u2014 refunded the instant you are not allotted.')
               :('Booking is open \u2014 one tap, one fare, no racing.'))
             :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
           tkStatusStyle:{display:(doneP&&me.won)?'none':'block',marginTop:10,
