@@ -197,6 +197,13 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     align-items:center!important;padding-top:4px}
   .k-stickysub{top:0!important}
 
+  /* wrapped onto two lines, a divider-separated toolbar reads as loose
+     text - so on phones each filter becomes a pill you can see the edge of */
+  .k-fchip{border:1px solid var(--k-d4d3ce)!important;border-radius:9px!important;
+    background:var(--k-fafaf8)!important;padding:9px 12px!important;
+    min-height:38px;font-size:12.5px!important}
+  .k-filters>div{flex:0 0 auto}
+
   /* the swap is a control, not a seam artefact: solid face, clear ring */
   .k-swap,.k-swap2{background:var(--k-fff)!important;
     box-shadow:0 0 0 4px var(--k-fff),0 4px 14px rgba(16,19,25,.22)!important}
@@ -821,7 +828,7 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
       <div class="k-filters" style="margin-left:auto;display:flex;align-items:stretch;border-left:1px solid var(--k-eeede9)">
         <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
           <div style="{{ f.wrap }}">
-            <div onClick="{{ f.onToggle }}" style="{{ f.style }}">{{ f.label }} ▾</div>
+            <div class="k-fchip" onClick="{{ f.onToggle }}" style="{{ f.style }}">{{ f.label }} ▾</div>
             <div style="{{ f.panel }}">
               <sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="4">
                 <div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</div>
