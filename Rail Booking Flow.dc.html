@@ -186,6 +186,17 @@ select,input,textarea,button{max-width:100%;font-family:inherit}
     -webkit-overflow-scrolling:touch}
   .k-checkout [data-copane]{max-height:none!important;overflow:visible!important}
 
+  /* the departures bar was one unwrappable row - seven date chips, a 60-day
+     chip and three dropdowns - so the page grew wider than the phone and
+     everything slid sideways. The dates scroll on their own; the filters
+     drop to their own line and wrap. */
+  .k-dates{overflow-x:auto!important;max-width:100%!important;
+    -webkit-overflow-scrolling:touch;flex:1 1 100%!important}
+  .k-filters{margin-left:0!important;border-left:none!important;
+    flex-wrap:wrap!important;width:100%!important;gap:6px!important;
+    align-items:center!important;padding-top:4px}
+  .k-stickysub{top:0!important}
+
   /* the swap is a control, not a seam artefact: solid face, clear ring */
   .k-swap,.k-swap2{background:var(--k-fff)!important;
     box-shadow:0 0 0 4px var(--k-fff),0 4px 14px rgba(16,19,25,.22)!important}
