@@ -13,7 +13,7 @@ name, it is the architecture, and it is the only part a competitor cannot ship
 next week by adding a feature. Roughly 46 seconds.
 
 **Tier 2, the thing that proves the engineering.** Fair Tatkal and Sentinel.
-Roughly 40 seconds.
+Roughly 38 seconds.
 
 **Tier 3, normal.** Saarthi and the money tracker. Both good, neither
 category-defining. Keep them short and do not argue for them. 26 seconds.
@@ -23,8 +23,9 @@ live map. Good work, wrong format. They need more than ten seconds to land.
 
 The problems are split rather than stacked. The empty berth opens, the Tatkal
 race arrives at 0:46, and the cancellation and refund problems appear where
-they are solved rather than in the opening. Three or four problems in a row
-before anything is shown is where attention goes.
+they are solved rather than in the opening.
+
+---
 
 ## 0:00 - 0:18 - on camera
 
@@ -57,7 +58,7 @@ berth is on tonight's Kaveri Express.
 *Pick the stations, search, scroll the coach, hover an amber berth so its
 handover station shows.*
 
-## 0:46 - 1:02 - the second problem
+## 0:46 - 1:00 - the second problem
 
 > Then there's ten in the morning. App open, details saved, thumb on the
 > button. You lose anyway.
@@ -65,7 +66,7 @@ handover station shows.*
 > Eighty percent of the traffic you're racing isn't human. That's IRCTC's own
 > number.
 
-## 1:02 - 1:26 - Fair Tatkal (tier 2)
+## 1:00 - 1:24 - Fair Tatkal (tier 2)
 
 > khaali makes Tatkal a window, so clicking first buys you nothing. Then it
 > scores how every entry arrived. The timing, the request pattern, how many
@@ -80,7 +81,7 @@ handover station shows.*
 *Open the window, close it, let the Sentinel panel land. Your own row sits above
 the three farms.*
 
-## 1:26 - 1:40 - Saarthi (tier 3)
+## 1:24 - 1:38 - Saarthi (tier 3)
 
 > This is Saarthi. Jarvis for your ticket.
 >
@@ -89,10 +90,11 @@ the three farms.*
 > Is my train cancelled. How long is the wait. Where's my PNR. It answers in
 > whatever language you asked in.
 
-*The cancellation and delay questions are real actions in the code, so ask one
-of them live rather than describing it.*
+*The cancellation and PNR questions are real actions in the code, so ask one of
+them live rather than describing it. Jarvis is the label; the three languages
+are the proof. Do not let the label be the only thing you say.*
 
-## 1:40 - 1:52 - money (tier 3)
+## 1:38 - 1:50 - money (tier 3)
 
 > And your money is never nowhere. Bank, gateway, us, railway. It names who's
 > holding it, right now.
@@ -102,72 +104,47 @@ of them live rather than describing it.*
 
 *The four-stage tracker, then the refund landing in the wallet.*
 
-## 1:52 - 2:00 - close
+## 1:50 - 2:00 - close
 
 > Same train. Same coach. Same berth.
 >
 > Someone's sitting in it now.
+>
+> That's my two minutes. The login's on screen. I'll let the password speak for
+> itself.
 
-*End card with the demo login.*
+*End card: khaali@betterthanirctc.com and irctcsucks, held long enough to read.*
 
-Three hard stops, then release. Land it and stop. No thank-you after it.
+Land the point, then tag it. That is the stand-up mechanic: comics do not end
+on the joke, they end on the release after the point. The substance line stays
+in front because without it the ending is only a joke, and it throws away the
+loop the opening set up.
 
-The opening carries two characters, the empty berth and the person waitlisted
-at Maddur, and this resolves both: it calls back to the exact berth, and the
-last thing on screen is a human being in a seat rather than a transaction. It
-also pays off the name without stating it, since the audience was told at 0:14
-that khaali means empty.
+Do not explain the password. Make them read it. The laugh lands after your
+video ends, which is the best place for it.
 
-The earlier version, "khaali doesn't add one train, one coach, or one berth, it
-just sells the ones already going empty," answered the berth and left the
-person on the platform. It also put a shopkeeper's verb at the emotional peak,
-and "just" shrinks whatever follows it.
+Delivery: after the tag, stop moving. The reason "that's my time" works on
+stage is the silence behind it. No music swell, no thank-you card, no smiling
+into the lens. Line, beat, cut to black.
 
 ### Alternate closes
 
-Same structure, different last frame. All three pass visualise, falsify and
-own.
+More swagger, bigger laugh if it lands, riskier if a judge works at IRCTC:
 
-The name payoff stated outright, more elegant and less human:
+> That's my time. Password's on screen. I'd apologise, but I don't mean it.
 
-> Same train. Same coach. Same berth. It's just not empty anymore.
+Warmest, but it spends three seconds and some of the cool by saying the joke
+out loud instead of letting them find it:
 
-The thesis restated, if the judges want the argument back at the end:
+> That's my two minutes. Go book the empty one. Email's on screen, password's
+> "irctcsucks", and yes, that's really it.
+
+Straight, no comedy, if the room turns out to be formal:
 
 > Not one more train. Not one more coach. Not one more berth. Just the ones
 > already going empty, sold to the people already waiting.
 
-Second person, the most emotional and the least precise, since berths do not
-leave, trains do:
-
-> khaali doesn't add a single berth. It just stops the empty ones leaving
-> without you.
-
-## Three lines that must not be said
-
-These came up in drafting and each one is wrong.
-
-**"We use OpenAI to filter out bot bookings."** OpenAI has never seen a bot
-entry in khaali. It writes sentences. The filtering is Sentinel, a scoring
-model with six signals and printed weights. The true version is also the
-stronger one: IRCTC already announced an AI anti-bot system, so "we use AI to
-catch bots" is the crowded claim, and "here are my weights, redo the maths" is
-the one nobody else is making.
-
-**"More than four hours late."** It is three hours everywhere in the product.
-Saying four on camera while the screen shows three is the kind of mismatch a
-judge catches.
-
-**"Lakhs of rupees going missing."** There is no source for that figure. Keep
-the experience, drop the number: money leaves, no ticket appears.
-
-## Spare line
-
-Cut for time, kept because it is strong. Trade it for the Saarthi beat if you
-would rather lead harder on the money problem:
-
-> Or the money leaves your account, no ticket appears, and now you own a
-> screenshot and a customer care number.
+---
 
 ## Before you record
 
@@ -261,3 +238,10 @@ What was cut, and why:
   that in Kannada, it answered in Kannada" is pointing at something the viewer
   just watched.
 
+## Spare line
+
+Cut for time, kept because it is strong. Trade it for the Saarthi beat if you
+would rather lead harder on the money problem:
+
+> Or the money leaves your account, no ticket appears, and now you own a
+> screenshot and a customer care number.
