@@ -2712,22 +2712,7 @@ class Component extends DCLogic {
     background:active?'var(--k-d8385a)':'var(--k-fff)',color:active?'var(--k-fg-fff)':'var(--k-fg-d8385a)',font:'600 13px/1 Manrope,sans-serif',cursor:'pointer',minHeight:42,
     display:'flex',alignItems:'center',justifyContent:'center'};}
 
-  noteAction(){
-    // Six signals decide a Sentinel score and two of them are behavioural:
-    // how much you did, and how regular your timing was. Both are measured
-    // here, on the traveller, with the same yardstick the farms get.
-    const t=Date.now();
-    if(!this._acts)this._acts={n:0,last:0,gaps:[]};
-    const A=this._acts;
-    if(A.last)A.gaps.push(Math.min(120000,t-A.last));
-    if(A.gaps.length>12)A.gaps.shift();
-    A.last=t;A.n++;
-  }
-  actionSignals(){
-    const A=this._acts||{n:0,gaps:[]};
-    return {actions:A.n,gaps:A.gaps.slice()};
-  }
-  go(p){this.noteAction();if(this.state.holdId&&p!=='ticket'&&p!=='confirm')this.cancelHold();
+  go(p){if(this.state.holdId&&p!=='ticket'&&p!=='confirm')this.cancelHold();
     this.setState({page:p,classModal:false,countModal:false,hov:null});window.scrollTo(0,0);}
 
   // ---- routing ----------------------------------------------------------
@@ -5019,7 +5004,7 @@ class Component extends DCLogic {
               let sid=null,ms=300000;
               try{const r=await this.tfetch('/api/tatkal/paysession',{method:'POST',
                 headers:this.authHdr({'content-type':'application/json'}),
-                body:JSON.stringify({who,name:nm,sig:this.actionSignals()})},6000);
+                body:JSON.stringify({who,name:nm})},6000);
                 const j=await r.json();if(r.ok&&j.ok){sid=j.payId;ms=j.msLeft||300000;}}catch(e){}
               this.setState({tkModal:true,tkStep:'pay',tkPayErr:null,tkPin:'',
                 tkFlight:-1,tkFail:false,tkStuck:false,tkPayId:sid,
@@ -5193,7 +5178,7 @@ class Component extends DCLogic {
             (async()=>{try{
               const r=await this.tfetch('/api/tatkal/paysession',{method:'POST',
                 headers:this.authHdr({'content-type':'application/json'}),
-                body:JSON.stringify({who,name:nm,sig:this.actionSignals()})},6000);
+                body:JSON.stringify({who,name:nm})},6000);
               const j=await r.json();
               if(r.ok&&j.ok)await this.tfetch('/api/pay/'+j.payId,{method:'POST'},8000);
             }catch(e){}
@@ -5263,12 +5248,13 @@ class Component extends DCLogic {
               return {who:whoLabel,band:sc.band,p:sc.p.toFixed(3),pCol:col,head:head,
                 badge:{font:"700 8.5px/1 'IBM Plex Mono',monospace",letterSpacing:'.12em',
                   textTransform:'uppercase',color:col,background:bg,padding:'3px 7px',borderRadius:999},
-                parts:(sc.parts||[]).slice(0,3).map(p=>
-                  '  '+p.k.padEnd(9)+' '+p.value.toFixed(2)+' \u00d7 '+p.w+' = +'+p.add.toFixed(2)),
+                parts:(sc.parts||[]).slice(0,4).map(p=>p.observed===false
+                  ?('  '+p.k.padEnd(9)+' not observed (simulated payment)')
+                  :('  '+p.k.padEnd(9)+' '+p.value.toFixed(2)+' \u00d7 '+p.w+' = +'+p.add.toFixed(2))),
                 why:(sc.why||[])[0]||''};};
             const rows=(SN.farms||[]).map(f=>row('bot-farm '+f.id,
               f.tries+' requests \u00b7 '+f.accounts+' accounts \u00b7 '+f.chits+' chit'+(f.chits===1?'':'s')+' standing',f));
-            if(SN.me)rows.unshift(row('you','your own entry, scored by the same model',SN.me));
+            if(SN.me)rows.unshift(row('you','your own entry \u00b7 signals measured by the server, not reported by this browser',SN.me));
             const W=SN.weights||{};
             const S2=SN.summary;
             return {

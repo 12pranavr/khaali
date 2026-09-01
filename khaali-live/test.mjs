@@ -5,6 +5,7 @@ import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, st
 import { TRAINS, ST } from './data.mjs';
 import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
+import * as activity from './activity.mjs';
 import fs from 'fs';
 
 const D = '2026-08-21';
@@ -404,6 +405,77 @@ t('the window resets and callers are independent', () => {
 t('a proxied caller is identified by x-forwarded-for', () => {
   assert.strictEqual(limits.callerOf({ headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' }, socket: {} }), '1.2.3.4');
   assert.strictEqual(limits.callerOf({ headers: {}, socket: { remoteAddress: '::1' } }), '::1');
+});
+
+
+
+console.log('\nsentinel: signals the server saw, not signals the browser claimed');
+t('a caller who never looked at a train is shallow', () => {
+  activity.reset();
+  const sig = activity.signalsFor('ip-blank', 1000);
+  assert.deepStrictEqual(sig, { actions: 0, gaps: [] });
+  assert.strictEqual(sentinel.features({ ...sig, atMs: 20, tries: 30 }).shallow, 1);
+});
+
+t('a caller who browsed shows up with real gaps', () => {
+  activity.reset();
+  const hits = [0, 2300, 10400, 11800, 21400];
+  hits.forEach(ms => activity.note('ip-human', '/api/search', 100000 + ms));
+  const sig = activity.signalsFor('ip-human', 100000 + 30000);
+  assert.strictEqual(sig.actions, 5);
+  assert.deepStrictEqual(sig.gaps, [2300, 8100, 1400, 9600]);
+  const f = sentinel.features({ ...sig, atMs: 18400, tries: 1, accounts: 1 });
+  assert.strictEqual(f.shallow, 0);
+  assert.ok(f.cadence < 0.5, 'irregular taps are not machine cadence');
+});
+
+t('polling does not count as looking', () => {
+  activity.reset();
+  activity.note('ip-poll', '/api/tatkal/state', 1);
+  activity.note('ip-poll', '/api/sim', 2);
+  activity.note('ip-poll', '/api/events', 3);
+  assert.strictEqual(activity.signalsFor('ip-poll', 10).actions, 0);
+});
+
+t('accounts is the identities actually seen behind one caller', () => {
+  activity.reset();
+  ['a@x', 'b@x', 'c@x', 'a@x'].forEach(e => activity.identity('ip-farm', e, 5000));
+  assert.strictEqual(activity.accountsFor('ip-farm', 6000), 3);
+  assert.strictEqual(activity.accountsFor('ip-nobody', 6000), 0);
+});
+
+t('the log forgets after half an hour', () => {
+  activity.reset();
+  activity.note('ip-old', '/api/search', 0);
+  activity.identity('ip-old', 'z@x', 0);
+  assert.strictEqual(activity.signalsFor('ip-old', 31 * 60 * 1000).actions, 0);
+  assert.strictEqual(activity.accountsFor('ip-old', 31 * 60 * 1000), 0);
+});
+
+t('an unobserved payReuse is labelled, not counted as innocent', () => {
+  const r = sentinel.score({ atMs: 15000, tries: 1, accounts: 1, payReuse: null, actions: 6,
+    gaps: [2000, 7000, 1500, 9000] });
+  const pr = r.parts.find(p => p.k === 'payReuse');
+  assert.strictEqual(pr.observed, false);
+  assert.strictEqual(pr.add, 0);
+  assert.strictEqual(r.parts.filter(p => p.observed).length, 5);
+  assert.strictEqual(r.band, 'clear');
+});
+
+t('measured end to end: a browsing person clears, a silent burst is challenged', () => {
+  activity.reset();
+  [0, 3100, 9000, 15500].forEach(ms => activity.note('ip-p', 'page', 1000 + ms));
+  activity.identity('ip-p', 'p@x', 20000);
+  const person = sentinel.score({ ...activity.signalsFor('ip-p', 20000), atMs: 19000, tries: 1,
+    accounts: activity.accountsFor('ip-p', 20000), payReuse: null });
+  ['f1@x', 'f2@x', 'f3@x', 'f4@x', 'f5@x', 'f6@x'].forEach(e => activity.identity('ip-b', e, 20000));
+  // the farm never looked at a train; it hit the entry route 190 times, 15 ms apart
+  for (let i = 0; i < 190; i++) activity.note('ip-b', '/api/tatkal/paysession', 17000 + i * 15);
+  assert.strictEqual(activity.signalsFor('ip-b', 20000).actions, 0, 'entry attempts are not looking');
+  const bot = sentinel.score({ ...activity.signalsFor('ip-b', 20000), atMs: 12, tries: 190,
+    accounts: activity.accountsFor('ip-b', 20000), payReuse: null });
+  assert.strictEqual(person.band, 'clear', 'person ' + person.p);
+  assert.strictEqual(bot.band, 'challenge', 'bot ' + bot.p);
 });
 
 

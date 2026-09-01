@@ -562,10 +562,14 @@ bulk advantage, not the entry, and a test asserts nobody is reduced below one.
 all go through the same function. A scorer that only ever sees the entries you
 already suspect is a label, not a model.
 
-**Measured, not asked.** The two behavioural signals come from a session
-recorder in the client that counts page moves and the gaps between them. The
-traveller is measured with the same yardstick as the farms, and their own
-score, band and reasons appear in the glass box next to the farms'.
+**Measured, not asked.** The server keeps a half-hour log per caller of the
+requests that mean somebody is looking at trains, plus the rhythm of every
+entry attempt. At the moment of entry, `actions`, `gaps` and `accounts` are
+read off that log; the browser sends nothing about itself and would be
+ignored if it did. `payReuse` cannot be observed while payment is simulated,
+so the glass box labels it *not observed* rather than counting it as
+innocence. The traveller's own score, band and reasons appear next to the
+farms', with five of six signals measured.
 
 **A typical round:** 3 farms firing 447 requests across 111 accounts score
 0.946 to 0.957 and are weighted from 12 chits down to 3. All 122 simulated

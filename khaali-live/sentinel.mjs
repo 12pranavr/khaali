@@ -106,7 +106,12 @@ export function features(s = {}) {
 export function score(signals = {}) {
   const f = features(signals);
   const W = MODEL.weights;
-  const parts = Object.keys(W).map(k => ({ k, value: +f[k].toFixed(3), w: W[k], add: +(W[k] * f[k]).toFixed(3) }));
+  // a signal that was not observed (payReuse, when the payment is simulated)
+  // is carried as a zero and labelled, never silently counted as innocence
+  const parts = Object.keys(W).map(k => ({
+    k, value: +f[k].toFixed(3), w: W[k], add: +(W[k] * f[k]).toFixed(3),
+    observed: !(k === 'payReuse' && signals.payReuse === null),
+  }));
   const z = parts.reduce((a, p) => a + p.add, MODEL.bias);
   const p = 1 / (1 + Math.exp(-z));
 

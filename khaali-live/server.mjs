@@ -26,6 +26,7 @@ import {
 import * as store from './store.mjs';
 import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
+import * as activity from './activity.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -365,6 +366,8 @@ async function api(req, res, url) {
   const q = url.searchParams;
   const p = url.pathname;
   if (overLimit(req, res, p)) return;
+  // what this caller looked at, as seen from here: Sentinel reads it later
+  activity.note(limits.callerOf(req), p);
 
   // Render pings this to decide whether the instance is alive, and an uptime
   // pinger hits it to stop the free tier falling asleep between judges. It
@@ -632,19 +635,25 @@ async function api(req, res, url) {
       if (!G.pays) G.pays = new Map();
       let sid = '';
       for (let i = 0; i < 18; i++) sid += '0123456789abcdef'[Math.floor(Math.random() * 16)];
-      // the same six signals the farms are judged on, measured on a real
-      // person: when they arrived, how much they did first, how regular their
-      // taps were. Nothing here is asked for; it is all already happening.
+      // The same signals the farms are judged on, measured on a real person
+      // by the server rather than reported by the browser. A script used to
+      // be able to send actions:10 and human-looking gaps and score as a
+      // person; now what counts is what this caller was actually seen doing.
+      // payReuse is null on purpose: with a simulated payment there is no
+      // instrument to see reused, and saying so beats inventing it.
       if (!R.hits) R.hits = new Map();
       R.hits.set(who, (R.hits.get(who) || 0) + 1);
-      const cs = (b && typeof b.sig === 'object' && b.sig) || {};
+      const ip = limits.callerOf(req);
+      activity.identity(ip, who);
+      const seenDoing = activity.signalsFor(ip);
       const sig = {
         atMs: Math.max(0, Date.now() - R.openedAt),
         tries: R.hits.get(who),
-        accounts: 1,
-        payReuse: false,
-        actions: Math.max(0, Math.min(99, +cs.actions || 0)),
-        gaps: Array.isArray(cs.gaps) ? cs.gaps.slice(0, 12).map(Number).filter(g => g > 0) : [],
+        accounts: Math.max(1, activity.accountsFor(ip)),
+        payReuse: null,
+        actions: seenDoing.actions,
+        gaps: seenDoing.gaps,
+        measured: true,
       };
       G.pays.set(sid, { id: sid, who, name: String(b.name || 'Traveller').slice(0, 60),
         round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending', sig });
@@ -1402,6 +1411,7 @@ function sendFile(res, file, onMiss) {
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (APP_ROUTES.has(url.pathname.replace(/\/+$/, '') || '/')) activity.note(limits.callerOf(req), 'page');
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
