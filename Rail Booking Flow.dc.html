@@ -3126,7 +3126,8 @@ class Component extends DCLogic {
     const scroll=()=>{const el=document.getElementById('saarthi-scroll');if(el)el.scrollTop=el.scrollHeight;};
     setTimeout(scroll,60);
     try{
-      const r=await this.tfetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},
+      // signed in, Saarthi answers about YOUR tickets; the token is how it knows
+      const r=await this.tfetch('/api/chat',{method:'POST',headers:this.authHdr({'content-type':'application/json'}),
         body:JSON.stringify({messages:msgs.slice(-10).map(m=>({role:m.role,content:m.content}))})},130000);
       const j=await r.json();
       if(j.lang)this.setState({chatVoiceLang:j.lang});

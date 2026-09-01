@@ -4,6 +4,7 @@ import * as S from './store.mjs';
 import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin } from './engine.mjs';
 import { TRAINS, ST } from './data.mjs';
 import * as sentinel from './sentinel.mjs';
+import * as limits from './limits.mjs';
 import fs from 'fs';
 
 const D = '2026-08-21';
@@ -377,6 +378,32 @@ t('an identity may keep at most two holds open', () => {
   assert.ok(mk(2).ok, 'releasing one frees a slot');
   S.release(b.hold.id);
   for (const h of [a, b]) {}
+});
+
+
+
+console.log('\nrate limits: the routes that cost money');
+t('the twenty-first call in a minute is refused', () => {
+  limits.reset();
+  let last;
+  for (let i = 0; i < 20; i++) last = limits.hit('ip|/api/tts', 20, 60000, 1000);
+  assert.ok(last.ok, 'twenty are allowed');
+  const r = limits.hit('ip|/api/tts', 20, 60000, 1000);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.retryAfter >= 1 && r.retryAfter <= 60, 'retryAfter ' + r.retryAfter);
+});
+
+t('the window resets and callers are independent', () => {
+  limits.reset();
+  for (let i = 0; i < 21; i++) limits.hit('a|/api/chat', 20, 60000, 1000);
+  assert.strictEqual(limits.hit('a|/api/chat', 20, 60000, 1000).ok, false);
+  assert.strictEqual(limits.hit('b|/api/chat', 20, 60000, 1000).ok, true, 'another caller is unaffected');
+  assert.strictEqual(limits.hit('a|/api/chat', 20, 60000, 1000 + 60001).ok, true, 'a minute later, allowed again');
+});
+
+t('a proxied caller is identified by x-forwarded-for', () => {
+  assert.strictEqual(limits.callerOf({ headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' }, socket: {} }), '1.2.3.4');
+  assert.strictEqual(limits.callerOf({ headers: {}, socket: { remoteAddress: '::1' } }), '::1');
 });
 
 

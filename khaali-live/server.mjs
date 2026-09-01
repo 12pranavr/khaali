@@ -18,6 +18,7 @@ import {
 } from './engine.mjs';
 import * as store from './store.mjs';
 import * as sentinel from './sentinel.mjs';
+import * as limits from './limits.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -45,8 +46,11 @@ const send = (res, code, body, type = 'application/json') => {
 
 const readBody = req => new Promise((resolve, reject) => {
   let s = '';
-  req.on('data', c => { s += c; if (s.length > 1e6) req.destroy(); });
+  // over a megabyte used to destroy the socket without settling the promise,
+  // so the handler awaited forever and the response was never sent
+  req.on('data', c => { s += c; if (s.length > 1e6) { reject(new Error('body too large')); req.destroy(); } });
   req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
+  req.on('error', reject);
 });
 
 const LAN_IPS = Object.values(os.networkInterfaces()).flat()
@@ -58,7 +62,10 @@ const LAN_IPS = Object.values(os.networkInterfaces()).flat()
 /** Best address for a phone to reach this server, given how the caller got here. */
 function lanBase(req) {
   const host = (req.headers.host || '').split(':')[0];
-  if (host && host !== 'localhost' && host !== '127.0.0.1') return `http://${req.headers.host}`;
+  // Railway terminates TLS and tells us so; a QR that says http:// on an
+  // https:// site works only by redirect, and a strict phone may refuse it
+  const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim() || 'http';
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return `${proto}://${req.headers.host}`;
   return LAN_IPS.length ? `http://${LAN_IPS[0]}:${PORT}` : `http://localhost:${PORT}`;
 }
 
@@ -273,7 +280,7 @@ const SAARTHI_SYS = () => [
   'CRITICAL: answer in the SAME language AND script the traveller wrote in — Kannada in Kannada script, Tamil in Tamil script, Hinglish in Hinglish. EXCEPTION: if they ASK for another language (for a family member, a friend, anyone), switch to it happily — never refuse a language request; you speak all Indian languages. Be warm and brief.',
   'Corridor stations (index:code name): ' + ST.map((s, i) => i + ':' + s.c + ' ' + s.n).join(', ') + '.',
   'Travellers write station names in any script or spelling — match them phonetically: Bangalore/Bengaluru/बेंगलुरु/ಬೆಂಗಳೂರು = index 5 (Bengaluru KSR City); Mysore/Mysuru/मैसूर/ಮೈಸೂರು = index 13 (Mysuru Jn); Whitefield = 1; Bangarpet = 0; Mandya/मंड्या/ಮಂಡ್ಯ = 11. If both stations are clear, DO return the search action — do not ask again.',
-  'khaali sells interval berths: green = berth free for the whole journey; amber = berth occupied for part of the route and free for the rest, priced only for the empty stretch, so it is cheaper. Booking opens from tomorrow up to 60 days ahead. Payment is a simulated QR; this is a prototype, not IRCTC.',
+  'khaali sells interval berths: green = berth free for the whole journey; amber = berth occupied for part of the route and free for the rest, priced only for the empty stretch, so it is cheaper. Payment is a simulated QR; this is a prototype, not IRCTC.',
   'Today is ' + TODAY() + '. Bookings run from today up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
   'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it; include "around":"HH:MM" in 24-hour time ONLY when the traveller names a time of day \u2014 morning/subah/belagge/kaalai means AM, evening/shaam/sanje/maalai/raat means PM, so \u201caround 7:30 in the evening\u201d \u2192 "around":"19:30").',
   'NEVER ask the traveller which date before searching. With no date named, omit the date field and search anyway \u2014 the system picks the first bookable day and tells them which day it used.',
@@ -330,10 +337,24 @@ setInterval(() => {
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
 }, 15000);
 
+// Five routes spend a paid credit per call. Twenty a minute per caller is
+// far more than a person needs and far less than a loop.
+const PAID = new Set(['/api/tts', '/api/stt', '/api/chat', '/api/odds/explain', '/api/tatkal/explain']);
+function overLimit(req, res, p) {
+  if (!PAID.has(p)) return false;
+  const r = limits.hit(limits.callerOf(req) + '|' + p, 20, 60000);
+  if (r.ok) return false;
+  res.setHeader('retry-after', String(r.retryAfter));
+  send(res, 429, { error: 'rate limited', retryAfter: r.retryAfter,
+    say: 'Saarthi needs a short breather \u2014 try again in about ' + r.retryAfter + ' seconds.', audio: '', text: '' });
+  return true;
+}
+
 // --------------------------------------------------------------------- API --
 async function api(req, res, url) {
   const q = url.searchParams;
   const p = url.pathname;
+  if (overLimit(req, res, p)) return;
 
   // Render pings this to decide whether the instance is alive, and an uptime
   // pinger hits it to stop the free tier falling asleep between judges. It
@@ -936,7 +957,12 @@ async function api(req, res, url) {
     return send(res, 200, { train: no, date, cls, wl, ...oddsOf(no, date, cls, wl) });
   }
 
-  if (p === '/api/bookings') return send(res, 200, { bookings: store.allBookings() });
+  if (p === '/api/bookings') {
+    // this used to hand every traveller's email and itinerary to anyone who asked
+    const me = await whoIs(req);
+    if (!me) return send(res, 401, { needsAuth: true, error: 'Sign in to see your bookings.' });
+    return send(res, 200, { bookings: store.allBookings().filter(b => b.who === me) });
+  }
 
   const mPnr = p.match(/^\/api\/booking\/(\d+)$/);
   if (mPnr) {
@@ -1006,6 +1032,9 @@ async function api(req, res, url) {
     }
     let b;
     try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+    // optional: when the traveller is signed in, ticket questions are about
+    // THEIR tickets. Unsigned, Saarthi has no tickets to read, not everyone's.
+    const chatWho = await whoIs(req);
     const hist = (Array.isArray(b.messages) ? b.messages : []).slice(-10)
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map(m => ({ role: m.role, content: m.content.slice(0, 1200) }));
@@ -1141,10 +1170,12 @@ async function api(req, res, url) {
       }
 
       if (act && act.type === 'mybookings') {
-        const bks = store.allBookings().slice(0, 5);
+        const bks = chatWho ? store.allBookings().filter(x => x.who === chatWho).slice(0, 5) : [];
         let en;
-        if (!bks.length) {
-          en = 'You have no tickets on this device yet. Book one and I will keep an eye on it for cancellations.';
+        if (!chatWho) {
+          en = 'Sign in and I can read your tickets back to you and check each one for cancellations.';
+        } else if (!bks.length) {
+          en = 'You have no tickets yet. Book one and I will keep an eye on it for cancellations.';
         } else {
           en = 'You have ' + bks.length + ' ticket' + (bks.length > 1 ? 's' : '') + '. '
             + bks.map(b => {
@@ -1168,32 +1199,7 @@ async function api(req, res, url) {
           && act.from >= 0 && act.from < ST.length
           && act.to >= 0 && act.to < ST.length && +act.from !== +act.to) {
         const cls = ['SL', '3A', '2A'].includes(act.cls) ? act.cls : 'SL';
-        // 'Today' gets a live answer: remaining departures + the chart truth.
-        const t0loc = new Date();
-        const todayIso = t0loc.getFullYear() + '-' + String(t0loc.getMonth() + 1).padStart(2, '0') + '-' + String(t0loc.getDate()).padStart(2, '0');
-        if (act.date === todayIso) {
-          const now = simNow();
-          const nowMin = now.getHours() * 60 + now.getMinutes();
-          const items = TRAINS.filter(t => serves(t, +act.from, +act.to))
-            .map(t => ({ t, depDay: (sMin(t, +act.from, 'd') ?? 0) % 1440 }))
-            .sort((a, b) => a.depDay - b.depDay);
-          const ahead = items.filter(x => x.depDay > nowMin).slice(0, 3);
-          const gone = items.length - items.filter(x => x.depDay > nowMin).length;
-          let en;
-          if (!ahead.length) {
-            en = 'All of today\u2019s trains from ' + ST[+act.from].n + ' to ' + ST[+act.to].n
-              + ' have already left. Bookings are open for tomorrow \u2014 want me to look?';
-          } else {
-            en = 'Today, ' + ahead.length + ' more trains leave ' + ST[+act.from].n + ' for ' + ST[+act.to].n + ': '
-              + ahead.map(x => x.t.name + ' (' + x.t.no + ') at ' + hhmm(x.depDay)).join('; ') + '.'
-              + (gone ? ' ' + gone + ' already left today.' : '')
-              + ' Today\u2019s chart is already prepared, so khaali cannot book today\u2019s run \u2014 booking opens from tomorrow.';
-          }
-          let sayT = en;
-          if (sl) { try { sayT = (await translateTo(en, sl[1])) || en; } catch (e) {} }
-          return send(res, 200, { say: sayT, lang: sl ? sl[1] : null, link: '/trains?from=' + (+act.from) + '&to=' + (+act.to) + '&cls=' + cls });
-        }
-        // Honour a requested date, clamped to the booking window (tomorrow..+60d).
+        // Honour a requested date, clamped to the booking window (today..+60d).
         const t0 = new Date(); t0.setHours(0, 0, 0, 0);
         const minMs = t0.getTime(), maxMs = t0.getTime() + 60 * 864e5;
         let dms = minMs;
@@ -1264,7 +1270,9 @@ async function api(req, res, url) {
                   + t.dep + ' with ' + t.counts.free + ' berths free').join(' and ') + '.' : '');
           }
         } else if (!alive.length) {
-          en = 'No trains are available from ' + r.fromName + ' to ' + r.toName + ' on ' + human + '.'
+          en = (date === TODAY()
+              ? 'Every train from ' + r.fromName + ' to ' + r.toName + ' has already left today.'
+              : 'No trains are available from ' + r.fromName + ' to ' + r.toName + ' on ' + human + '.')
             + (cxd.length ? ' ' + cxd.map(t => t.no).join(', ') + ' cancelled that day.' : '');
         } else {
           const b = alive[0], b2 = alive[1];
@@ -1362,7 +1370,17 @@ function serveStatic(res, urlPath) {
   const inPub = path.join(PUB, clean);
   const inParent = path.join(PARENT, clean);
   if (!inPub.startsWith(PUB) || !inParent.startsWith(PARENT)) return send(res, 403, { error: 'nope' });
-  sendFile(res, inPub, () => sendFile(res, inParent, () => send(res, 404, 'Not found', 'text/plain')));
+  // The parent folder is the whole repository. It used to be served as-is,
+  // which put server.mjs, the configs and every doc one URL away. The app
+  // needs two scripts from there and nothing else, so only browser assets
+  // pass; source, data, config, docs and dotfiles do not.
+  const ASSET = /\.(js|css|png|jpe?g|webp|gif|svg|ico|woff2?|mp3)$/i;
+  const base = path.basename(clean);
+  const parentOk = ASSET.test(base) && !base.startsWith('.') && !/\.(mjs|json|ya?ml|md|html|bak\d*)$/i.test(base)
+    && !clean.replace(/\\/g, '/').split('/').some(seg => seg.startsWith('.') || seg === 'khaali-live' || seg === 'node_modules');
+  sendFile(res, inPub, () => parentOk
+    ? sendFile(res, inParent, () => send(res, 404, 'Not found', 'text/plain'))
+    : send(res, 404, 'Not found', 'text/plain'));
 }
 
 function sendFile(res, file, onMiss) {
