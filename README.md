@@ -65,8 +65,9 @@ Tests:
 npm test
 ```
 
-33 tests covering routing, interval maths, locking under contention, payment
-idempotency, pricing and the Sentinel scorer. All pass.
+55 tests covering routing, interval maths, locking under contention, payment
+idempotency, pricing, the caps, the Sentinel scorer and its server-measured
+signals, rate limits, and the journal. All pass.
 
 ### Demo login
 
@@ -194,12 +195,19 @@ khaali-live/
   sentinel.mjs              the behavioural scorer
   data.mjs                  stations, classes, core timetables
   extra-trains.mjs          122 more trains from data.gov.in
-  test.mjs                  33 tests
+  journal.mjs               append-only journal, replayed at boot
+  activity.mjs              what each caller did, for Sentinel
+  limits.mjs                per-caller limits on the paid routes
+  test.mjs                  55 tests
   public/pay.html           the second-phone payment page
 ```
 
-State lives in memory. Restarting the server reseeds it, which is fine for a
-prototype and swappable for a real database without touching the engine.
+Memory decides and a journal remembers. The store keeps deciding in memory,
+which is what makes the locking a real compare-and-swap, and appends one
+line per confirmed booking, Tatkal win and reset to
+`khaali-live/data/khaali-journal.jsonl` (or `DATA_DIR`). Boot replays it, so a
+restart keeps every booking. On Railway, mount a volume and set `DATA_DIR` to
+it so a redeploy keeps them too.
 
 ### Locking
 

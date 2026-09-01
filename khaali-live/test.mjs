@@ -490,7 +490,7 @@ t('a confirmed booking is recorded with its exact leg masks', () => {
   S.onRecord(r => recs.push(r));
   const v = S.availability('16021', jDate, 'SL', 5, 6);
   const b = v.berths.find(x => x.k === 'free');
-  const h = S.hold({ train: '16021', date: jDate, cls: 'SL', from: 5, to: 13, berthIdxs: [b.idx], pax: 1, who: 'j-1' });
+  const h = S.hold({ train: '16021', date: jDate, cls: 'SL', from: 5, to: 6, berthIdxs: [b.idx], pax: 1, who: 'j-1' });
   const c = S.confirm(h.hold.id);
   assert.ok(c.ok);
   const r = recs.find(x => x.t === 'booked' && x.pnr === c.booking.pnr);
