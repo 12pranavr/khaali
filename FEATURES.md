@@ -745,9 +745,13 @@ Being straight about this is worth more than overclaiming.
 - **The Saarthi system prompt contradicts itself on booking dates.** One
   clause says booking opens from tomorrow, a later clause says from today.
   The app allows today. The stale clause should go.
-- **Inventory is in memory.** Restarting the server reseeds it. Fine for a
-  prototype, and the store is small enough to back with a real database
-  without touching the engine.
+- **Bookings survive a restart, not necessarily a redeploy.** The store is
+  memory-authoritative and appends a journal (`khaali-live/journal.mjs`) of
+  every confirmed booking, Tatkal win and reset; boot replays it. On Railway
+  the filesystem is ephemeral, so without a volume the journal survives a
+  process restart but not a new container. Mount a volume and set `DATA_DIR`
+  to it and it survives everything. Pending five-minute holds are deliberately
+  not journaled.
 - **The 122 extra trains are searchable but not meaningfully bookable**, since
   only the six core services carry full stop data.
 - **The Sarvam and OpenAI keys have passed through chat and the repository is

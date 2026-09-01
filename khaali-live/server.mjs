@@ -27,9 +27,32 @@ import * as store from './store.mjs';
 import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
+import * as journal from './journal.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
+
+// Memory decides; the journal remembers. Replay happens before the first
+// request, and only then does the store start recording, so replayed
+// bookings are not written back out a second time.
+const monthOf = () => TODAY().slice(0, 7);
+const monthKey = who => who + '|' + monthOf();
+global.__tk = { users: new Map(), month: new Map(), pays: new Map() };
+{
+  const file = journal.open();
+  const recs = journal.readAll();
+  const got = store.replay(recs);
+  let wins = 0;
+  for (const r of recs) {
+    if (r.t === 'reset') { global.__tk.month.clear(); continue; }
+    if (r.t === 'tkwin' && r.who && r.month) {
+      const k = r.who + '|' + r.month;
+      global.__tk.month.set(k, (global.__tk.month.get(k) || 0) + 1); wins++;
+    }
+  }
+  store.onRecord(rec => journal.append(rec));
+  console.log(`journal: ${file} \u00b7 replayed ${got.booked} bookings, ${wins} tatkal wins` + (got.resets ? `, ${got.resets} resets` : ''));
+}
 // the local calendar date, not the UTC one: at 01:00 IST, toISOString still
 // says yesterday
 const TODAY = () => { const d = new Date();
@@ -541,7 +564,7 @@ async function api(req, res, url) {
     }).map(t => {
       const cx = cancelledOn(t.no, date);
       const av = store.availability(t.no, date, cls, from, to);
-      const o = oddsOf2(t.no, date, cls, { from, to, quota, wl });
+      const o = oddsOf2(t.no, date, cls, { from, to, quota, wl, now: simNow() });
       const band = cx ? 'cx' : av.counts.free > 0 ? 'book' : av.counts.part > 0 ? 'hop' : 'odds';
       return { no: t.no, name: t.name, dep: hhmm(sMin(t, from, 'd')), depMin: sMin(t, from, 'd'),
         counts: av.counts, price: av.price, band,
@@ -569,7 +592,6 @@ async function api(req, res, url) {
     // used to share a single global round and stomp each other; a stranger
     // could open or close it with an anonymous POST. Now a round belongs to
     // the email Supabase vouched for, and only that email can drive it.
-    if (!global.__tk) global.__tk = { users: new Map(), month: new Map(), pays: new Map() };
     const G = global.__tk;
     const userOf = who => { let u = G.users.get(who);
       if (!u) { u = { round: null, history: [] }; G.users.set(who, u); } return u; };
@@ -631,7 +653,7 @@ async function api(req, res, url) {
       if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
       const who = signedIn;
       if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one entry per person per round' });
-      if ((G.month.get(who) || 0) >= 4) return send(res, 409, { error: 'four Tatkal entries per month \u2014 all used' });
+      if ((G.month.get(monthKey(who)) || 0) >= 4) return send(res, 409, { error: 'four Tatkal entries per month \u2014 all used' });
       if (!G.pays) G.pays = new Map();
       let sid = '';
       for (let i = 0; i < 18; i++) sid += '0123456789abcdef'[Math.floor(Math.random() * 16)];
@@ -705,7 +727,11 @@ async function api(req, res, url) {
       realWinners.forEach((w, i) => { w.berthIdx = freeIdx[i] != null ? freeIdx[i] : null; });
       // only a WIN consumes a monthly chit - losing must cost a human
       // nothing, while the per-round identity limit still starves bot farms
-      realWinners.forEach(w => G.month.set(w.id, (G.month.get(w.id) || 0) + 1));
+      realWinners.forEach(w => {
+        const k = monthKey(w.id);
+        G.month.set(k, (G.month.get(k) || 0) + 1);
+        journal.append({ t: 'tkwin', who: w.id, month: monthOf(), round: R.id });
+      });
       const botChits = R.sim.agents.reduce((a2, a) => a2 + chitsFor(a.id), 0);
       R.result = {
         chits: bowl.length,
@@ -759,7 +785,7 @@ async function api(req, res, url) {
       const U = peekUser(who);
       const R = U.round;
       if (!R) return send(res, 200, { phase: 'idle', history: U.history.slice(-5),
-        monthUsed: G.month.get(who) || 0, train: TKN, date: tkIso(), berths: TKB });
+        monthUsed: G.month.get(monthKey(who)) || 0, train: TKN, date: tkIso(), berths: TKB });
       const el = Date.now() - R.openedAt;
       const arrived = R.sim.arrivals.filter(a => a.atMs <= el);
       const agentsIn = arrived.filter(a => a.kind === 'agent');
@@ -767,13 +793,13 @@ async function api(req, res, url) {
       const feed = [];
       agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  tout bot-farm ' + a.id + ' (simulated) fired ' + a.tries + ' requests'));
       feed.push(humansIn + ' simulated ordinary travellers have booked so far');
-      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 \u20b9175 locked \u00b7 ' + ((G.month.get(e.who) || 0)) + '/4 used this month)'));
+      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 \u20b9175 locked \u00b7 ' + ((G.month.get(monthKey(e.who)) || 0)) + '/4 used this month)'));
       const totalTries = R.sim.agents.reduce((s2, a) => s2 + a.tries, 0);
       const me = R.real.find(e => e.who === who) || null;
       const myWin = R.result ? (R.result.winners.real.find(w => w.who === who) || null) : null;
       return send(res, 200, {
         phase: R.state, id: R.id, elapsedMs: el, train: TKN, cls: TKC, date: tkIso(), berths: TKB,
-        monthUsed: G.month.get(who) || 0,
+        monthUsed: G.month.get(monthKey(who)) || 0,
         customer: {
           entered: !!me, chitNo: me ? R.sim.humans + R.real.indexOf(me) + 1 : null,
           chitsInBowl: humansIn + agentsIn.length + R.real.length,
@@ -840,7 +866,7 @@ async function api(req, res, url) {
     const no = q.get('train'), date = q.get('date') || TODAY(), cls = q.get('cls') || 'SL';
     const from = +q.get('from'), to = +q.get('to');
     if (!no || !(from >= 0 && to >= 0 && from !== to)) return send(res, 400, { error: 'bad params' });
-    const o = oddsOf2(no, date, cls, { from, to, quota: q.get('quota') || 'General' });
+    const o = oddsOf2(no, date, cls, { from, to, quota: q.get('quota') || 'General', now: simNow() });
     const tr = trainByNo(no);
     const av = store.availability(no, date, cls, from, to);
     const text = await narrate('odds|' + no + '|' + date + '|' + cls + '|' + from + '|' + to,

@@ -42,6 +42,10 @@ const inventory = new Map();                    // key -> { booked, held, owner 
 const holds = new Map();                        // holdId -> hold
 const bookings = new Map();                     // pnr -> booking
 const listeners = new Set();
+// Every confirmed booking goes here as a plain record. The server points
+// this at the journal; on its own the store just remembers in memory.
+let recorder = null;
+export function onRecord(fn) { recorder = fn; }
 
 export const keyOf = (train, date, cls) => `${train}|${date}|${cls}`;
 
@@ -259,6 +263,10 @@ export function confirm(id) {
     paidAt: Date.now(),
   };
   bookings.set(pnr, booking);
+  // the record carries the exact leg masks, so replay puts the same bits
+  // back on the same berths without re-deriving anything
+  if (recorder) recorder({ t: 'booked', ...booking, key: h.key,
+    grants: h.grants.map(g => ({ idx: g.idx, mask: g.mask })) });
   emit('booked', { key: h.key, train: h.train, date: h.date, cls: h.cls, berthIdxs: h.berthIdxs, pnr });
   return { ok: true, booking };
 }
@@ -289,10 +297,34 @@ function publicHold(h) {
   };
 }
 
+/**
+ * Rebuild from journal records. A 'booked' record re-marks its legs on its
+ * berths and restores the booking; a 'reset' record forgets everything
+ * before it, so a deliberate wipe is honoured on replay too. No events are
+ * emitted: nothing is happening, it already happened.
+ */
+export function replay(records) {
+  let booked = 0, resets = 0;
+  for (const r of records || []) {
+    if (!r || typeof r !== 'object') continue;
+    if (r.t === 'reset') { bookings.clear(); inventory.clear(); resets++; continue; }
+    if (r.t !== 'booked' || !r.pnr || !r.key || !Array.isArray(r.grants)) continue;
+    const v = inv(r.key);
+    for (const g of r.grants) {
+      if (Number.isInteger(g.idx) && g.idx >= 0 && g.idx < v.booked.length) v.booked[g.idx] |= (g.mask | 0);
+    }
+    const { t, key, grants, ...booking } = r;
+    bookings.set(String(r.pnr), booking);
+    booked++;
+  }
+  return { booked, resets };
+}
+
 /** Test/demo helper: wipe everything back to the seeded state. */
 export function reset() {
   for (const h of holds.values()) clearTimeout(h.timer);
   holds.clear(); bookings.clear(); inventory.clear();
+  if (recorder) recorder({ t: 'reset' });
   emit('reset', {});
 }
 

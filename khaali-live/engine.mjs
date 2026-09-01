@@ -300,7 +300,7 @@ export function wlTypeOf(no, from, quota) {
  * this minute), plus the named reasons behind them.
  */
 export function oddsOf2(no, dateISO, clsKey, opts = {}) {
-  const { from = 0, to = 13, quota = 'General', wl = null } = opts;
+  const { from = 0, to = 13, quota = 'General', wl = null, now = null } = opts;
   const C = classByKey(clsKey);
   const cap = C.coaches.length * C.per;
   const why = [];
@@ -331,7 +331,8 @@ export function oddsOf2(no, dateISO, clsKey, opts = {}) {
     why.push(sisters + ' parallel train' + (sisters > 1 ? 's' : '') + ' cancelled that day');
   }
 
-  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  // the caller's clock, so a shifted demo clock moves the odds with the map
+  const t0 = now ? new Date(now.getTime()) : new Date(); t0.setHours(0, 0, 0, 0);
   const days = Math.max(0, Math.round((d.getTime() - t0.getTime()) / 864e5));
 
   // churn: booked berths that free up before charting. Longer lead = more

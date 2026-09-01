@@ -1,11 +1,14 @@
 // Locking, payment and expiry tests. Run: node test.mjs
 import assert from 'assert';
 import * as S from './store.mjs';
-import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin } from './engine.mjs';
+import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin, oddsOf2 } from './engine.mjs';
 import { TRAINS, ST } from './data.mjs';
 import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
+import * as journal from './journal.mjs';
+import os from 'os';
+import path from 'path';
 import fs from 'fs';
 
 const D = '2026-08-21';
@@ -476,6 +479,84 @@ t('measured end to end: a browsing person clears, a silent burst is challenged',
     accounts: activity.accountsFor('ip-b', 20000), payReuse: null });
   assert.strictEqual(person.band, 'clear', 'person ' + person.p);
   assert.strictEqual(bot.band, 'challenge', 'bot ' + bot.p);
+});
+
+
+
+console.log('\npersistence: memory decides, the journal remembers');
+const jDate = '2026-09-25';
+t('a confirmed booking is recorded with its exact leg masks', () => {
+  const recs = [];
+  S.onRecord(r => recs.push(r));
+  const v = S.availability('16021', jDate, 'SL', 5, 6);
+  const b = v.berths.find(x => x.k === 'free');
+  const h = S.hold({ train: '16021', date: jDate, cls: 'SL', from: 5, to: 13, berthIdxs: [b.idx], pax: 1, who: 'j-1' });
+  const c = S.confirm(h.hold.id);
+  assert.ok(c.ok);
+  const r = recs.find(x => x.t === 'booked' && x.pnr === c.booking.pnr);
+  assert.ok(r, 'recorded');
+  assert.strictEqual(r.grants.length, 1);
+  assert.strictEqual(r.grants[0].idx, b.idx);
+  assert.strictEqual(r.grants[0].mask, journeyMask(5, 6));
+  S.onRecord(null);
+});
+
+t('replay puts the booking and its berth back after a wipe', () => {
+  const recs = [];
+  S.onRecord(r => recs.push(r));
+  const v = S.availability('16022', jDate, '3A', 13, 5);
+  const b = v.berths.find(x => x.k === 'free');
+  const h = S.hold({ train: '16022', date: jDate, cls: '3A', from: 13, to: 5, berthIdxs: [b.idx], pax: 1, who: 'j-2' });
+  const pnr = S.confirm(h.hold.id).booking.pnr;
+  S.onRecord(null);
+  S.reset();                                             // everything gone
+  assert.strictEqual(S.getBooking(pnr), null);
+  assert.strictEqual(S.availability('16022', jDate, '3A', 13, 5).berths.find(x => x.idx === b.idx).k, 'free');
+  const got = S.replay(recs.filter(x => x.t === 'booked'));
+  assert.strictEqual(got.booked, 1);
+  assert.ok(S.getBooking(pnr), 'booking is back');
+  assert.strictEqual(S.getBooking(pnr).train, '16022');
+  assert.strictEqual(S.availability('16022', jDate, '3A', 13, 5).berths.find(x => x.idx === b.idx).k, 'taken', 'berth is taken again');
+});
+
+t('a reset record on replay forgets what came before it', () => {
+  const v = S.availability('16021', jDate, 'SL', 0, 5);
+  const b = v.berths.find(x => x.k === 'free');
+  const before = { t: 'booked', pnr: '4500000001', key: '16021|' + jDate + '|SL', train: '16021', date: jDate,
+    cls: 'SL', from: 0, to: 5, pax: 1, amount: 100, who: 'old', berths: ['S1/1'], grants: [{ idx: b.idx, mask: journeyMask(0, 5) }] };
+  const got = S.replay([before, { t: 'reset' }]);
+  assert.strictEqual(got.resets, 1);
+  assert.strictEqual(S.getBooking('4500000001'), null);
+});
+
+t('replay is silent: no events fire for things that already happened', () => {
+  let fired = 0;
+  const off = S.subscribe(() => fired++);
+  S.replay([{ t: 'booked', pnr: '4500000002', key: '16021|' + jDate + '|SL', train: '16021', date: jDate,
+    cls: 'SL', from: 5, to: 6, pax: 1, amount: 50, who: 'q', berths: ['S1/2'], grants: [{ idx: 1, mask: journeyMask(5, 6) }] }]);
+  off();
+  assert.strictEqual(fired, 0);
+});
+
+t('the journal file round-trips, and a torn last line is skipped', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'khaali-j-'));
+  const file = journal.open(dir);
+  assert.ok(journal.append({ t: 'booked', pnr: '1' }));
+  assert.ok(journal.append({ t: 'tkwin', who: 'a@x', month: '2026-09' }));
+  fs.appendFileSync(file, '{"t":"booked","pnr":"torn');            // crash mid-write
+  const all = journal.readAll();
+  assert.strictEqual(all.length, 2);
+  assert.strictEqual(all[0].pnr, '1');
+  assert.ok(all[1].at > 0, 'stamped');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+t('the odds move with the clock they are given', () => {
+  const far = oddsOf2('16021', '2026-10-15', 'SL', { from: 5, to: 13, now: new Date('2026-09-01T12:00:00+05:30') });
+  const near = oddsOf2('16021', '2026-10-15', 'SL', { from: 5, to: 13, now: new Date('2026-10-14T12:00:00+05:30') });
+  assert.strictEqual(far.days, 44);
+  assert.strictEqual(near.days, 1);
+  assert.ok(far.expCancel > near.expCancel, 'more churn with more lead time');
 });
 
 

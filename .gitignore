@@ -6,6 +6,7 @@ khaali-live/.openai-key
 # dependencies & runtime junk
 node_modules/
 khaali-live/_srv.log
+khaali-live/data/
 
 # local editor / harness state
 .claude/
