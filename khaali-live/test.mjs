@@ -652,7 +652,9 @@ t('two partial berths chain into one hold, each priced for its own stretch', () 
   const v = S.availability('16021', hd, 'SL', 5, 13);
   assert.strictEqual(v.berths.find(x => x.idx === a.idx).k, 'locked');
   assert.strictEqual(v.berths.find(x => x.idx === b.idx).k, 'locked');
-  assert.strictEqual(S.availability('16021', hd, 'SL', 9, 13).berths.find(x => x.idx === a.idx).k, 'free', 'the near berth is untouched on the far stretch');
+  // the near berth is somebody else's beyond station 9 - that is why it is
+  // only the near berth - so the hop must not have locked it there
+  assert.notStrictEqual(S.availability('16021', hd, 'SL', 9, 13).berths.find(x => x.idx === a.idx).k, 'locked', 'the hop locks the near berth only on its own stretch');
   // and released together
   S.release(h.hold.id);
   const w = S.availability('16021', hd, 'SL', 5, 13);
