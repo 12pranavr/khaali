@@ -421,6 +421,10 @@ async function api(req, res, url) {
   // Demo time machine: shift the clock and/or change its speed.
   if (p === '/api/sim') {
     if (req.method === 'POST') {
+      // the clock is shared by every visitor: a signed-in person may move it,
+      // an anonymous cross-site POST may not
+      const who = await whoIs(req);
+      if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to move the demo clock.' });
       const b = await readBody(req);
       const cur = simNow().getTime();
       if (b.shiftMin != null) {
@@ -527,8 +531,15 @@ async function api(req, res, url) {
       const d = new Date(Date.now() + 864e5);
       return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     };
-    if (!global.__tk) global.__tk = { round: null, month: new Map(), history: [] };
+    // One round per verified identity. Two reviewers on the page at once
+    // used to share a single global round and stomp each other; a stranger
+    // could open or close it with an anonymous POST. Now a round belongs to
+    // the email Supabase vouched for, and only that email can drive it.
+    if (!global.__tk) global.__tk = { users: new Map(), month: new Map(), pays: new Map() };
     const G = global.__tk;
+    const userOf = who => { let u = G.users.get(who);
+      if (!u) { u = { round: null, history: [] }; G.users.set(who, u); } return u; };
+    const peekUser = who => G.users.get(who) || { round: null, history: [] };
     const fnv = s => { let h = 2166136261 >>> 0;
       for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
       return h; };
@@ -569,31 +580,20 @@ async function api(req, res, url) {
     };
 
     if (p === '/api/tatkal/open' && req.method === 'POST') {
-      const id = (G.history.length + 1);
-      const seed = fnv('tk|' + id + '|' + tkIso());
-      G.round = { id, seed, openedAt: Date.now(), state: 'open', real: [], sim: simOf(seed), result: null };
+      const who = await whoIs(req);
+      if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to open a Tatkal window.' });
+      const U = userOf(who);
+      const id = (U.history.length + 1);
+      const seed = fnv('tk|' + who + '|' + id + '|' + tkIso());
+      U.round = { id, seed, openedAt: Date.now(), state: 'open', real: [], sim: simOf(seed), result: null };
       return send(res, 200, { ok: true, id });
-    }
-    if (p === '/api/tatkal/enter' && req.method === 'POST') {
-      let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
-      const R = G.round;
-      if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
-      const who = String(b.who || 'guest').slice(0, 80);
-      if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one chit per person per round' });
-      const used = G.month.get(who) || 0;
-      if (used >= 4) return send(res, 409, { error: 'four Tatkal chits per month \u2014 all used' });
-      if (b.paid !== true) return send(res, 402, { error: 'the fare must be locked to enter' });
-      R.real.push({ who, name: String(b.name || 'you').slice(0, 60), at: Date.now(),
-        signals: { atMs: Math.max(0, Date.now() - R.openedAt), tries: 1, accounts: 1,
-          payReuse: false, actions: 4, gaps: [] } });
-      return send(res, 200, { ok: true, chit: R.sim.humans + R.real.length });
     }
     if (p === '/api/tatkal/paysession' && req.method === 'POST') {
       let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
       const signedIn = await whoIs(req);
       if (!signedIn) return send(res, 401, { needsAuth: true,
         error: 'Sign in to enter the Tatkal window — entries are capped per person.' });
-      const R = G.round;
+      const R = userOf(signedIn).round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'window is not open' });
       const who = signedIn;
       if (R.real.some(e => e.who === who)) return send(res, 409, { error: 'one entry per person per round' });
@@ -621,7 +621,10 @@ async function api(req, res, url) {
     }
 
     if (p === '/api/tatkal/draw' && req.method === 'POST') {
-      const R = G.round;
+      const who = await whoIs(req);
+      if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to run the allotment.' });
+      const U = userOf(who);
+      const R = U.round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'no open window' });
       R.state = 'done'; R.closedAt = Date.now();
       // Sentinel runs on EVERY entrant, farms and people alike. A scorer that
@@ -679,16 +682,18 @@ async function api(req, res, url) {
           humans: winners.filter(w => w.kind === 'human').length,
           real: realWinners.map(w => ({ who: w.id, name: w.name, berthIdx: w.berthIdx })) },
       };
-      G.history.push({ id: R.id, chits: bowl.length, bots: R.result.winners.bots,
+      U.history.push({ id: R.id, chits: bowl.length, bots: R.result.winners.bots,
         humans: R.result.winners.humans + realWinners.length });
       return send(res, 200, { ok: true });
     }
     if (p === '/api/tatkal/reset' && req.method === 'POST') {
-      G.round = null;
+      const who = await whoIs(req);
+      if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to reset your window.' });
+      userOf(who).round = null;
       return send(res, 200, { ok: true });
     }
     if (p === '/api/tatkal/explain') {
-      const R = G.round;
+      const R = peekUser(q.get('who') || 'guest').round;
       if (!R || !R.result) return send(res, 200, { text: '' });
       const tries = R.sim.agents.reduce((a, x) => a + x.tries, 0);
       const bots = R.result.winners.bots;
@@ -711,8 +716,9 @@ async function api(req, res, url) {
 
     if (p === '/api/tatkal/state') {
       const who = q.get('who') || 'guest';
-      const R = G.round;
-      if (!R) return send(res, 200, { phase: 'idle', history: G.history.slice(-5),
+      const U = peekUser(who);
+      const R = U.round;
+      if (!R) return send(res, 200, { phase: 'idle', history: U.history.slice(-5),
         monthUsed: G.month.get(who) || 0, train: TKN, date: tkIso(), berths: TKB });
       const el = Date.now() - R.openedAt;
       const arrived = R.sim.arrivals.filter(a => a.atMs <= el);
@@ -823,24 +829,49 @@ async function api(req, res, url) {
   }
 
   if (p === '/api/hold' && req.method === 'POST') {
-    const b = await readBody(req);
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     // holding a berth takes it away from everyone else, so it needs a name
     // the server has checked - not one the request simply asserts
     const signedIn = await whoIs(req);
     if (!signedIn) return send(res, 401, { ok: false, needsAuth: true,
-      error: 'Sign in to hold a berth — a hold takes it off the board for everyone else.' });
-    const cxh = cancelledOn(String(b.train || ''), b.date || TODAY());
+      error: 'Sign in to hold a berth \u2014 a hold takes it off the board for everyone else.' });
+
+    // Everything below is the request being disbelieved. The client used to
+    // be trusted on all of it, which is how a hold for 2019, a hold on
+    // stations the train skips, and a hold with fees of zero all got through.
+    const from = Number(b.from), to = Number(b.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0
+        || from >= ST.length || to >= ST.length || from === to)
+      return send(res, 400, { ok: false, error: 'bad stations' });
+    const tr = trainByNo(String(b.train || ''));
+    if (!tr) return send(res, 404, { ok: false, error: 'unknown train' });
+    if (!serves(tr, from, to))
+      return send(res, 409, { ok: false, reason: 'not-served',
+        error: 'This train does not stop at both of those stations.' });
+    const date = String(b.date || TODAY());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { ok: false, error: 'bad date' });
+    const dayMs = new Date(date + 'T00:00:00Z').getTime();
+    const t0 = new Date(TODAY() + 'T00:00:00Z').getTime();
+    // a day of grace either side covers timezone skew between phone and server
+    if (!(dayMs >= t0 - 864e5 && dayMs <= t0 + 61 * 864e5))
+      return send(res, 409, { ok: false, reason: 'bad-date',
+        error: 'Bookings run from today to sixty days ahead.' });
+    const cls = ['SL', '3A', '2A'].includes(b.cls) ? b.cls : 'SL';
+    const cxh = cancelledOn(tr.no, date);
     if (cxh) return send(res, 409, { ok: false, error: 'This train is cancelled on that date \u2014 ' + cxh.reason + '.' });
+    const berthIdxs = (Array.isArray(b.berthIdxs) ? b.berthIdxs : []).map(Number);
+    if (!berthIdxs.length || berthIdxs.some(i => !Number.isInteger(i) || i < 0))
+      return send(res, 400, { ok: false, error: 'bad berths' });
     const segsIn = Array.isArray(b.segs)
       ? b.segs.map(g => (g && g.to > g.from && g.from >= 0 && g.to <= 13) ? { from: +g.from, to: +g.to } : null)
       : undefined;
     const r = store.hold({
-      train: b.train, date: b.date || TODAY(), cls: b.cls || 'SL',
-      from: +b.from, to: +b.to, berthIdxs: (b.berthIdxs || []).map(Number),
-      pax: +b.pax || (b.berthIdxs || []).length, who: signedIn, fees: +b.fees || 0,
-      segs: segsIn, hop: !!b.hop,
+      train: tr.no, date, cls, from, to, berthIdxs,
+      pax: Number.isInteger(+b.pax) ? +b.pax : berthIdxs.length,
+      who: signedIn, segs: segsIn, hop: !!b.hop,
     });
-    return send(res, r.ok ? 200 : 409, r);
+    const code = r.ok ? 200 : (r.reason === 'too-many-open-holds' ? 429 : 409);
+    return send(res, code, r);
   }
 
   const mHold = p.match(/^\/api\/hold\/([a-f0-9]+)$/);
@@ -871,7 +902,9 @@ async function api(req, res, url) {
       if (tq.status === 'paid') return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
       if (tq.status !== 'pending' || Date.now() > tq.expiresAt)
         return send(res, 410, { error: 'payment session expired \u2014 nothing was charged' });
-      const G2 = global.__tk, R = G2.round;
+      const G2 = global.__tk;
+      const U2 = G2 && G2.users && G2.users.get(tq.who);
+      const R = U2 && U2.round;
       if (!R || R.state !== 'open' || R.id !== tq.round)
         return send(res, 409, { error: 'the window closed before payment \u2014 nothing was charged' });
       tq.status = 'paid';
@@ -1279,7 +1312,14 @@ async function api(req, res, url) {
     }
   }
 
-  if (p === '/api/reset' && req.method === 'POST') { store.reset(); return send(res, 200, { ok: true }); }
+  if (p === '/api/reset' && req.method === 'POST') {
+    // wipes every booking on the server: never from a browser, never anonymously.
+    // x-admin-token is not in the CORS allow-list, so no other site can send it.
+    const want = process.env.ADMIN_TOKEN || '';
+    const got = String(req.headers['x-admin-token'] || '');
+    if (!want || got !== want) return send(res, 403, { error: 'admin token required' });
+    store.reset(); return send(res, 200, { ok: true });
+  }
   if (p === '/api/stats') return send(res, 200, store.stats());
 
   if (p === '/api/events') {

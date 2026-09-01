@@ -273,9 +273,12 @@ async function boot(){
   mapEl.classList.toggle('z-out',map.getZoom()<9);
   await tick();
   schedule(4000);
+  // the clock is shared by everyone, so moving it needs the signed-in token
+  const authH=()=>{try{const a=JSON.parse(localStorage.getItem('khaali-auth')||'null');
+    return a&&a.token?{'authorization':'Bearer '+a.token}:{};}catch(e){return {};}};
   $('#speed').onchange=async e=>{
     const v=+e.target.value;
-    await fetch('/api/sim',{method:'POST',headers:{'content-type':'application/json'},
+    await fetch('/api/sim',{method:'POST',headers:Object.assign({'content-type':'application/json'},authH()),
       body:JSON.stringify({speed:v})});
     mapEl.style.setProperty('--glide',v>1?'1.7s':'3.6s');
     schedule(v>1?1800:4000);
@@ -288,7 +291,7 @@ async function boot(){
       const now=new Date();const cur=now.getHours()*60+now.getMinutes();
       shift=((target-cur)%1440+1440)%1440;
     }
-    await fetch('/api/sim',{method:'POST',headers:{'content-type':'application/json'},
+    await fetch('/api/sim',{method:'POST',headers:Object.assign({'content-type':'application/json'},authH()),
       body:JSON.stringify({shiftMin:shift})});
     tick();
   };

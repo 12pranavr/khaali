@@ -17,6 +17,26 @@ import {
 } from './engine.mjs';
 
 export const HOLD_MS = 5 * 60 * 1000;          // 5 minutes at the payment screen
+// One request used to be able to lock every free berth on a train. Six is
+// IRCTC's own per-booking limit; two open holds is enough to change your mind
+// once without letting one account fence off a coach.
+export const MAX_BERTHS_PER_HOLD = 6;
+export const MAX_OPEN_HOLDS = 2;
+
+/** Charges are the server's to compute. Reservation and superfast follow the
+    traveller count, GST follows the AC fare, the convenience fee is flat. */
+export function feesFor(cls, pax, berthSum) {
+  const ac = cls !== 'SL';
+  const gst = ac ? Math.round(berthSum * 0.05) : 0;
+  return 20 * pax + (ac ? 15 * pax : 0) + gst + 12;
+}
+
+/** Holds this identity still has at the payment screen. */
+export function pendingHoldsFor(who) {
+  let n = 0;
+  for (const h of holds.values()) if (h.status === 'pending' && h.who === who) n++;
+  return n;
+}
 
 const inventory = new Map();                    // key -> { booked, held, owner }
 const holds = new Map();                        // holdId -> hold
@@ -112,16 +132,26 @@ export function snapshot(train, date, cls) {
  * Try to lock `berthIdxs` for [from,to). All-or-nothing.
  * Returns { ok:true, hold } or { ok:false, reason, conflicts }.
  */
-export function hold({ train, date, cls, from, to, berthIdxs, pax, who, fees, segs, hop }) {
+// `fees` is no longer accepted: the client used to send it, which meant it
+// could send zero. It is computed below from cls, pax and the berth prices.
+export function hold({ train, date, cls, from, to, berthIdxs, pax, who, segs, hop }) {
   const key = keyOf(train, date, cls);
   const v = inv(key);
   const j = journeyMask(from, to);
 
   if (!berthIdxs.length) return { ok: false, reason: 'no-berths' };
+  if (berthIdxs.length > MAX_BERTHS_PER_HOLD) return { ok: false, reason: 'too-many-berths' };
+  if (new Set(berthIdxs).size !== berthIdxs.length) return { ok: false, reason: 'duplicate-berth' };
+  const paxN = Math.floor(+pax || 0);
+  if (!(paxN >= 1 && paxN <= MAX_BERTHS_PER_HOLD)) return { ok: false, reason: 'bad-pax' };
   // Hops: one traveller, several berths in sequence. segs pins each berth to
   // its promised stretch; without segs, one berth per passenger as before.
+  // A hop is at most two berths per traveller - pax used to go unchecked in
+  // this mode, which let one passenger lock twenty berths.
   if (segs && segs.length !== berthIdxs.length) return { ok: false, reason: 'bad-segs' };
-  if (!segs && berthIdxs.length !== pax) return { ok: false, reason: 'berth-count-mismatch' };
+  if (segs && berthIdxs.length > 2 * paxN) return { ok: false, reason: 'too-many-berths' };
+  if (!segs && berthIdxs.length !== paxN) return { ok: false, reason: 'berth-count-mismatch' };
+  if (who && pendingHoldsFor(who) >= MAX_OPEN_HOLDS) return { ok: false, reason: 'too-many-open-holds' };
 
   // --- check (no await between here and the set below) ---
   // A berth may be free for only part of the journey. Lock exactly the legs it
@@ -165,14 +195,15 @@ export function hold({ train, date, cls, from, to, berthIdxs, pax, who, fees, se
       gapKm: jkm - gotKm,
     };
   });
-  const extra = Math.max(0, Math.min(2000, Math.floor(+fees || 0)));
-  const amount = berths.reduce((a, b) => a + b.price, 0) + extra;
+  const berthSum = berths.reduce((a, b) => a + b.price, 0);
+  const extra = feesFor(cls, paxN, berthSum);
+  const amount = berthSum + extra;
 
   const hopFlag = !!(hop || segs);
   const h = {
     hop: hopFlag,
-    id, key, train, date, cls, from, to, berthIdxs, grants, mask: j, pax, who: who || 'guest',
-    amount, fees: extra, fullPrice: fare(cls, jkm) * pax + extra, journeyKm: jkm,
+    id, key, train, date, cls, from, to, berthIdxs, grants, mask: j, pax: paxN, who: who || 'guest',
+    amount, berthSum, fees: extra, fullPrice: fare(cls, jkm) * paxN + extra, journeyKm: jkm,
     status: 'pending', createdAt: Date.now(), expiresAt, berths,
   };
   for (const i of berthIdxs) v.owner[i] = id;
@@ -242,7 +273,7 @@ export const allBookings = () => [...bookings.values()].sort((a, b) => b.paidAt 
 function publicHold(h) {
   return {
     id: h.id, train: h.train, date: h.date, cls: h.cls, from: h.from, to: h.to,
-    pax: h.pax, amount: h.amount, fees: h.fees || 0, fullPrice: h.fullPrice, journeyKm: h.journeyKm,
+    pax: h.pax, amount: h.amount, berthSum: h.berthSum, fees: h.fees || 0, fullPrice: h.fullPrice, journeyKm: h.journeyKm,
     status: h.status, who: h.who, pnr: h.pnr || null,
     expiresAt: h.expiresAt, msLeft: Math.max(0, h.expiresAt - Date.now()),
     hop: !!h.hop,

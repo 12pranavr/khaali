@@ -201,7 +201,8 @@ t('a hold charges the sum of its berths, not a flat fare', () => {
   const h = S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13,
     berthIdxs: [cheap.idx, full.idx], pax: 2, who: 'A' });
   assert.ok(h.ok);
-  assert.strictEqual(h.hold.amount, cheap.price + full.price);
+  assert.strictEqual(h.hold.berthSum, cheap.price + full.price);
+  assert.strictEqual(h.hold.amount, h.hold.berthSum + h.hold.fees, 'total is berths plus server fees');
   assert.ok(h.hold.amount < h.hold.fullPrice, 'mixed basket beats two full fares');
   const p = h.hold.berths.find(b => b.idx === cheap.idx);
   assert.strictEqual(p.partial, true);
@@ -311,6 +312,71 @@ t('people and farms go through the same function', () => {
   assert.strictEqual(rows[0].band, 'challenge');
   assert.strictEqual(rows[1].band, 'clear');
   assert.ok(rows[1].why[0].indexOf('nothing') >= 0, rows[1].why[0]);
+});
+
+
+
+console.log('\ncaps: what one request may lock');
+const capDate = '2026-09-20';
+t('more than six berths in one hold is rejected', () => {
+  const v = S.availability('16021', capDate, 'SL', 5, 6);
+  const free = v.berths.filter(b => b.k === 'free').map(b => b.idx);
+  assert.ok(free.length >= 7, 'need seven free berths for this test, got ' + free.length);
+  const r = S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
+    berthIdxs: free.slice(0, 7), pax: 7, who: 'cap-1' });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.reason, 'too-many-berths');
+  assert.strictEqual(S.availability('16021', capDate, 'SL', 5, 6).counts.locked, 0, 'nothing was locked');
+});
+
+t('a hop cannot carry more than two berths per traveller', () => {
+  const v = S.availability('16021', capDate, 'SL', 5, 6);
+  const free = v.berths.filter(b => b.k === 'free').map(b => b.idx).slice(0, 3);
+  const r = S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
+    berthIdxs: free, pax: 1, segs: free.map(() => ({ from: 5, to: 6 })), hop: true, who: 'cap-2' });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.reason, 'too-many-berths');
+});
+
+t('duplicate berth indexes are rejected', () => {
+  const v = S.availability('16021', capDate, 'SL', 5, 6);
+  const one = v.berths.find(b => b.k === 'free').idx;
+  const r = S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
+    berthIdxs: [one, one], pax: 2, who: 'cap-3' });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.reason, 'duplicate-berth');
+});
+
+t('fees come from the server, never from the request', () => {
+  const v = S.availability('16021', capDate, 'SL', 5, 6);
+  const one = v.berths.find(b => b.k === 'free').idx;
+  const r = S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
+    berthIdxs: [one], pax: 1, who: 'cap-4', fees: 1999 });
+  assert.ok(r.ok);
+  assert.strictEqual(r.hold.fees, S.feesFor('SL', 1, r.hold.berthSum));
+  assert.notStrictEqual(r.hold.fees, 1999);
+  assert.strictEqual(r.hold.amount, r.hold.berthSum + r.hold.fees);
+  S.release(r.hold.id);
+});
+
+t('AC fares carry superfast and GST, sleeper does not', () => {
+  assert.strictEqual(S.feesFor('SL', 2, 1000), 20 * 2 + 12);
+  assert.strictEqual(S.feesFor('3A', 2, 1000), 20 * 2 + 15 * 2 + 50 + 12);
+});
+
+t('an identity may keep at most two holds open', () => {
+  const v = S.availability('16021', capDate, 'SL', 5, 6);
+  const free = v.berths.filter(b => b.k === 'free').map(b => b.idx);
+  const mk = i => S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
+    berthIdxs: [free[i]], pax: 1, who: 'cap-5' });
+  const a = mk(0), b = mk(1), c = mk(2);
+  assert.ok(a.ok && b.ok, 'first two succeed');
+  assert.strictEqual(c.ok, false);
+  assert.strictEqual(c.reason, 'too-many-open-holds');
+  S.release(a.hold.id);
+  assert.ok(mk(2).ok, 'releasing one frees a slot');
+  S.release(b.hold.id);
+  for (const h of [a, b]) {}
 });
 
 
