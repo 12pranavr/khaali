@@ -370,19 +370,18 @@ t('AC fares carry superfast and GST, sleeper does not', () => {
   assert.strictEqual(S.feesFor('3A', 2, 1000), 20 * 2 + 15 * 2 + 50 + 12);
 });
 
-t('an identity may keep at most two holds open', () => {
+t('a third hold supersedes the oldest, so a refresh never locks you out', () => {
   const v = S.availability('16021', capDate, 'SL', 5, 6);
   const free = v.berths.filter(b => b.k === 'free').map(b => b.idx);
   const mk = i => S.hold({ train: '16021', date: capDate, cls: 'SL', from: 5, to: 6,
     berthIdxs: [free[i]], pax: 1, who: 'cap-5' });
   const a = mk(0), b = mk(1), c = mk(2);
-  assert.ok(a.ok && b.ok, 'first two succeed');
-  assert.strictEqual(c.ok, false);
-  assert.strictEqual(c.reason, 'too-many-open-holds');
-  S.release(a.hold.id);
-  assert.ok(mk(2).ok, 'releasing one frees a slot');
-  S.release(b.hold.id);
-  for (const h of [a, b]) {}
+  assert.ok(a.ok && b.ok && c.ok, 'all three go ahead');
+  assert.strictEqual(S.getHold(a.hold.id).status, 'superseded', 'the oldest gave way');
+  assert.strictEqual(S.getHold(b.hold.id).status, 'pending');
+  assert.strictEqual(S.pendingHoldsFor('cap-5'), 2, 'still at most two');
+  assert.strictEqual(S.availability('16021', capDate, 'SL', 5, 6).berths.find(x => x.idx === free[0]).k, 'free', 'its berth is back on the board');
+  S.release(b.hold.id); S.release(c.hold.id);
 });
 
 

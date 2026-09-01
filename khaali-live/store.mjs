@@ -155,7 +155,15 @@ export function hold({ train, date, cls, from, to, berthIdxs, pax, who, segs, ho
   if (segs && segs.length !== berthIdxs.length) return { ok: false, reason: 'bad-segs' };
   if (segs && berthIdxs.length > 2 * paxN) return { ok: false, reason: 'too-many-berths' };
   if (!segs && berthIdxs.length !== paxN) return { ok: false, reason: 'berth-count-mismatch' };
-  if (who && pendingHoldsFor(who) >= MAX_OPEN_HOLDS) return { ok: false, reason: 'too-many-open-holds' };
+  // At the cap, the oldest of this person's own holds gives way. Refusing
+  // instead locked out anyone who refreshed twice, for five minutes, with
+  // nothing to pay for. The cap is against hoarding, not against changing
+  // your mind.
+  if (who) {
+    let mine = [...holds.values()].filter(h => h.status === 'pending' && h.who === who)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    while (mine.length >= MAX_OPEN_HOLDS) release(mine.shift().id, 'superseded');
+  }
 
   // --- check (no await between here and the set below) ---
   // A berth may be free for only part of the journey. Lock exactly the legs it
