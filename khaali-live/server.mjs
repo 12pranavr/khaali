@@ -2,6 +2,13 @@
 //
 // Run:  node server.mjs
 // Then open the printed LAN address on every phone you want to test with.
+// The timetable is Indian Standard Time. The host is whatever it is - on
+// Railway, UTC - and Node reads TZ when it builds its first Date. Pin it
+// here, before any import can construct one, so 'has this train left yet',
+// 'today', the live map and every date Saarthi resolves agree with the
+// traveller's watch instead of running five and a half hours behind it.
+process.env.TZ = process.env.TZ || 'Asia/Kolkata';
+
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -22,7 +29,10 @@ import * as limits from './limits.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
-const TODAY = () => new Date().toISOString().slice(0, 10);
+// the local calendar date, not the UTC one: at 01:00 IST, toISOString still
+// says yesterday
+const TODAY = () => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 // Simulation clock: can be shifted to any time of day and run faster than real
 // time, so a demo can watch the whole day's traffic in minutes.
