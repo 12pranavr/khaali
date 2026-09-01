@@ -7,6 +7,7 @@ import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
+import * as tatkal from './tatkal.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -557,6 +558,105 @@ t('the odds move with the clock they are given', () => {
   assert.strictEqual(far.days, 44);
   assert.strictEqual(near.days, 1);
   assert.ok(far.expCancel > near.expCancel, 'more churn with more lead time');
+});
+
+
+
+console.log('\nfair tatkal: the round, without HTTP');
+const tkDate = tatkal.tkIso(new Date('2026-09-10T12:00:00+05:30').getTime());
+t('a round is deterministic from who opened it, its number and its date', () => {
+  const a = tatkal.newRound('p@x', 1, tkDate, 0), b = tatkal.newRound('p@x', 1, tkDate, 0);
+  assert.strictEqual(a.seed, b.seed);
+  assert.strictEqual(a.sim.humans, b.sim.humans);
+  assert.notStrictEqual(tatkal.newRound('q@x', 1, tkDate, 0).seed, a.seed, 'another person gets another round');
+  assert.strictEqual(a.sim.agents.length, 3);
+  assert.ok(a.sim.humans >= 120 && a.sim.humans < 150);
+});
+
+t('one entry per identity, and only while the window is open', () => {
+  const R = tatkal.newRound('p@x', 1, tkDate, 0);
+  assert.ok(tatkal.enter(R, { who: 'a@x', name: 'A' }).ok);
+  assert.strictEqual(tatkal.enter(R, { who: 'a@x', name: 'A again' }).reason, 'duplicate');
+  assert.ok(tatkal.enter(R, { who: 'b@x', name: 'B' }).ok);
+  assert.strictEqual(R.real.length, 2);
+  R.state = 'done';
+  assert.strictEqual(tatkal.enter(R, { who: 'c@x', name: 'C' }).reason, 'closed');
+});
+
+t('allotment weights the farms down and never below one', () => {
+  const R = tatkal.newRound('p@x', 2, tkDate, 0);
+  const av = S.availability(tatkal.TKN, tkDate, tatkal.TKC, tatkal.TKF, tatkal.TKT);
+  const out = tatkal.allot(R, av);
+  assert.ok(out.ok);
+  assert.strictEqual(R.state, 'done');
+  const sn = R.result.sentinel;
+  assert.strictEqual(sn.capChits, 12);
+  assert.strictEqual(sn.botChits, 3, 'three farms, one chit each');
+  assert.strictEqual(sn.stripped, 9);
+  assert.strictEqual(sn.flagged, 3);
+  assert.strictEqual(sn.cleared, R.sim.humans, 'every simulated traveller clears');
+  assert.strictEqual(R.result.chits, R.sim.humans + 3);
+  assert.strictEqual(R.result.winners.bots + R.result.winners.humans, Math.min(tatkal.TKB, R.result.chits));
+  assert.strictEqual(tatkal.allot(R, av).reason, 'closed', 'cannot allot twice');
+});
+
+t('the same seed allots the same winners, so anyone can replay it', () => {
+  const av = S.availability(tatkal.TKN, tkDate, tatkal.TKC, tatkal.TKF, tatkal.TKT);
+  const a = tatkal.newRound('p@x', 3, tkDate, 0), b = tatkal.newRound('p@x', 3, tkDate, 0);
+  const wa = tatkal.allot(a, av).winners.map(w => w.kind + ':' + w.id);
+  const wb = tatkal.allot(b, av).winners.map(w => w.kind + ':' + w.id);
+  assert.deepStrictEqual(wa, wb);
+});
+
+t('a real winner is pointed at a berth that is genuinely free', () => {
+  // enough real entrants that at least one lands in the first forty
+  const av = S.availability(tatkal.TKN, tkDate, tatkal.TKC, tatkal.TKF, tatkal.TKT);
+  let R, out, tries = 0;
+  do {
+    R = tatkal.newRound('p@x', 10 + tries, tkDate, 0);
+    for (let i = 0; i < 60; i++) tatkal.enter(R, { who: 'r' + i + '@x', name: 'R' + i, signals: { atMs: 9000, tries: 1, actions: 5, gaps: [2000, 6000, 1500] } });
+    out = tatkal.allot(R, av);
+  } while (!out.realWinners.length && ++tries < 5);
+  assert.ok(out.realWinners.length, 'someone real won');
+  const usable = new Set(av.berths.filter(b => b.k === 'free' || (b.k === 'part' && b.price != null)).map(b => b.idx));
+  for (const w of out.realWinners) assert.ok(usable.has(w.berthIdx), 'winner ' + w.id + ' got berth ' + w.berthIdx);
+  const idxs = out.realWinners.map(w => w.berthIdx);
+  assert.strictEqual(new Set(idxs).size, idxs.length, 'no two winners share a berth');
+});
+
+console.log('\nseat hop: two half-empty berths, one ticket');
+t('two partial berths chain into one hold, each priced for its own stretch', () => {
+  const hd = '2026-09-22';
+  // a berth free on the near half and a different berth free on the far half
+  const near = S.availability('16021', hd, 'SL', 5, 9), far = S.availability('16021', hd, 'SL', 9, 13);
+  const a = near.berths.find(b => b.k === 'free');
+  const b = far.berths.find(x => x.k === 'free' && x.idx !== a.idx);
+  assert.ok(a && b, 'a near berth and a far berth');
+  const h = S.hold({ train: '16021', date: hd, cls: 'SL', from: 5, to: 13, berthIdxs: [a.idx, b.idx], pax: 1,
+    segs: [{ from: 5, to: 9 }, { from: 9, to: 13 }], hop: true, who: 'hop-1' });
+  assert.ok(h.ok, h.reason);
+  assert.strictEqual(h.hold.hop, true);
+  assert.strictEqual(h.hold.berths.length, 2);
+  const [ba, bb] = h.hold.berths;
+  assert.strictEqual(ba.segFrom, 5); assert.strictEqual(ba.segTo, 9);
+  assert.strictEqual(bb.segFrom, 9); assert.strictEqual(bb.segTo, 13);
+  assert.ok(ba.partial && bb.partial, 'each covers part of the journey');
+  assert.strictEqual(ba.km + bb.km, journeyKm(5, 13), 'together they cover the whole trip');
+  // a hop is priced by the kilometres ridden, so the two halves together cost
+  // what one through berth costs (within rounding to five rupees), and each
+  // half on its own is cheaper than a full-way berth
+  const through = h.hold.fullPrice - h.hold.fees;
+  assert.ok(Math.abs(h.hold.berthSum - through) <= 10, 'halves ' + h.hold.berthSum + ' vs through ' + through);
+  assert.ok(ba.price < through && bb.price < through, 'each half is cheaper than a through berth');
+  // both locked, exactly on their stretches
+  const v = S.availability('16021', hd, 'SL', 5, 13);
+  assert.strictEqual(v.berths.find(x => x.idx === a.idx).k, 'locked');
+  assert.strictEqual(v.berths.find(x => x.idx === b.idx).k, 'locked');
+  assert.strictEqual(S.availability('16021', hd, 'SL', 9, 13).berths.find(x => x.idx === a.idx).k, 'free', 'the near berth is untouched on the far stretch');
+  // and released together
+  S.release(h.hold.id);
+  const w = S.availability('16021', hd, 'SL', 5, 13);
+  assert.strictEqual(w.counts.locked, 0);
 });
 
 

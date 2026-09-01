@@ -28,6 +28,7 @@ import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
+import * as tatkal from './tatkal.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -583,11 +584,7 @@ async function api(req, res, url) {
   // win points at a genuinely free berth the winner then holds and pays for
   // through the ordinary pipeline.
   if (p.startsWith('/api/tatkal')) {
-    const TKN = '16021', TKC = 'SL', TKF = 0, TKT = 13, TKB = 40;
-    const tkIso = () => {
-      const d = new Date(Date.now() + 864e5);
-      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-    };
+    const { TKN, TKC, TKF, TKT, TKB, tkIso } = tatkal;
     // One round per verified identity. Two reviewers on the page at once
     // used to share a single global round and stomp each other; a stranger
     // could open or close it with an anonymous POST. Now a round belongs to
@@ -596,52 +593,15 @@ async function api(req, res, url) {
     const userOf = who => { let u = G.users.get(who);
       if (!u) { u = { round: null, history: [] }; G.users.set(who, u); } return u; };
     const peekUser = who => G.users.get(who) || { round: null, history: [] };
-    const fnv = s => { let h = 2166136261 >>> 0;
-      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-      return h; };
-    const mulb = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0;
-      let t = Math.imul(a ^ a >>> 15, 1 | a);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-    const simOf = seed => {
-      const r = mulb(seed);
-      const agents = [{ id: 'A', tries: 180 + Math.floor(r() * 80) },
-        { id: 'B', tries: 110 + Math.floor(r() * 70) },
-        { id: 'C', tries: 60 + Math.floor(r() * 60) }];
-      const humans = 120 + Math.floor(r() * 30);
-      const arrivals = [];
-      agents.forEach(a => {
-        a.atMs = 3 + Math.floor(r() * 40);
-        a.accounts = 22 + Math.floor(r() * 30);
-        // a script keeps time: gaps clustered tightly around one interval
-        const base = 12 + Math.floor(r() * 9);
-        a.gaps = [];
-        for (let g = 0; g < 6; g++) a.gaps.push(base + Math.floor(r() * 3));
-        a.signals = { atMs: a.atMs, tries: a.tries, accounts: a.accounts,
-          payReuse: true, actions: 0, gaps: a.gaps };
-        arrivals.push({ kind: 'agent', id: a.id, tries: a.tries, atMs: a.atMs });
-      });
-      const hpeople = [];
-      for (let h = 0; h < humans; h++) {
-        const atMs = 500 + Math.floor(r() * 40000);
-        // a person browses first and their taps are anything but regular
-        const gaps = [900 + Math.floor(r() * 5200), 1400 + Math.floor(r() * 9000),
-          700 + Math.floor(r() * 3100), 2600 + Math.floor(r() * 11000)];
-        hpeople.push({ id: 'h' + h,
-          signals: { atMs, tries: 1, accounts: 1, payReuse: false,
-            actions: 3 + Math.floor(r() * 9), gaps } });
-        arrivals.push({ kind: 'human', id: 'h' + h, atMs });
-      }
-      return { agents, humans, hpeople, arrivals };
-    };
+    // the round itself - seed, population, entries, allotment - lives in
+    // tatkal.mjs, where it can be tested without HTTP or a token
 
     if (p === '/api/tatkal/open' && req.method === 'POST') {
       const who = await whoIs(req);
       if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to open a Tatkal window.' });
       const U = userOf(who);
       const id = (U.history.length + 1);
-      const seed = fnv('tk|' + who + '|' + id + '|' + tkIso());
-      U.round = { id, seed, openedAt: Date.now(), state: 'open', real: [], sim: simOf(seed), result: null };
+      U.round = tatkal.newRound(who, id, tkIso());
       return send(res, 200, { ok: true, id });
     }
     if (p === '/api/tatkal/paysession' && req.method === 'POST') {
@@ -688,68 +648,17 @@ async function api(req, res, url) {
       const U = userOf(who);
       const R = U.round;
       if (!R || R.state !== 'open') return send(res, 409, { error: 'no open window' });
-      R.state = 'done'; R.closedAt = Date.now();
-      // Sentinel runs on EVERY entrant, farms and people alike. A scorer that
-      // only ever sees the entries you already suspect is a label, not a model.
-      const scored = sentinel.scoreRound([
-        ...R.sim.agents.map(a => ({ id: a.id, kind: 'bot', signals: a.signals })),
-        ...(R.sim.hpeople || []).map(h => ({ id: h.id, kind: 'human', signals: h.signals })),
-        ...R.real.map(e => ({ id: e.who, kind: 'real', name: e.name, signals: e.signals || {} })),
-      ]);
-      const byId = new Map(scored.map(x => [x.id, x]));
-      R.scored = scored;
-
-      // The identity check and the monthly cap already stand. Sentinel can only
-      // take chits AWAY from an entry that behaves like a farm; it can never
-      // hand one more, and it can never take a real person below one. Worst
-      // case for a human who trips every signal is being counted as one person
-      // entering once, which is what they are.
-      const chitsFor = id => {
-        const sc = byId.get(id);
-        return Math.max(1, Math.min(4, sc ? sc.chits : 4));
-      };
-      const bowl = [];
-      R.sim.agents.forEach(a => { const n = chitsFor(a.id);
-        for (let c = 0; c < n; c++) bowl.push({ kind: 'bot', id: a.id }); });
-      for (let h = 0; h < R.sim.humans; h++) bowl.push({ kind: 'human', id: 'h' + h });
-      R.real.forEach((e, i) => bowl.push({ kind: 'real', id: e.who, name: e.name, ix: i }));
-      const r = mulb(R.seed ^ 0x9e3779b9);
-      for (let i = bowl.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1));
-        const t = bowl[i]; bowl[i] = bowl[j]; bowl[j] = t; }
-      const winners = bowl.slice(0, Math.min(TKB, bowl.length));
-      const realWinners = winners.filter(w => w.kind === 'real');
-      const av = store.availability(TKN, tkIso(), TKC, TKF, TKT);
-      // full-way berths first; on a sold-out day the winner gets the best
-      // partly-free berth instead, priced for the stretch that is theirs
-      const freeIdx = av.berths.filter(x => x.k === 'free').map(x => x.idx)
-        .concat(av.berths.filter(x => x.k === 'part' && x.price != null)
-          .sort((a2, b2) => b2.price - a2.price).map(x => x.idx));
-      realWinners.forEach((w, i) => { w.berthIdx = freeIdx[i] != null ? freeIdx[i] : null; });
+      const done2 = tatkal.allot(R, store.availability(TKN, tkIso(), TKC, TKF, TKT));
+      if (!done2.ok) return send(res, 409, { error: 'no open window' });
       // only a WIN consumes a monthly chit - losing must cost a human
       // nothing, while the per-round identity limit still starves bot farms
-      realWinners.forEach(w => {
+      done2.realWinners.forEach(w => {
         const k = monthKey(w.id);
         G.month.set(k, (G.month.get(k) || 0) + 1);
         journal.append({ t: 'tkwin', who: w.id, month: monthOf(), round: R.id });
       });
-      const botChits = R.sim.agents.reduce((a2, a) => a2 + chitsFor(a.id), 0);
-      R.result = {
-        chits: bowl.length,
-        sentinel: {
-          model: sentinel.MODEL.version,
-          capChits: R.sim.agents.length * 4,
-          botChits,
-          stripped: R.sim.agents.length * 4 - botChits,
-          flagged: scored.filter(x => x.band !== 'clear').length,
-          cleared: scored.filter(x => x.band === 'clear').length,
-        },
-        counts: { free: av.counts.free, part: av.counts.part },
-        winners: { bots: winners.filter(w => w.kind === 'bot').length,
-          humans: winners.filter(w => w.kind === 'human').length,
-          real: realWinners.map(w => ({ who: w.id, name: w.name, berthIdx: w.berthIdx })) },
-      };
-      U.history.push({ id: R.id, chits: bowl.length, bots: R.result.winners.bots,
-        humans: R.result.winners.humans + realWinners.length });
+      U.history.push({ id: R.id, chits: R.result.chits, bots: R.result.winners.bots,
+        humans: R.result.winners.humans + done2.realWinners.length });
       return send(res, 200, { ok: true });
     }
     if (p === '/api/tatkal/reset' && req.method === 'POST') {
@@ -974,7 +883,7 @@ async function api(req, res, url) {
       if (!R || R.state !== 'open' || R.id !== tq.round)
         return send(res, 409, { error: 'the window closed before payment \u2014 nothing was charged' });
       tq.status = 'paid';
-      if (!R.real.some(e => e.who === tq.who)) R.real.push({ who: tq.who, name: tq.name, at: Date.now(), signals: tq.sig || {} });
+      tatkal.enter(R, { who: tq.who, name: tq.name, signals: tq.sig || {} });
       return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
     }
     const h = store.getHold(mPay[1]);
