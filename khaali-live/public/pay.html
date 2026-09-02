@@ -89,6 +89,7 @@ async function load() {
   try { hold = await api('/api/hold/' + holdId); }
   catch { return expired(); }
 
+  if (hold.tatkal) return bank(hold);
   if (hold.status === 'paid') return done(hold.pnr);
   if (hold.status !== 'pending' || hold.msLeft <= 0) return expired();
 
@@ -135,17 +136,86 @@ async function load() {
   }, 250);
 }
 
-function done(pnr) {
+// ---------------------------------------------------------------------------
+// A Tatkal entry is not a payment, so for one this page is not a checkout.
+// It plays the part of the traveller's bank: a block request comes in, the
+// traveller approves it, and the money is set aside without moving. The same
+// page then waits for the draw and shows what became of the block - taken
+// because a berth was allotted, or released because none was. There is no
+// refund screen because there was never a debit.
+const BANK = { upi: 'UPI app', card: 'card', netbanking: 'bank account', wallet: 'khaali wallet' };
+function bank(h) {
   stop();
-  if (pnr === 'TQ-ENTRY') {
-    $('#panel').innerHTML = `<div class="banner ok">Payment received. Tatkal entry confirmed.</div>
-      <h2 style="margin:10px 0 4px">You are in the window</h2>
-      <div class="muted">Your berth is allotted when the window closes \u2014 watch the Fair Tatkal page.
-      Not allotted means an instant full refund.</div>
-      <a class="btn" href="/fair-tatkal" style="display:block;text-align:center;margin-top:14px;
-        text-decoration:none">Back to Fair Tatkal</a>`;
+  const via = BANK[h.method] || 'bank';
+  const amt = '₹' + h.amount;
+  document.querySelector('.brand small').textContent = 'your bank · simulated';
+  const simNote = `<div class="note" style="margin-top:14px"><b>Simulated bank.</b> This page stands in for
+    your ${via}. It is not a UPI code and no real money moves.</div>`;
+  const back = `<a class="btn ghost" href="/fair-tatkal" style="display:block;text-align:center;margin-top:10px;
+    text-decoration:none">Back to Fair Tatkal</a>`;
+  const head = (kicker, title, sub) => `
+    <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px">${kicker}</div>
+    <h2 style="margin:8px 0 4px;font-size:30px">${title}</h2>
+    <div class="muted">${sub}</div>`;
+
+  if (h.status === 'pending' && h.msLeft > 0) {
+    $('#panel').innerHTML = head('Block request · from khaali', amt, 'Tatkal entry · 16021 Kaveri Express · tomorrow')
+      + `<div style="margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px">
+          <div style="font-weight:700">This blocks ${amt} in your account. It is not debited.</div>
+          <div class="muted" style="margin-top:6px">It is taken only if you are allotted a berth when the window
+          closes. Otherwise the block is released on its own. Nothing to refund, nothing to chase.</div>
+        </div>
+        <div class="timer" id="timer" style="margin:8px 0 2px">5:00</div>
+        <div class="muted">The request lapses after this. A lapsed request blocks nothing.</div>
+        <button class="btn" id="approve" style="display:block;width:100%;margin-top:16px">Approve block · ${amt}</button>
+        <button class="btn ghost" id="decline" style="display:block;width:100%;margin-top:10px">Decline</button>
+        ${simNote}`;
+    renderTimer(h.msLeft);
+    const endsAt = Date.now() + h.msLeft;
+    ticker = setInterval(() => { const left = endsAt - Date.now(); renderTimer(left); if (left <= 0) refreshBank(); }, 250);
+    $('#approve').onclick = async () => {
+      $('#approve').disabled = true; $('#approve').textContent = 'Blocking…';
+      try { await api('/api/pay/' + holdId, { method: 'POST' }); await refreshBank(); }
+      catch (e) {
+        $('#approve').disabled = false; $('#approve').textContent = 'Approve block · ' + amt;
+        banner('err', e.status === 410 ? 'The request lapsed — nothing was blocked.' : 'Not blocked: ' + e.message);
+      }
+    };
+    $('#decline').onclick = async () => {
+      await api('/api/hold/' + holdId, { method: 'DELETE' }).catch(() => {});
+      refreshBank();
+    };
     return;
   }
+  if (h.status === 'authorised') {
+    $('#panel').innerHTML = head('Blocked · not debited', amt + ' blocked',
+        'Your money has not moved. It is set aside in your ' + via + ' until the window closes.')
+      + `<div class="banner ok" style="margin-top:16px">Waiting for allotment. This page updates by itself.</div>
+        <div class="muted" style="margin-top:10px">Allotted: ${amt} is debited and the berth is yours.<br>
+        Not allotted: the block is released. ₹0 debited.</div>${back}${simNote}`;
+    return;
+  }
+  if (h.status === 'captured') {
+    $('#panel').innerHTML = head('Allotted', amt + ' debited', 'Your block was taken because a berth was allotted to you.')
+      + `<div class="banner ok" style="margin-top:16px">Berth ${h.berth || 'allotted'} on tomorrow's 16021.
+        Open Fair Tatkal to get your ticket — the ${amt} covers it, there is nothing more to pay.</div>${back}${simNote}`;
+    return;
+  }
+  if (h.status === 'released') {
+    $('#panel').innerHTML = head('Not allotted', '₹0 debited',
+        'The block on your ' + amt + ' is released. Nothing was taken, so there is nothing to refund.')
+      + `<div class="banner ok" style="margin-top:16px">Your ${via} shows the money exactly where it was.</div>${back}${simNote}`;
+    return;
+  }
+  $('#panel').innerHTML = head(h.status === 'cancelled' ? 'Declined' : 'Lapsed', 'Nothing was blocked',
+      'The request was never approved, so no money was set aside and none was taken.') + back + simNote;
+}
+async function refreshBank() {
+  try { hold = await api('/api/hold/' + holdId); bank(hold); } catch { expired(); }
+}
+
+function done(pnr) {
+  stop();
   $('#panel').innerHTML = `<div class="banner ok">Payment received. Booking confirmed.</div>
     <h2 style="margin:10px 0 4px">PNR ${pnr}</h2>
     <div class="muted">These berths are now yours. Everyone else sees them as taken.</div>
@@ -177,6 +247,8 @@ es.onmessage = e => {
   if (m.type === 'booked' && m.pnr && hold && m.berthIdxs?.some(i => hold.berths.some(b => b.idx === i))) {
     api('/api/hold/' + holdId).then(h => { if (h.status === 'paid') done(h.pnr); }).catch(() => {});
   }
+  // the draw settled this block on the other screen: show what became of it
+  if (m.type === 'tkpay' && m.id === holdId) refreshBank();
 };
 
 load();

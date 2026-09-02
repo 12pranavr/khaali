@@ -509,7 +509,11 @@ khaali replaces the race with a **window**.
 6. **Real berths.** A winner is assigned an actually free berth from live
    inventory, full-way berths first. On a sold-out day the winner gets the
    best partial berth instead, priced for the stretch that is theirs.
-7. **Refund.** Entries not allotted are refunded instantly and in full.
+7. **Block, don't take.** The fare is never paid to enter. The traveller's
+   bank blocks it, the way an IPO application blocks money through a UPI
+   mandate or ASBA, and nothing is debited. When the window closes, a
+   winner's block is taken and every other block is released. There is no
+   refund step because there was no debit. See "Blocked, not taken" below.
 
 ### The simulated opposition
 
@@ -645,13 +649,49 @@ A line underneath names the current holder in plain words. If the payment
 sticks, it says so explicitly: "the payment gateway, not khaali, not the
 railway", and marks that no PNR was issued.
 
+### Blocked, not taken
+
+A Tatkal entry is a bet on an allotment, and most entrants lose. Charging
+them up front and refunding the losers is the wrong shape: it creates the
+"money gone, no ticket" moment and a queue of refunds. khaali's payment
+session for a Tatkal entry is therefore a block, not a payment.
+
+The session has four states, in `khaali-live/tatkal.mjs`:
+
+```
+pending -> authorised -> captured   allotted: the fare is now taken
+                      -> released   not allotted: nothing was ever taken
+pending -> cancelled | expired      the bank never approved: nothing blocked
+```
+
+Approving the session (`POST /api/pay/:id`) moves it to `authorised` and
+enters the traveller in the window. The draw settles every approved block in
+the round: `settleRound` captures a winner's and releases the rest. Resetting
+a window releases every approved block in it. A block the bank never approved
+is never settled, and a settled block cannot be settled again.
+
+Every method uses the same rule and only the word changes: held in the
+wallet, authorised on a card, blocked through a UPI mandate, blocked ASBA
+style through netbanking. In the wallet this is real: the wallet keeps
+`held` separately from `bal`, the header shows available money and the
+blocked amount side by side, and the ledger records a release as a zero
+rupee line so it is visible that nothing happened.
+
+The scanned page (`khaali-live/public/pay.html`) plays the part of the
+traveller's bank for a Tatkal session. It shows the block request with
+Approve and Decline, then "blocked, not debited", then, when the draw runs
+on the other screen, either "debited, berth S4/12 is yours" or "₹0 debited,
+block released". It updates on its own through the same event stream the
+booking flow uses. The page says it is a simulated bank.
+
 ### Automatic refunds
 
-Money returns to the wallet without anyone claiming it, in four cases:
+Money returns to the wallet without anyone claiming it. A Tatkal entry is
+the exception on purpose: nothing was taken, so nothing comes back.
 
 | Trigger | Note written to the wallet |
 |---|---|
-| Not allotted in Tatkal | fare refunded instantly |
+| Not allotted in Tatkal | block released, ₹0 debited |
 | Train cancelled | full refund |
 | Delay over 3 hours | full refund, with the option to keep the ticket |
 | Duplicate booking | khaali spots the pair and asks before refunding |

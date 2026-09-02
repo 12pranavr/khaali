@@ -1552,15 +1552,15 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </sc-for>
             <div style="{{ tkHoldingStyle }}">{{ tkHolding }}</div>
             <div style="{{ tkStuckStyle }}">
-              <div style="font:700 12.5px/1.4 Manrope,sans-serif;color:#ffb4a2;margin-bottom:5px">Your money did not reach the railway</div>
-              <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#dfe3ea">It is sitting with the payment gateway, not with khaali and not with Indian Railways. Under RBI&#8217;s rules for failed transactions it must auto-reverse within T+5 days &#8212; after that your bank owes you &#8377;100 for every extra day, and it is supposed to pay that without being asked.</div>
-              <button onClick="{{ tkClaim }}" style="margin-top:11px;border:none;background:#1f9d55;color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 16px;border-radius:7px;cursor:pointer;min-height:42px">Claim it back now &#8594;</button>
+              <div style="font:700 12.5px/1.4 Manrope,sans-serif;color:#ffb4a2;margin-bottom:5px">Your entry did not reach khaali &#8212; and your money never left</div>
+              <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#dfe3ea">Your bank approved the block and khaali never heard about it. Because it was a block and not a debit, nothing was taken: an unmatched block lapses on its own. With a debit, this is the exact moment you would be holding a screenshot and a customer-care number, waiting on RBI&#8217;s T+5 days.</div>
+              <button onClick="{{ tkClaim }}" style="margin-top:11px;border:none;background:#1f9d55;color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 16px;border-radius:7px;cursor:pointer;min-height:42px">Release the block now &#8594;</button>
             </div>
           </div>
           <div style="flex:1 1 380px;min-width:300px;background:var(--k-fff);padding:22px 24px 26px;max-height:calc(100vh - 32px);overflow-y:auto" data-copane="1">
             <div style="display:flex;align-items:center;margin-bottom:16px">
               <div>
-                <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount payable</div>
+                <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Amount to block &#183; not debited</div>
                 <div style="font:700 24px/1.2 Manrope,sans-serif;margin-top:4px">{{ tkFare }}</div>
               </div>
               <div onClick="{{ tkCheckoutClose }}" style="margin-left:auto;cursor:pointer;font-size:20px;line-height:1;color:var(--k-fg-8a8a84);padding:4px 6px">&#215;</div>
@@ -1579,7 +1579,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
                     <div style="flex:none;background:#fff;border-radius:9px;padding:8px;line-height:0"><img src="{{ tkQrSrc }}" width="124" height="124" style="display:block" alt="Payment QR"/></div>
                     <div style="flex:1;min-width:150px">
                       <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a)">Scan with any UPI app</div>
-                      <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">GPay &#183; PhonePe &#183; Paytm &#183; BHIM</div>
+                      <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">GPay &#183; PhonePe &#183; Paytm &#183; BHIM &#183; your app asks you to approve a block, not a payment</div>
                       <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:7px">or type your UPI ID</div>
                     </div>
                   </div>
@@ -1631,7 +1631,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <input value="{{ tkName }}" onChange="{{ setTkName }}" placeholder="Who is travelling?" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 14px"></input>
             <div style="border:1px solid var(--k-e6e5e0);border-radius:9px;padding:13px 15px;margin-bottom:14px;background:var(--k-fafaf8)">
               <div style="display:flex;font:600 12.5px/1.6 Manrope,sans-serif"><span>Tatkal fare</span><span style="margin-left:auto">{{ tkFare }}</span></div>
-              <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Paid now to enter &#183; refunded to the same method the instant you are not allotted</div>
+              <div style="font:500 11px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Blocked now to enter, not paid &#183; taken only if you are allotted, released on its own if not</div>
             </div>
             <button onClick="{{ tkToPay }}" style="width:100%;border:none;background:var(--k-d8385a);color:var(--k-fg-fff);font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:8px;cursor:pointer;min-height:48px">Continue to payment &#8594;</button>
           </div>
@@ -1690,8 +1690,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </div>
       <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-d8385a)">
-        <div style="font:700 12.5px/1.35 Manrope,sans-serif">You book &amp; pay the fare</div>
-        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">UPI &#183; scan the QR on your phone &#183; card &#183; netbanking &#183; wallet PIN. The &#8377;175 is <b>held</b>, not spent &#8212; it is what makes your entry real.</div>
+        <div style="font:700 12.5px/1.35 Manrope,sans-serif">You book &amp; block the fare</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">UPI &#183; scan the QR on your phone &#183; card &#183; netbanking &#183; wallet PIN. Your bank <b>blocks</b> &#8377;175 and debits nothing &#8212; the way an IPO application works. The block is what makes your entry real.</div>
       </div>
       <div class="k-arrow" style="flex:none;align-self:center;font:700 16px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">&#8594;</div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:10px;padding:13px 15px;flex:1;min-width:150px;border-left:4px solid var(--k-e0a419)">
@@ -1707,11 +1707,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch;margin-top:10px">
       <div style="flex:1;min-width:230px;background:rgba(31,157,85,.08);border:1px solid var(--k-1f9d55);border-radius:10px;padding:13px 15px">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif;color:var(--k-fg-14663a)">&#10003; Allotted</div>
-        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Your berth is named &#8212; S4/60, Lower &#8212; and the fare you already paid becomes the ticket. One tap prints the PNR. The bell rings to tell you.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">Your berth is named &#8212; S4/60, Lower &#8212; and only now is the &#8377;175 taken: the block becomes the ticket. One tap prints the PNR. The bell rings to tell you.</div>
       </div>
       <div style="flex:1;min-width:230px;background:rgba(224,164,25,.08);border:1px solid var(--k-e0a419);border-radius:10px;padding:13px 15px">
         <div style="font:700 12.5px/1.35 Manrope,sans-serif;color:var(--k-fg-c2870a)">&#10007; Not allotted</div>
-        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">The &#8377;175 bounces back <b>instantly</b> to whatever paid it &#8212; the bell rings with the receipt. Then the khaali part: the card shows the berths that need no window at all &#8212; book normally, or take the guaranteed seat-hop.</div>
+        <div class="k-flowsub" style="font:500 10.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:4px">The block is released and <b>&#8377;0 was debited</b> &#8212; no refund, because nothing was taken. The bell rings to say so. Then the khaali part: the card shows the berths that need no window at all &#8212; book normally, or take the guaranteed seat-hop.</div>
       </div>
     </div>
     <div style="margin-top:14px;padding-top:13px;border-top:1px dashed var(--k-e6e5e0)">
@@ -1748,8 +1748,9 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <h1 style="margin:0 0 18px;font:600 34px/1.1 'Cormorant Garamond',Georgia,serif;letter-spacing:-.01em">Your money, back in seconds</h1>
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:14px;padding:26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px">
     <div>
-      <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">Balance</div>
+      <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:8px">Available</div>
       <div style="font:700 44px/1 'Cormorant Garamond',Georgia,serif;color:var(--k-fg-14663a)">{{ walletBalBig }}</div>
+      <div style="{{ walletHeldStyle }}">{{ walletHeldLine }}</div>
     </div>
     <button onClick="{{ walletWithdraw }}" style="margin-left:auto;border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 13px/1 Manrope,sans-serif;padding:14px 20px;border-radius:7px;cursor:pointer;min-height:44px">Withdraw to bank · simulated</button>
   </div>
@@ -2479,7 +2480,9 @@ class Component extends DCLogic {
     (async()=>{
       await step(1,700);                       // bank -> gateway
       if(fail){
-        // the money leaves the bank, the gateway takes it, khaali never hears
+        // the bank approves the block, the gateway confirms it, khaali never
+        // hears - and because it was a block, nothing has actually moved
+        if(this.state.tkMethod==='wallet')this.tkBlockWallet('tk:'+(S.tkPayId||'fail'));
         await new Promise(r=>setTimeout(r,900));
         this.setState({tkPayBusy:false,tkStuck:true,tkFlight:2});
         return;
@@ -2498,14 +2501,13 @@ class Component extends DCLogic {
     try{const a=(this.state.travNames||[]).slice();a[0]=nm;
       localStorage.setItem('khaali-copax',JSON.stringify(a));
       this.setState({travNames:a});}catch(e){}
-    // wallet money is real money here; UPI and card charge outside the wallet
-    if(method==='wallet'){
-      if(this.wallet().bal<fare)this.walletCredit(fare,'Demo top-up for Tatkal payment');
-      this.walletDebit(fare,'Tatkal entry \u2014 paid, held until allotment');
-    }
+    // wallet money is real money here, so the wallet blocks it the way a
+    // bank would; UPI, card and netbanking block outside the wallet
+    const ref='tk:'+(S.tkPayId||T.id);
+    if(method==='wallet')this.tkBlockWallet(ref);
     const label={wallet:'khaali wallet',upi:'UPI',card:'card',netbanking:'bank account'}[method]||'wallet';
     try{localStorage.setItem('khaali-tklock',
-      JSON.stringify({round:T.id,amt:fare,settled:false,method:method,label:label}));}catch(e){}
+      JSON.stringify({round:T.id,amt:fare,settled:false,method:method,label:label,ref:ref}));}catch(e){}
     if(!keepOpen)this.setState({tkModal:false,tkStep:'details',tkPin:'',tkCard:''});
     // the session is the single source of truth: paying it creates the entry
     (async()=>{try{
@@ -2523,11 +2525,11 @@ class Component extends DCLogic {
       const j=await this.tfetch('/api/tatkal/state?who='+encodeURIComponent(who),null,6000).then(r=>r.json());
       this.setState({tk:j});
       // once the numbers are final, ask the narrator to word them - once
-      if(j.phase==='done'&&(!this.state.tkSay||this.state.tkSay.id!==j.id)&&!this._tkSayBusy){
-        this._tkSayBusy=true;
+      if(j.phase==='done'&&this._tkSayFor!==j.id&&(!this.state.tkSay||this.state.tkSay.id!==j.id)&&!this._tkSayBusy){
+        this._tkSayBusy=true;this._tkSayFor=j.id;
         this.tfetch('/api/tatkal/explain',null,14000).then(r=>r.json())
           .then(x=>{if(x&&x.text)this.setState({tkSay:{id:x.id,text:x.text}});})
-          .catch(()=>{}).finally(()=>{this._tkSayBusy=false;});
+          .catch(()=>{this._tkSayFor=null;}).finally(()=>{this._tkSayBusy=false;});
       }
       // paid from the scanned phone: close the checkout on this screen too
       if(this.state.tkModal&&this.state.tkStep==='pay'&&j.customer&&j.customer.entered){
@@ -2536,27 +2538,35 @@ class Component extends DCLogic {
           localStorage.setItem('khaali-tklock',JSON.stringify({round:j.id,amt:175,settled:false,method:'upi',label:'UPI'}));}catch(e){}
         this.setState({tkModal:false,tkStep:'details',tkDeadline:0,tkFlight:-1,tkPin:''});
       }
-      // settle the fare lock exactly once per round, the moment allotment runs
+      // settle the block exactly once per round, the moment allotment runs:
+      // a winner's block is taken, a loser's is released. Nothing is refunded
+      // because nothing was debited.
       try{
         const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
-        if(L&&!L.settled&&j.phase==='done'&&j.id===L.round){
-          const won=!!(j.customer&&j.customer.won);
+        const P=j.customer&&j.customer.pay;
+        const settledNow=P?(P.status==='captured'||P.status==='released'):(j.phase==='done');
+        if(L&&!L.settled&&settledNow&&j.id===L.round){
+          const won=P?P.status==='captured':!!(j.customer&&j.customer.won);
           const via=L.label||'khaali wallet';
-          if((L.method==='wallet'||!L.method)&&!won){
-            this.walletCredit(L.amt,'Tatkal not allotted \u2014 fare refunded instantly');
+          const ref=L.ref||('tk:'+L.round);
+          if(L.method==='wallet'||!L.method){
+            if(won)this.walletCapture(ref,'Tatkal allotted \u2014 \u20b9'+L.amt+' taken from the block');
+            else this.walletRelease(ref,'Tatkal not allotted \u2014 block released, nothing taken');
           }
           // ring the bell either way - the traveller may be on any page
           const notice=won
-            ?{t:'Tatkal allotted \u2014 a berth is yours',
-              sub:'Open Fair Tatkal to get your ticket. Your \u20b9'+L.amt+' already covers it.',
+            ?{t:'Tatkal allotted \u2014 \u20b9'+L.amt+' taken, the berth is yours',
+              sub:'The block on your '+via+' became the fare. Open Fair Tatkal for your ticket \u2014 nothing more to pay.',
               page:'tatkal'}
-            :{t:'Tatkal not allotted \u2014 \u20b9'+L.amt+' refunded',
-              sub:'Instantly, to your '+via+'. Nothing to claim, nothing to chase.',
-              page:won?'tatkal':'wallet'};
+            :{t:'Tatkal not allotted \u2014 block released',
+              sub:'\u20b90 taken from your '+via+'. Nothing to refund, nothing to claim, nothing to chase.',
+              page:'tatkal'};
           this.setState({notices:[notice].concat(this.state.notices||[]).slice(0,6)});
-          // UPI and card refunds return to the source, so the wallet ledger
-          // stays out of it - the status line says where the money went
-          void via;
+          L.settled=true;localStorage.setItem('khaali-tklock',JSON.stringify(L));
+        }else if(L&&!L.settled&&j.phase&&j.id!==L.round){
+          // the window was reset under this block: release it, nothing was taken
+          if(L.method==='wallet'||!L.method)
+            this.walletRelease(L.ref||('tk:'+L.round),'Tatkal window reset \u2014 block released, nothing taken');
           L.settled=true;localStorage.setItem('khaali-tklock',JSON.stringify(L));
         }
       }catch(e){}
@@ -2930,6 +2940,7 @@ class Component extends DCLogic {
             .then(h=>{if(h.status==='paid')this.commitBooking(h.pnr,h.amount);}).catch(()=>{});}
         if(m.type==='charted'&&m.pnr)this.onCharted(m);
         if(m.type==='chart')this.syncAv();
+        if(m.type==='tkpay')this.loadTk(true);
       }catch(_){}};
     }catch(_){}
     this._h=setInterval(()=>{const S=this.state;
@@ -2979,7 +2990,40 @@ class Component extends DCLogic {
     if(this._pgT){clearInterval(this._pgT);this._pgT=null;}
     this.setState({chatSpeak:false,chatPlayKey:null,chatLoadKey:null,chatPlayPct:0});
   }
-  wallet(){try{return JSON.parse(localStorage.getItem('khaali-wallet')||'{"bal":0,"tx":[]}');}catch(e){return {bal:0,tx:[]};}}
+  wallet(){try{const w=JSON.parse(localStorage.getItem('khaali-wallet')||'{"bal":0,"tx":[]}');w.held=w.held||[];return w;}catch(e){return {bal:0,tx:[],held:[]};}}
+  // a block is money set aside, not money taken: it never touches the ledger
+  // until it is captured (a berth was allotted) or released (it was not)
+  walletHeld(){return this.wallet().held.reduce((a,h)=>a+h.amount,0);}
+  walletAvail(){const w=this.wallet();return Math.max(0,w.bal-w.held.reduce((a,h)=>a+h.amount,0));}
+  walletHold(amount,note,ref){
+    const w=this.wallet();
+    w.held=w.held.filter(h=>h.ref!==ref).concat([{ref,amount,note,ts:Date.now()}]);
+    try{localStorage.setItem('khaali-wallet',JSON.stringify(w));}catch(e){}
+    this.setState({walletTick:(this.state.walletTick||0)+1});
+  }
+  walletCapture(ref,note,pnr){
+    const w=this.wallet();const h=w.held.find(x=>x.ref===ref);if(!h)return false;
+    w.held=w.held.filter(x=>x.ref!==ref);
+    try{localStorage.setItem('khaali-wallet',JSON.stringify(w));}catch(e){}
+    this.walletDebit(h.amount,note,pnr);return true;
+  }
+  walletRelease(ref,note){
+    const w=this.wallet();const h=w.held.find(x=>x.ref===ref);if(!h)return false;
+    w.held=w.held.filter(x=>x.ref!==ref);
+    // a zero-rupee line: the ledger records, on purpose, that nothing happened
+    w.tx.unshift({id:Date.now()+''+Math.floor(Math.random()*999),ts:Date.now(),amount:0,note,pnr:null});
+    w.tx=w.tx.slice(0,40);
+    try{localStorage.setItem('khaali-wallet',JSON.stringify(w));}catch(e){}
+    const ev=(this.state.walletEvents||[]).slice(0,9);
+    this.setState({walletEvents:[{note,amount:0,pnr:null,ts:Date.now()}].concat(ev),walletTick:(this.state.walletTick||0)+1});
+    return true;
+  }
+  tkBlockWallet(ref){
+    const fare=this.fare('SL',Math.abs(this.ST[13].km-this.ST[0].km));
+    if(this.walletAvail()<fare)this.walletCredit(fare,'Demo top-up for Tatkal entry');
+    this.walletHold(fare,'Tatkal entry \u2014 blocked, not taken',ref);
+    return fare;
+  }
   walletPin(){try{return localStorage.getItem('khaali-pin')||'123456';}catch(e){return '123456';}}
   walletDebit(amount,note,pnr){
     const w=this.wallet();
@@ -2996,7 +3040,7 @@ class Component extends DCLogic {
     if(pin.length!==6)return this.setState({wpErr:'Enter all six digits.'});
     if(pin!==this.walletPin())return this.setState({wpErr:'Incorrect PIN \u2014 nothing was paid.',wpPin:''});
     const amt=(S.hold&&S.hold.amount)||0;
-    if(this.wallet().bal<amt)return this.setState({wpErr:'Wallet is short by \u20b9'+(amt-this.wallet().bal)+'.'});
+    if(this.walletAvail()<amt)return this.setState({wpErr:'Wallet is short by \u20b9'+(amt-this.walletAvail())+(this.walletHeld()?' \u2014 \u20b9'+this.walletHeld()+' is blocked for Tatkal':'')+'.'});
     this.setState({wpBusy:true,wpErr:null});
     try{
       const r=await this.tfetch('/api/pay/'+S.holdId,{method:'POST'},8000);
@@ -4868,17 +4912,21 @@ class Component extends DCLogic {
         const pairs=this.dupPairs();
         return {
           goWallet:()=>this.go('wallet'),
-          walletBal:String(w.bal),
+          walletBal:String(this.walletAvail())+(this.walletHeld()?' \u00b7 '+this.walletHeld()+' blocked':''),
           walletChip:{flex:'none',cursor:'pointer',font:"700 12.5px/1 'IBM Plex Mono',monospace",
             border:'1px solid var(--k-e2e0da)',borderRadius:999,padding:'9px 13px',
             color:w.bal>0?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)',
             background:w.bal>0?'var(--k-e6f4ec)':'transparent'},
-          walletBalBig:'\u20b9'+w.bal,
+          walletBalBig:'\u20b9'+this.walletAvail(),
+          walletHeldLine:this.walletHeld()?('\u20b9'+this.walletHeld()+' more is blocked, not taken \u2014 '
+            +(w.held[w.held.length-1].note)+'. It is debited only if a berth is allotted.'):'',
+          walletHeldStyle:{display:this.walletHeld()?'block':'none',marginTop:8,maxWidth:420,
+            font:'600 11.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-c2870a)'},
           walletTx:w.tx.map(t2=>({
             note:t2.note,
-            amount:(t2.amount<0?'\u2212 \u20b9'+Math.abs(t2.amount):'+ \u20b9'+t2.amount),
+            amount:(t2.amount<0?'\u2212 \u20b9'+Math.abs(t2.amount):t2.amount>0?'+ \u20b9'+t2.amount:'\u20b90'),
             amtStyle:{font:"700 16px/1 'IBM Plex Mono',monospace",
-              color:t2.amount<0?'var(--k-fg-d8385a)':'var(--k-fg-14663a)'},
+              color:t2.amount<0?'var(--k-fg-d8385a)':t2.amount>0?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)'},
             when:new Date(t2.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})
               +' \u00b7 '+new Date(t2.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
             pnr:t2.pnr?('PNR '+t2.pnr):''})),
@@ -5180,8 +5228,8 @@ class Component extends DCLogic {
           tkModalClose:()=>this.setState({tkModal:false}),
           tkName:S.tkName||'',
           setTkName:e=>this.setState({tkName:e.target.value}),
-          tkWalletLine:(()=>{const b2=this.wallet().bal;
-            return b2>=tkFareN?('Wallet balance \u20b9'+b2+' \u2014 ready')
+          tkWalletLine:(()=>{const b2=this.walletAvail();
+            return b2>=tkFareN?('Wallet available \u20b9'+b2+' \u2014 \u20b9'+tkFareN+' will be held, not taken')
               :('Wallet \u20b9'+b2+' \u2014 \u20b9'+tkFareN+' demo money is added automatically');})(),
           tkStepDetails:{display:'block'},
           tkStepPay:{display:'none'},
@@ -5200,11 +5248,12 @@ class Component extends DCLogic {
             const stamp=i=>{const d=this.simNowDate();
               d.setSeconds(d.getSeconds()+i);
               return d.toTimeString().slice(0,8);};
+            const via={upi:'UPI',card:'card',netbanking:'bank account',wallet:'khaali wallet'}[S.tkMethod]||'account';
             const defs=[
-              ['Your bank','\u20b9'+tkFareN+' debited from your '+({upi:'UPI',card:'card',netbanking:'bank account',wallet:'khaali wallet'}[S.tkMethod]||'account')],
-              ['Payment gateway','payment authorised and confirmed'],
-              ['khaali','your entry recorded in the Tatkal window'],
-              ['Indian Railways','berth allotted when the window closes'],
+              ['Your bank','\u20b9'+tkFareN+' blocked on your '+via+' \u2014 not debited'],
+              ['Payment gateway','block approved \u00b7 no money moved'],
+              ['khaali','your entry recorded \u00b7 khaali holds nothing'],
+              ['Indian Railways','the block is taken only if a berth is allotted when the window closes'],
             ];
             const stages=defs.map(([title,sub],i)=>{
               const failedHere=stuck&&i===2;
@@ -5221,14 +5270,14 @@ class Component extends DCLogic {
                 title:title,
                 titleStyle:{font:'700 13px/1.4 Manrope,sans-serif',
                   color:failedHere?'#ff9d8c':(doneS||active)?'#fff':'#6a7080'},
-                sub:failedHere?'no PNR issued \u2014 the money never arrived here'
+                sub:failedHere?'khaali never heard \u2014 but a block is not a debit, so nothing was taken'
                   :(doneS?sub+' \u00b7 '+stamp(i):(active?'in progress\u2026':sub)),
               };});
-            const holder=stuck?'the payment gateway \u2014 not khaali, not the railway'
-              :F>=3?'nobody \u2014 it has become your entry'
-              :F>=2?'khaali, held against your entry'
-              :F>=1?'the payment gateway'
-              :F>=0?'your bank, on its way out':'';
+            const holder=stuck?'your bank, still blocked \u2014 not khaali, not the railway, and not debited'
+              :F>=3?'your bank \u2014 blocked, not taken. It moves only if you are allotted'
+              :F>=2?'your bank \u2014 blocked for your entry, not taken'
+              :F>=1?'your bank \u2014 approving the block'
+              :F>=0?'your bank, untouched':'';
             return {
               tkStages:stages,
               tkHolding:'Right now your money is with: '+holder,
@@ -5239,9 +5288,9 @@ class Component extends DCLogic {
                 borderRadius:10,background:'rgba(255,107,87,.10)',border:'1px solid rgba(255,107,87,.45)'},
             };})(),
           tkClaim:()=>{
-            if(S.tkMethod==='wallet')this.walletCredit(tkFareN,'Failed booking \u2014 refund claimed');
+            if(S.tkMethod==='wallet')this.walletRelease('tk:'+(S.tkPayId||'fail'),'Failed entry \u2014 block released, nothing taken');
             this.setState({tkStuck:false,tkFail:false,tkFlight:-1,tkModal:false,tkStep:'details',
-              srvNote:'\u20b9'+tkFareN+' refund claimed \u2014 in a real integration this files the bank dispute with the RBI reference attached.'});},
+              srvNote:'\u20b9'+tkFareN+' block released \u2014 it was never debited, so there is nothing to dispute and nothing to wait for.'});},
           // --- the method rows ---------------------------------------------
           tkMethodsWrap:{display:S.tkFlight>=0?'none':'block'},
           tkPayMethods:[['upi','UPI','GPay, PhonePe, Paytm'],['card','Cards','Visa, RuPay, Mastercard'],
@@ -5289,7 +5338,8 @@ class Component extends DCLogic {
           tkPayErrStyle:{display:S.tkPayErr?'block':'none',marginTop:10,padding:'10px 13px',borderRadius:7,
             background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
             font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
-          tkPayNowLabel:S.tkPayBusy?'Contacting your bank\u2026':('Pay \u20b9'+tkFareN),
+          tkPayNowLabel:S.tkPayBusy?'Asking your bank to block\u2026'
+            :({wallet:'Hold \u20b9'+tkFareN+' in wallet',card:'Authorise \u20b9'+tkFareN}[S.tkMethod]||('Block \u20b9'+tkFareN)),
           tkPayNowStyle:{width:'100%',marginTop:13,border:'none',
             background:S.tkPayBusy?'var(--k-d4d3ce)':'var(--k-1f9d55)',
             color:S.tkPayBusy?'var(--k-fg-8a8a84)':'#fff',
@@ -5301,7 +5351,7 @@ class Component extends DCLogic {
           ...(()=>{const left=Math.max(0,Math.round(((S.tkDeadline||0)-Date.now())/1000));
             const mm=Math.floor(left/60),ss=String(left%60).padStart(2,'0');
             return {
-              tkClockText:'Complete payment within '+mm+':'+ss,
+              tkClockText:'Approve the block within '+mm+':'+ss,
               tkClockStyle:{display:(S.tkDeadline&&S.tkFlight<0)?'block':'none',marginTop:12,
                 textAlign:'center',font:"600 12px/1.5 'IBM Plex Mono',monospace",
                 color:left<60?'var(--k-fg-d8385a)':'var(--k-fg-8a8a84)'},
@@ -5323,10 +5373,10 @@ class Component extends DCLogic {
           tkDoneWrap:{display:(S.tkFlight>=0&&!S.tkPayBusy&&(S.tkFlight>=3||S.tkStuck))?'block':'none',
             paddingTop:8},
           tkDoneMark:S.tkStuck?'\u2715':'\u2713',
-          tkDoneHead:S.tkStuck?'Booking failed \u2014 but your money is traceable'
-            :'Payment successful',
-          tkDoneSub:S.tkStuck?'The gateway took your money and khaali never received it. The panel on the left names who is holding it and what you are owed \u2014 no seven-day silence.'
-            :'Your entry is in the Tatkal window and the fare is held. Allotment runs when the window closes \u2014 booking faster would not have changed anything.',
+          tkDoneHead:S.tkStuck?'Entry failed \u2014 but nothing was taken'
+            :'\u20b9'+tkFareN+' blocked \u00b7 you are in the window',
+          tkDoneSub:S.tkStuck?'Your bank approved the block and khaali never heard. A block is not a debit: the \u20b9'+tkFareN+' is still yours, and the panel on the left shows exactly that.'
+            :'Not paid \u2014 blocked. It is debited only if a berth is allotted to you when the window closes, and released on its own if not. Booking faster would not have changed anything.',
           tkDoneBtn:S.tkStuck?'Back to booking':'Done',
           tkConfirmEnter:()=>{if(!(open&&!me.entered))return;
             const nm=String(S.tkName||'').trim()||((S.auth&&(S.auth.fullName||S.auth.name))||'Traveller');
@@ -5335,9 +5385,8 @@ class Component extends DCLogic {
             try{const a=(this.state.travNames||[]).slice();a[0]=nm;
               localStorage.setItem('khaali-copax',JSON.stringify(a));
               this.setState({travNames:a});}catch(e){}
-            if(this.wallet().bal<tkFareN)this.walletCredit(tkFareN,'Demo top-up for Tatkal entry');
-            this.walletDebit(tkFareN,'Tatkal entry \u2014 fare locked until allotment');
-            try{localStorage.setItem('khaali-tklock',JSON.stringify({round:T.id,amt:tkFareN,settled:false}));}catch(e){}
+            this.tkBlockWallet('tk:'+T.id);
+            try{localStorage.setItem('khaali-tklock',JSON.stringify({round:T.id,amt:tkFareN,settled:false,ref:'tk:'+T.id}));}catch(e){}
             this.setState({tkModal:false});
             (async()=>{try{
               const r=await this.authFetch('/api/tatkal/paysession',{method:'POST',
@@ -5348,8 +5397,8 @@ class Component extends DCLogic {
             }catch(e){}
               this.loadTk(true);})();},
           tkEnterLabel:doneP?'':(open?(me.entered?'Booking received \u2713'
-              :(this.wallet().bal<tkFareN?('Add \u20b9'+tkFareN+' (demo) & book Tatkal')
-                :('Book Tatkal \u00b7 \u20b9'+tkFareN+' locks now')))
+              :(this.walletAvail()<tkFareN?('Add \u20b9'+tkFareN+' (demo) & book Tatkal')
+                :('Book Tatkal \u00b7 \u20b9'+tkFareN+' blocks now')))
             :'Tatkal opens at 10:00 AM'),
           tkEnterStyle:{display:doneP?'none':'inline-block',border:'none',
             background:!open?'var(--k-d4d3ce)':me.entered?'var(--k-1f9d55)':'var(--k-d8385a)',
@@ -5361,12 +5410,12 @@ class Component extends DCLogic {
             return 'Not allotted this time \u2014 your entry was not among the 40 the quota could seat. '
               +tp+' berths went to travellers'
               +(tb?(', '+tb+' to the capped bot entries, considered like everyone else'):' \u2014 the bots won none')
-              +'. Your \u20b9175 has already bounced back to your '
+              +'. The block on your \u20b9175 is released \u2014 nothing was taken from your '
               +(()=>{try{const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');
-                return (L&&L.label)||'khaali wallet';}catch(e){return 'khaali wallet';}})()+'.'
+                return (L&&L.label)||'khaali wallet';}catch(e){return 'khaali wallet';}})()+', so there is nothing to refund.'
               +((me.result&&me.result.free>0)?(' And here is the khaali part: '+me.result.free+' berths on this very train are open RIGHT NOW through ordinary booking \u2014 no window needed.')
                 :((me.result&&me.result.part>0)?(' No full-way berths remain \u2014 but '+me.result.part+' free up en route; seat-hop can seat you without any window at all.'):''));})())
-            :open?(me.entered?('Payment successful \u00b7 \u20b9'+tkFareN+' held'+(()=>{try{const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');return L&&L.label?(' on your '+L.label):'';}catch(e){return '';}})()+'. Allotment runs when the window closes \u2014 refunded the instant you are not allotted.')
+            :open?(me.entered?('Entry received \u00b7 \u20b9'+tkFareN+' blocked'+(()=>{try{const L=JSON.parse(localStorage.getItem('khaali-tklock')||'null');return L&&L.label?(' on your '+L.label):'';}catch(e){return '';}})()+', not debited. Allotment runs when the window closes \u2014 not allotted means the block is released, and there is nothing to refund.')
               :('Booking is open \u2014 one tap, one fare, no racing.'))
             :'The demo window opens from the backend side \u2014 in production this is simply 10:00 AM.',
           tkStatusStyle:{display:(doneP&&me.won)?'none':'block',marginTop:10,
@@ -5386,7 +5435,7 @@ class Component extends DCLogic {
             borderRadius:10,background:'rgba(31,157,85,.10)',border:'1px solid var(--k-1f9d55)'},
           tkWinHead:tkB?('Berth '+tkB.coach+'/'+tkB.no+' \u00b7 '+this.typeName(tkB.type)+' \u00b7 tomorrow\u2019s 16021'):'Berth allotted',
           tkWinSub:'Your booking was allotted a real berth. The \u20b9'+tkFareN
-            +' you paid to enter covers this ticket \u2014 there is nothing more to pay.',
+            +' blocked at entry is now taken \u2014 it covers this ticket, and there is nothing more to pay.',
           tkPay:()=>{if(me.berthIdx==null)return;this.tkIssueTicket(me.berthIdx);},
           tkPayLabel:'Get my ticket \u2192',
           tkPayStyle:{border:'none',background:'var(--k-1f9d55)',color:'#fff',

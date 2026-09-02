@@ -862,5 +862,63 @@ t('the number that matters: one sellable berth becomes many after packing', () =
 });
 
 
+console.log('\nfair tatkal: blocked, not taken');
+const sess = (who, round, status = 'pending') =>
+  ({ id: 'p-' + who, who, round, amount: 175, expiresAt: 1000, status });
+
+t('the bank approves a block once, and only while the request is live', () => {
+  const p = sess('a@x', 1);
+  assert.deepStrictEqual(tatkal.authorise(p, 10), { ok: true, status: 'authorised' });
+  assert.strictEqual(p.captured, 0, 'approved means blocked, and blocked means nothing taken');
+  assert.strictEqual(tatkal.authorise(p, 20).reason, 'authorised', 'a second approval changes nothing');
+  const late = sess('b@x', 1);
+  assert.strictEqual(tatkal.authorise(late, 5000).reason, 'expired');
+  assert.strictEqual(late.status, 'expired', 'a lapsed request is marked so, not approved');
+});
+
+t('allotment takes a winner\'s block and releases a loser\'s', () => {
+  const w = sess('w@x', 1), l = sess('l@x', 1);
+  tatkal.authorise(w, 10); tatkal.authorise(l, 10);
+  assert.deepStrictEqual(tatkal.settle(w, true, 20), { ok: true, status: 'captured', captured: 175 });
+  assert.deepStrictEqual(tatkal.settle(l, false, 20), { ok: true, status: 'released', captured: 0 });
+});
+
+t('a settled block stays settled; a block the bank never approved is never taken', () => {
+  const w = sess('w@x', 1); tatkal.authorise(w, 10); tatkal.settle(w, true, 20);
+  assert.strictEqual(tatkal.settle(w, false, 30).reason, 'captured', 'cannot un-take');
+  assert.strictEqual(tatkal.authorise(w, 30).reason, 'captured', 'cannot re-approve');
+  const cold = sess('c@x', 1);
+  assert.strictEqual(tatkal.settle(cold, true, 20).reason, 'pending');
+  assert.strictEqual(cold.captured, undefined, 'no approval, no money, ever');
+});
+
+t('the draw settles every approved block in the round against its result', () => {
+  const R = tatkal.newRound('w@x', 1, tkDate, 0);
+  tatkal.enter(R, { who: 'w@x', name: 'W', signals: {} }, 5);
+  const av = { berths: [{ k: 'free', idx: 7 }], counts: { free: 1, part: 0 } };
+  const done = tatkal.allot(R, av, 10);
+  const won = done.realWinners.some(x => x.id === 'w@x');
+  const mine = sess('w@x', 1), old = sess('w@x', 0), never = sess('w@x', 1);
+  tatkal.authorise(mine, 6); tatkal.authorise(old, 6);
+  const changed = tatkal.settleRound([mine, old, never], R, 20);
+  assert.deepStrictEqual(changed, [mine], 'only this round, only approved blocks');
+  assert.strictEqual(mine.status, won ? 'captured' : 'released');
+  assert.strictEqual(mine.captured, won ? 175 : 0);
+  if (won) assert.strictEqual(mine.berthIdx, 7, 'the taken block points at the berth it bought');
+  assert.strictEqual(old.status, 'authorised', 'another round\'s block is not this draw\'s business');
+  assert.strictEqual(never.status, 'pending');
+});
+
+t('abandoning a window releases every approved block, and only those', () => {
+  const a = sess('a@x', 3), b = sess('a@x', 3), c = sess('a@x', 3);
+  tatkal.authorise(a, 1); tatkal.authorise(b, 1); tatkal.settle(b, true, 2);
+  const out = tatkal.releaseAll([a, b, c], 3, 5);
+  assert.deepStrictEqual(out.map(x => x.status), ['released']);
+  assert.strictEqual(a.captured, 0);
+  assert.strictEqual(b.status, 'captured', 'a berth already bought is not undone by a reset');
+  assert.strictEqual(c.status, 'pending');
+});
+
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

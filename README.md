@@ -118,9 +118,15 @@ phonetically, so Bangalore, Bengaluru, बेंगलुरु and ಬೆಂಗ
 station. Relative dates and times of day resolve to concrete values, so "around
 7:30 in the evening" becomes 19:30.
 
+**Blocked, not taken.** A Tatkal entry never pays the fare. Your bank blocks
+it, the way an IPO application does, and the money is debited only if you are
+allotted a berth. Not allotted means the block is released and nothing was
+taken, so there is no refund to wait for. The scanned pay page plays the part
+of your bank so the block, and its release, can be watched live.
+
 **Wallet and automatic refunds.** Money comes back without anyone claiming it
-when a Tatkal entry is not allotted, a train is cancelled, a train runs more
-than three hours late, or you booked the same journey twice.
+when a train is cancelled, a train runs more than three hours late, or you
+booked the same journey twice.
 
 **Real payment session.** Scanning the QR opens the same bill on a second phone,
 and paying there confirms the booking on the first. The QR is rendered as SVG

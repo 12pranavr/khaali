@@ -363,10 +363,19 @@ if (SARVAM_KEY) ttsAudio(GREET_TEXT, 'hi-IN').catch(() => {});
 
 // --------------------------------------------------------------------- SSE --
 const sseClients = new Set();
-store.subscribe(msg => {
+function sseSend(msg) {
   const line = `data: ${JSON.stringify(msg)}\n\n`;
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
-});
+}
+store.subscribe(sseSend);
+
+/** "S4/12" for a berth index on the Tatkal train, or null if it is unknown. */
+function tkBerthLabel(idx) {
+  if (idx == null) return null;
+  const b = store.availability(tatkal.TKN, tatkal.tkIso(), tatkal.TKC, tatkal.TKF, tatkal.TKT)
+    .berths.find(x => x.idx === idx);
+  return b ? b.coach + '/' + b.no : null;
+}
 // When does this train's chart get prepared? Four hours before it leaves
 // its origin, on the demo clock. Null when the train is unknown.
 function chartAtFor(no, date) {
@@ -663,7 +672,8 @@ async function api(req, res, url) {
         measured: true,
       };
       G.pays.set(sid, { id: sid, who, name: String(b.name || 'Traveller').slice(0, 60),
-        round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending', sig });
+        round: R.id, amount: 175, expiresAt: Date.now() + 300000, status: 'pending', sig,
+        method: ['upi', 'card', 'netbanking', 'wallet'].includes(b.method) ? b.method : 'upi' });
       return send(res, 200, { ok: true, payId: sid, amount: 175, msLeft: 300000 });
     }
 
@@ -684,12 +694,19 @@ async function api(req, res, url) {
       });
       U.history.push({ id: R.id, chits: R.result.chits, bots: R.result.winners.bots,
         humans: R.result.winners.humans + done2.realWinners.length });
+      // the blocks were only ever blocks: take a winner's, release everyone else's
+      tatkal.settleRound([...G.pays.values()].filter(x => x.who === who), R).forEach(x =>
+        sseSend({ type: 'tkpay', id: x.id, who: x.who, status: x.status, amount: x.amount,
+          captured: x.captured, berth: tkBerthLabel(x.berthIdx) }));
       return send(res, 200, { ok: true });
     }
     if (p === '/api/tatkal/reset' && req.method === 'POST') {
       const who = await whoIs(req);
       if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to reset your window.' });
-      userOf(who).round = null;
+      const Ur = userOf(who);
+      if (Ur.round) tatkal.releaseAll([...G.pays.values()].filter(x => x.who === who), Ur.round.id).forEach(x =>
+        sseSend({ type: 'tkpay', id: x.id, who: x.who, status: 'released', amount: x.amount, captured: 0 }));
+      Ur.round = null;
       return send(res, 200, { ok: true });
     }
     if (p === '/api/tatkal/explain') {
@@ -709,7 +726,7 @@ async function api(req, res, url) {
           + ', stripping ' + R.result.sentinel.stripped + '. No entrant was reduced below one entry. ') : '')
         + R.sim.humans + ' ordinary travellers entered. ' + R.result.chits + ' equal entries competed for 40 berths. '
         + 'Result: ' + people + ' berths went to real travellers and ' + bots + ' to bot entries. '
-        + 'Entries that were not allotted were refunded instantly and in full. '
+        + 'Entrants blocked the fare rather than paying it, so those not allotted had the block released and nothing debited. '
         + 'Explain what this shows about removing the 10am race. Do not use the words lottery, luck or draw.');
       return send(res, 200, { text, id: R.id });
     }
@@ -727,7 +744,7 @@ async function api(req, res, url) {
       const feed = [];
       agentsIn.forEach(a => feed.push('10:00:00.0' + a.atMs + '  tout bot-farm ' + a.id + ' (simulated) fired ' + a.tries + ' requests'));
       feed.push(humansIn + ' simulated ordinary travellers have booked so far');
-      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 \u20b9175 locked \u00b7 ' + ((G.month.get(monthKey(e.who)) || 0)) + '/4 used this month)'));
+      R.real.forEach(e => feed.push('chit from ' + e.name + ' (verified \u00b7 \u20b9175 blocked, not taken \u00b7 ' + ((G.month.get(monthKey(e.who)) || 0)) + '/4 used this month)'));
       const totalTries = R.sim.agents.reduce((s2, a) => s2 + a.tries, 0);
       const me = R.real.find(e => e.who === who) || null;
       const myWin = R.result ? (R.result.winners.real.find(w => w.who === who) || null) : null;
@@ -740,6 +757,13 @@ async function api(req, res, url) {
           won: !!myWin, berthIdx: myWin ? myWin.berthIdx : null,
           result: R.result ? { taken: TKB, toPeople: TKB - R.result.winners.bots,
             free: R.result.counts.free, part: R.result.counts.part } : null,
+          // the traveller's block for this round, newest first
+          pay: (() => {
+            const x = [...G.pays.values()].filter(y => y.who === who && y.round === R.id)
+              .sort((a2, b2) => b2.expiresAt - a2.expiresAt)[0];
+            return x ? { id: x.id, status: x.status, amount: x.amount, method: x.method || 'upi',
+              captured: x.captured == null ? null : x.captured, berth: tkBerthLabel(x.berthIdx) } : null;
+          })(),
         },
         backend: {
           feed: feed.slice(-14),
@@ -784,7 +808,7 @@ async function api(req, res, url) {
             'behavioural weighting: ' + R.result.sentinel.capChits + ' farm chits → '
               + R.result.sentinel.botChits + ' · ' + R.result.sentinel.stripped
               + ' stripped · no entrant reduced below one',
-            'entry rule: fare locked to enter \u00b7 the farms floated \u20b9' + (12 * 175) + ' across their 12 entries \u00b7 not allotted = refunded instantly',
+            'entry rule: fare blocked to enter, not paid \u00b7 the farms had \u20b9' + (12 * 175) + ' blocked across their 12 entries \u00b7 not allotted = block released, \u20b90 debited',
             'allotment: seed ' + R.seed + ' \u00b7 ' + TKB + ' berths among ' + R.result.chits + ' equal entries \u00b7 replayable by anyone',
             'result: ' + R.result.winners.bots + ' bot berth' + (R.result.winners.bots === 1 ? '' : 's') + ' \u00b7 ' + (TKB - R.result.winners.bots) + ' traveller berths',
           ] : ['window is open \u2014 bookings are collecting', 'nothing is decided until allotment runs'],
@@ -882,14 +906,21 @@ async function api(req, res, url) {
     // minus the berths - the seat does not exist until allotment
     const tq = global.__tk && global.__tk.pays && global.__tk.pays.get(mHold[1]);
     if (tq) {
-      if (req.method === 'DELETE') { tq.status = 'cancelled'; return send(res, 200, { ok: true }); }
+      if (req.method === 'DELETE') {
+        // declining a block request: nothing was ever blocked, so only a
+        // request the bank has not answered can be declined
+        if (tq.status === 'pending') tq.status = 'cancelled';
+        return send(res, 200, { ok: true, status: tq.status });
+      }
       const msLeft = Math.max(0, tq.expiresAt - Date.now());
+      const status = tq.status === 'pending' && msLeft <= 0 ? 'expired' : tq.status;
+      const inWindow = status === 'authorised' || status === 'captured' || status === 'released';
       return send(res, 200, {
-        id: tq.id, status: tq.status === 'pending' && msLeft <= 0 ? 'expired' : tq.status,
-        msLeft, amount: tq.amount, fees: 0, fullPrice: tq.amount,
+        id: tq.id, status, msLeft, amount: tq.amount, fees: 0, fullPrice: tq.amount,
         train: '16021 \u00b7 Tatkal entry', from: 0, to: 13, pax: 1,
-        journeyKm: journeyKm(0, 13), berths: [], tatkal: true,
-        pnr: tq.status === 'paid' ? 'TQ-ENTRY' : undefined,
+        journeyKm: journeyKm(0, 13), berths: [], tatkal: true, method: tq.method || 'upi',
+        captured: tq.captured == null ? null : tq.captured, berth: tkBerthLabel(tq.berthIdx),
+        pnr: inWindow ? 'TQ-ENTRY' : undefined,
       });
     }
     if (req.method === 'DELETE') return send(res, 200, store.release(mHold[1]));
@@ -901,17 +932,20 @@ async function api(req, res, url) {
   if (mPay && req.method === 'POST') {
     const tq = global.__tk && global.__tk.pays && global.__tk.pays.get(mPay[1]);
     if (tq) {
-      if (tq.status === 'paid') return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
+      if (tq.status === 'authorised' || tq.status === 'captured' || tq.status === 'released')
+        return send(res, 200, { ok: true, status: tq.status, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
       if (tq.status !== 'pending' || Date.now() > tq.expiresAt)
-        return send(res, 410, { error: 'payment session expired \u2014 nothing was charged' });
+        return send(res, 410, { error: 'the block request lapsed \u2014 nothing was blocked, nothing was taken' });
       const G2 = global.__tk;
       const U2 = G2 && G2.users && G2.users.get(tq.who);
       const R = U2 && U2.round;
       if (!R || R.state !== 'open' || R.id !== tq.round)
-        return send(res, 409, { error: 'the window closed before payment \u2014 nothing was charged' });
-      tq.status = 'paid';
+        return send(res, 409, { error: 'the window closed before your bank answered \u2014 nothing was blocked' });
+      // the bank sets the fare aside; khaali takes it only on allotment
+      tatkal.authorise(tq);
       tatkal.enter(R, { who: tq.who, name: tq.name, signals: tq.sig || {} });
-      return send(res, 200, { ok: true, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
+      sseSend({ type: 'tkpay', id: tq.id, who: tq.who, status: 'authorised', amount: tq.amount });
+      return send(res, 200, { ok: true, status: 'authorised', booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });
     }
     const h = store.getHold(mPay[1]);
     if (!h) return send(res, 404, { error: 'unknown hold' });

@@ -10,4 +10,4 @@ Saarthi, built on Sarvam AI, runs all of it by voice: ask in Kannada, Hindi or T
 
 khaali finds the seat; AI protects how it is handed out. Sarvam does language, Sentinel does behaviour, neither decides a price or an allotment.
 
-The payment tracker names who holds your money, and refunds reach the wallet on non-allotment, cancellation, delays and duplicates.
+A Tatkal entry blocks the fare instead of paying it, IPO-style, so a lost entry releases the block with nothing debited; the tracker names who holds your money, and cancellations, delays and duplicates refund to the wallet on their own.

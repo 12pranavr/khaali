@@ -164,3 +164,69 @@ export function allot(R, av, now = Date.now()) {
   };
   return { ok: true, realWinners, winners, scored, bowl };
 }
+
+// ---------------------------------------------------------------------------
+// The fare is blocked, never taken up front.
+//
+// A Tatkal entry is a bet on an allotment, so charging for it is the wrong
+// shape: most entrants lose, and every loser then waits on a refund. Instead
+// the payment session works the way a bank block does - an IPO mandate on UPI,
+// an authorisation on a card, a hold in the wallet. The bank sets the money
+// aside and nothing moves. When the window closes, a winner's block is taken
+// and every other block is released. There is no refund because there was no
+// debit.
+//
+//   pending -> authorised -> captured   (allotted: the fare is now taken)
+//                         -> released   (not allotted: nothing was ever taken)
+//   pending -> cancelled | expired      (the bank never approved: nothing blocked)
+
+export const PAY_STATES = ['pending', 'authorised', 'captured', 'released', 'cancelled', 'expired'];
+
+/** The bank approved the block. Only a pending, unexpired session can move here. */
+export function authorise(s, now = Date.now()) {
+  if (!s) return { ok: false, reason: 'missing' };
+  if (s.status !== 'pending') return { ok: false, reason: s.status };
+  if (now > s.expiresAt) { s.status = 'expired'; return { ok: false, reason: 'expired' }; }
+  s.status = 'authorised'; s.authorisedAt = now; s.captured = 0;
+  return { ok: true, status: s.status };
+}
+
+/**
+ * Allotment decides what happens to a block: a winner's is captured, a loser's
+ * is released. Anything that is not an approved block is left exactly as it
+ * is, so settling twice, or settling a session the bank never approved, does
+ * nothing.
+ */
+export function settle(s, won, now = Date.now()) {
+  if (!s) return { ok: false, reason: 'missing' };
+  if (s.status !== 'authorised') return { ok: false, reason: s.status };
+  s.status = won ? 'captured' : 'released';
+  s.captured = won ? s.amount : 0;
+  s.settledAt = now;
+  return { ok: true, status: s.status, captured: s.captured };
+}
+
+/** Every approved block in this round, settled against the round's result. */
+export function settleRound(sessions, R, now = Date.now()) {
+  const wins = (R && R.result && R.result.winners && R.result.winners.real) || [];
+  const out = [];
+  for (const s of sessions) {
+    if (!s || s.round !== R.id || s.status !== 'authorised') continue;
+    const w = wins.find(x => x.who === s.who) || null;
+    settle(s, !!w, now);
+    if (w) s.berthIdx = w.berthIdx;
+    out.push(s);
+  }
+  return out;
+}
+
+/** The round was abandoned: every approved block goes back untouched. */
+export function releaseAll(sessions, roundId, now = Date.now()) {
+  const out = [];
+  for (const s of sessions) {
+    if (!s || s.round !== roundId || s.status !== 'authorised') continue;
+    settle(s, false, now);
+    out.push(s);
+  }
+  return out;
+}

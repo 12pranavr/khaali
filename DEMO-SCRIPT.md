@@ -103,13 +103,16 @@ are the proof. Do not let the label be the only thing you say.*
 
 ## 1:38 - 1:50 - money (tier 3)
 
-> And your money is never nowhere. Bank, gateway, us, railway. It names who's
-> holding it, right now.
+> And Tatkal never takes your money. Watch the phone. Your bank blocks a
+> hundred and seventy-five. Not debited. Window closes. No berth? The block
+> lets go. Zero rupees moved. Nothing to refund, nothing to chase.
 >
-> No berth, train cancelled, or three hours late: the refund is in your wallet
-> before you close the tab.
+> Train cancelled, or three hours late: that refund is in your wallet before
+> you close the tab.
 
-*The four-stage tracker, then the refund landing in the wallet.*
+*Phone in frame: scan, approve the block, "blocked, not debited". Close the
+window on the laptop and let the phone update on its own to "₹0 debited".
+That self-updating phone is the beat; do not cut away from it.*
 
 ## 1:50 - 2:00 - close
 
@@ -225,7 +228,7 @@ Lines that earn their place:
 | 138 kilometres to Mysuru with nobody in it | yes | yes | yes |
 | 215 berths cover part of your trip | yes | yes | yes |
 | these farms nought point nine five, me nought point nought four | yes | yes | yes |
-| it names who is holding it, right now | yes | yes | yes |
+| your bank blocks it, not debited, and lets go on its own | yes | yes | yes |
 | doesn't add one train, one coach, or one berth | yes | yes | yes |
 
 What was cut, and why:
