@@ -1296,16 +1296,25 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
               </div>
               <div style="{{ tv.metaStyle }}">
                 <div onClick="{{ tv.dobClick }}" style="{{ tv.dobLineStyle }}">{{ tv.dobLine }}</div>
-                <div style="{{ tv.dobEditStyle }}">
-                  <input value="{{ tv.dob }}" onChange="{{ tv.setDob }}" placeholder="Date of birth YYYY-MM-DD" inputmode="numeric" style="flex:1;min-width:170px;max-width:220px;padding:9px 11px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:600 12.5px/1.3 'IBM Plex Mono',monospace;outline:none"></input>
-                  <div onClick="{{ tv.saveDob }}" style="font:700 12px/1 Manrope,sans-serif;padding:10px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8)">Save once</div>
-                </div>
+                <div onClick="{{ tv.dlAsk }}" style="{{ tv.dlBtn }}">{{ tv.dlLabel }}</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
                   <sc-for list="{{ tv.needChips }}" as="nc" hint-placeholder-count="3"><div onClick="{{ nc.onClick }}" style="{{ nc.style }}">{{ nc.t }}</div></sc-for>
                 </div>
               </div>
             </div>
           </sc-for>
+          <div style="{{ dlPanelStyle }}">
+            <div style="font:700 12.5px/1.4 Manrope,sans-serif">{{ dlPanelHead }}</div>
+            <div style="font:500 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:4px">{{ dlPanelSub }}</div>
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:11px">
+              <div style="flex:none;background:#fff;border-radius:9px;padding:7px;line-height:0"><img src="{{ dlQrSrc }}" width="128" height="128" style="display:block" alt="Consent request QR"/></div>
+              <div style="flex:1;min-width:170px;display:flex;flex-direction:column;gap:8px">
+                <div onClick="{{ dlOpenHere }}" style="font:700 12.5px/1 Manrope,sans-serif;padding:12px 15px;border-radius:8px;cursor:pointer;border:1px solid var(--k-d4d3ce);background:var(--k-fff);text-align:center">Open it on this device instead</div>
+                <div onClick="{{ dlCancel }}" style="font:600 12px/1 Manrope,sans-serif;padding:11px 15px;border-radius:8px;cursor:pointer;color:var(--k-fg-8a8a84);text-align:center">Cancel the request</div>
+              </div>
+            </div>
+          </div>
+          <div style="{{ dlErrStyle }}">{{ dlErrText }}</div>
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:4px 0 10px">
             <input value="{{ newPerson }}" onChange="{{ setNewPerson }}" placeholder="Someone else? name as on ID" style="flex:1;min-width:170px;max-width:250px;padding:10px 12px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 12.5px/1.3 Manrope,sans-serif;outline:none"></input>
             <div onClick="{{ addPerson }}" style="{{ addPersonStyle }}">Add</div>
@@ -2465,10 +2474,10 @@ class Component extends DCLogic {
            q:'',searchOpen:false,searchSel:0,fOpen:null,fFare:'all',fSort:'time',dark:false,
            bookings:[
              {from:0,to:13,train:'16021',cls:'3A',quota:'General',pax:1,dayIdx:-6,
-              picks:[{key:'B1-18',no:18,coach:'B1',type:'LB',k:'free'}],pnr:'4516620418',total:625,names:['Ananya Rao']},
+              picks:[{key:'B1-18',no:18,coach:'B1',type:'LB',k:'free'}],pnr:'4516620418',total:625,names:['Pranav']},
              {from:4,to:11,train:'22682',cls:'SL',quota:'Senior citizen',pax:2,dayIdx:-2,
               picks:[{key:'S3-4',no:4,coach:'S3',type:'LB',k:'part',at:5},{key:'S3-6',no:6,coach:'S3',type:'UB',k:'part',at:5}],
-              pnr:'4517203964',total:272,names:['Lakshmi Devi','Susheela Rao']}
+              pnr:'4517203964',total:272,names:['Sam Altman','Meowy Mayya']}
            ]};
   SUPA='https://bqzbdajkrtbuovhjimvp.supabase.co';
   SUPA_KEY='sb_publishable_RGMBcLx0VUY1-5vfm___-Q_5ryOV-y0';
@@ -3093,7 +3102,7 @@ class Component extends DCLogic {
         const adds=[];
         const victim=this.TRAINS.find(x=>this.cxOf(x.no,0)&&this.serves(x,0,5));
         if(victim)adds.push({pnr:'4500991177',train:victim.no,dayIdx:0,from:0,to:5,
-          cls:'SL',quota:'General',pax:1,total:135,names:['Ravi Kumar'],
+          cls:'SL',quota:'General',pax:1,total:135,names:['Martin'],
           picks:[{coach:'S2',no:18,k:'free',at:null,price:135}]});
         // a booking whose train runs 3h+ late -> the delay-shield band
         let lateT=null,lateD=0;
@@ -3101,12 +3110,12 @@ class Component extends DCLogic {
           lateT=this.TRAINS.find(x=>!this.cxOf(x.no,d)&&this.bigDelayOf(x.no,d)&&this.serves(x,5,13))&&(lateD=d,
             this.TRAINS.find(x=>!this.cxOf(x.no,d)&&this.bigDelayOf(x.no,d)&&this.serves(x,5,13)));
         if(lateT)adds.push({pnr:'4500880266',train:lateT.no,dayIdx:lateD,from:5,to:13,
-          cls:'SL',quota:'General',pax:1,total:135,names:['Meena Iyer'],
+          cls:'SL',quota:'General',pax:1,total:135,names:['Achina'],
           picks:[{coach:'S3',no:24,k:'free',at:null,price:135}]});
         // an accidental duplicate pair -> the double-booking review flow
         const dupT=this.TRAINS.find(x=>!this.cxOf(x.no,1)&&this.serves(x,5,11));
         if(dupT)['4500770355','4500770356'].forEach((pnr,i)=>adds.push({pnr,train:dupT.no,dayIdx:1,
-          from:5,to:11,cls:'SL',quota:'General',pax:1,total:110,names:['Arjun Nair'],
+          from:5,to:11,cls:'SL',quota:'General',pax:1,total:110,names:['Varun'],
           picks:[{coach:'S1',no:30+i,k:'free',at:null,price:110}]}));
         if(adds.length&&!this.state.bookings.some(b=>b.pnr==='4500991177'))
           this.setState({bookings:this.bstatApply(adds).concat(this.state.bookings)});
@@ -3127,6 +3136,7 @@ class Component extends DCLogic {
         if(m.type==='chart')this.syncAv();
         if(m.type==='tkpay')this.loadTk(true);
         if(m.type==='order')this.onOrderEvent(m);
+        if(m.type==='dl'&&this.state.dlAsk&&m.id===this.state.dlAsk.id)this.pollLocker(m.id);
       }catch(_){}};
     }catch(_){}
     this._h=setInterval(()=>{const S=this.state;
@@ -3463,6 +3473,41 @@ class Component extends DCLogic {
   ruleFlat(id){const b=this.ruleBits(id);
     return {ruleToggle:b.toggle,ruleLink:b.link,ruleLinkText:b.linkText,rulePanel:b.panel,
       ruleText:b.rule,ruleSrc:b.src,ruleKhaali:b.khaali};}
+  // --------------------------------------- the document locker demo --
+  /** Ask the traveller's own locker, on their own device, for two answers. */
+  async askLocker(name){
+    const S=this.state;
+    if(!S.auth)return this.setState({authOpen:true,authMode:'in',aPass:'',
+      aErr:'Sign in to ask for a document check \u2014 it is asked in your name.'});
+    this.setState({dlBusy:name,dlErr:null});
+    try{
+      const r=await this.authFetch('/api/dl',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({name,date:this.dateIsoFor(S.dayIdx||0)})},8000);
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.ok)throw new Error(j.error||'could not start the check');
+      this.setState({dlBusy:null,dlAsk:{name,id:j.id,url:j.url}});
+      clearInterval(this._dlPoll);
+      this._dlPoll=setInterval(()=>this.pollLocker(j.id),2000);
+    }catch(e){this.setState({dlBusy:null,dlErr:String(e&&e.message||e)});}
+  }
+  /** The holder answered on the other device. Keep only what they shared. */
+  async pollLocker(id){
+    try{
+      const r=await this.tfetch('/api/dl/'+id,null,6000);if(!r.ok)return;
+      const c=await r.json();
+      if(c.status==='pending')return;
+      clearInterval(this._dlPoll);
+      if(c.status==='allowed'&&c.share){
+        // age is decided by the date of birth, so only a certificate-backed
+        // need is stored as one; nothing else from the locker is kept
+        this.setPersonMeta(c.name,{dob:c.share.dob,verified:true,
+          need:(c.share.need==='disabled'||c.share.need==='expecting')?c.share.need:''});
+      }
+      this.setState({dlAsk:null,
+        dlErr:c.status==='declined'?'The locker was declined \u2014 nothing was shared.'
+          :c.status==='expired'?'The request lapsed \u2014 nothing was shared.':null});
+    }catch(e){}
+  }
   onOrderEvent(m){
     const me=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})();
     if(!me||m.who!==me)return;
@@ -6616,7 +6661,8 @@ class Component extends DCLogic {
                     background:on?'var(--k-d8385a)':'var(--k-fff)',
                     color:on?'var(--k-fg-fff)':'var(--k-fg-14161a)'}};}),
               ...(()=>{
-                if(!chosen)return {metaStyle:{display:'none'},needChips:[],dobEditStyle:{display:'none'},dobLineStyle:{},dobLine:'',dob:'',setDob:()=>{},saveDob:()=>{},dobClick:()=>{}};
+                if(!chosen)return {metaStyle:{display:'none'},needChips:[],dobLineStyle:{},dobLine:'',
+                  dlAsk:()=>{},dlBtn:{display:'none'},dlLabel:'',dobClick:()=>{}};
                 const me=this.isMe(chosen);const M=this.peopleMeta()[chosen]||{};
                 const dob=me?(S.auth&&S.auth.dob||''):(M.dob||'');
                 const iso=this.dateIsoFor(S.dayIdx||0);const age=dob?this.ageOn(dob,iso):null;
@@ -6631,18 +6677,36 @@ class Component extends DCLogic {
                 chips.push({t:'Prefers lower \u00b7 free',style:small(M.pref==='lower'),onClick:()=>this.setPersonMeta(chosen,{pref:M.pref==='lower'?'':'lower'})});
                 return {
                   metaStyle:{display:'block',marginTop:8,padding:'10px 12px',borderRadius:8,background:'var(--k-fafaf8)',border:'1px solid var(--k-e6e5e0)'},
-                  dobLine:dob?('Born '+dob+' \u00b7 '+age+' on travel day'+(senior?' \u00b7 lower berth priority, checked against ID at boarding':''))
-                    :(me?'Add your date of birth in your profile \u2192 it decides lower-berth priority':'Date of birth decides lower-berth priority \u00b7 saved once, as on ID'),
+                  dobLine:dob?('Born '+dob+' \u00b7 '+age+' on travel day'
+                      +(M.verified?' \u00b7 verified from their locker':'')
+                      +(senior?' \u00b7 lower berth priority':''))
+                    :'Date of birth decides lower-berth priority. khaali asks their locker for it \u2014 never the Aadhaar number.',
                   dobLineStyle:{font:'600 11.5px/1.5 Manrope,sans-serif',color:dob?'var(--k-fg-14663a)':'var(--k-fg-6a6d75)',cursor:(me&&!dob)?'pointer':'default'},
                   dobClick:()=>{if(me&&!dob)this.openProfile();},
-                  dobEditStyle:{display:(!dob&&!me)?'flex':'none',gap:7,flexWrap:'wrap',alignItems:'center',marginTop:6},
-                  dob:draft,
-                  setDob:e=>{const dd=Object.assign({},this.state.dobDraft||{});dd[chosen]=String(e.target.value||'').replace(/[^0-9-]/g,'').slice(0,10);this.setState({dobDraft:dd});},
-                  saveDob:()=>{if(!this.validDob(draft))return this.setState({srvNote:'Date of birth as YYYY-MM-DD, a real past date. It is saved once.'});
-                    this.setPersonMeta(chosen,{dob:draft});},
+                  // a need is proved from the traveller's own locker, on their
+                  // own device, rather than typed in by whoever is booking
+                  dlAsk:()=>{if(!M.verified)this.askLocker(chosen);},
+                  dlBtn:{display:M.verified?'none':'inline-block',marginTop:7,cursor:'pointer',
+                    font:'700 11.5px/1 Manrope,sans-serif',padding:'9px 12px',borderRadius:7,
+                    border:'1px solid var(--k-1f3f8f)',color:'var(--k-fg-1f3f8f)',background:'var(--k-fff)'},
+                  dlLabel:(S.dlBusy===chosen)?'Asking\u2026':'Check documents \u2192',
                   needChips:chips,
                 };})(),
             };}),
+          ...(()=>{const A2=S.dlAsk;
+            return {
+              dlPanelStyle:{display:A2?'block':'none',margin:'2px 0 12px',padding:'13px 15px',
+                borderRadius:10,background:'var(--k-fafaf8)',border:'1px solid var(--k-1f3f8f)'},
+              dlPanelHead:A2?('Waiting for '+A2.name+' to allow it'):'',
+              dlPanelSub:'Scan this on their phone. They see exactly what khaali is asking for, and what it will never be shown, then tap Allow. Simulated locker \u2014 no real Aadhaar, PAN or OTP anywhere.',
+              dlQrSrc:A2?('/api/qr?d='+encodeURIComponent((S.lanBase||location.origin)+A2.url)):'',
+              dlOpenHere:()=>{if(A2)window.open(A2.url,'_blank');},
+              dlCancel:()=>{clearInterval(this._dlPoll);this.setState({dlAsk:null});},
+              dlErrText:S.dlErr||'',
+              dlErrStyle:{display:S.dlErr?'block':'none',margin:'0 0 10px',padding:'10px 13px',
+                borderRadius:7,background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
+                font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
+            };})(),
           newPerson:S.newPerson||'',
           setNewPerson:e=>this.setState({newPerson:e.target.value}),
           addPersonStyle:{font:'700 12px/1 Manrope,sans-serif',padding:'10px 15px',borderRadius:8,

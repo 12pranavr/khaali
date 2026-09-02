@@ -649,6 +649,33 @@ A line underneath names the current holder in plain words. If the payment
 sticks, it says so explicitly: "the payment gateway, not khaali, not the
 railway", and marks that no PNR was issued.
 
+### A need proved, not claimed
+
+khaali seats a traveller who needs a lower berth ahead of one who merely
+wants it. Until now that need was a chip you ticked, so the rule rested on
+everyone being honest: anyone could tick "disabled" and take a lower berth
+from a seventy-year-old.
+
+The fix is a consent step on the traveller's own device. Pressing "Check
+documents" opens a request; a QR sends it to their phone. That screen lists
+what khaali will be told, what it will never be shown, and what the locker
+holds, then Allow or Decline. On Allow, exactly two things come back: a date
+of birth, and whether a certificate giving lower-berth priority exists. The
+Aadhaar number, the PAN, the address and the documents themselves never
+leave, and a test asserts that no identifier appears in what is shared.
+Nothing is read at all until the holder says yes; a decline or a lapse reads
+nothing and keeps nothing.
+
+`khaali-live/digilocker.mjs` holds the demo lockers for the six saved
+travellers and the consent state machine (pending, allowed, declined,
+expired), all pure and tested. The consent page is
+`khaali-live/public/locker.html`, reached at `/locker/<id>`.
+
+**It is not DigiLocker.** It is khaali's own consent screen standing in for a
+document locker, exactly as `pay.html` stands in for a bank: no emblem, no
+borrowed branding, no field that would accept a real Aadhaar number, PAN or
+OTP, and it says so on every screen. The records are invented.
+
 ### The rule, beside the decision
 
 khaali already follows a stack of real railway rules, and in three places it

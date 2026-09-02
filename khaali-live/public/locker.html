@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · document check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">khaali<span>.</span><small>document check · simulated</small></div>
+    <div class="spacer"></div>
+    <span class="who" id="who">…</span>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <div class="card" style="margin:16px 0" id="panel">
+    <div class="muted">Loading…</div>
+  </div>
+</main>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const api = (p, o) => fetch(p, o).then(async r => {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { status: r.status });
+  return j;
+});
+const applyTheme = on => document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+applyTheme(localStorage.getItem('khaali-theme')
+  ? localStorage.getItem('khaali-theme') === 'dark'
+  : matchMedia('(prefers-color-scheme:dark)').matches);
+
+const id = location.pathname.split('/').filter(Boolean).pop();
+let ticker = null;
+const stop = () => { clearInterval(ticker); ticker = null; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// This page is khaali's own consent screen. It stands in for a document
+// locker the way /pay stands in for a bank: no emblem, no borrowed branding,
+// no field that would ever accept a real Aadhaar number, PAN or OTP.
+const standIn = `<div class="note" style="margin-top:16px"><b>Simulated.</b> This is khaali's own
+  screen standing in for a document locker. It is not DigiLocker, is not connected to it, and holds
+  invented records. Never type a real Aadhaar number, PAN or OTP into a demo.</div>`;
+
+const head = (kicker, title, sub) => `
+  <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px">${esc(kicker)}</div>
+  <h2 style="margin:8px 0 4px;font-size:28px">${esc(title)}</h2>
+  <div class="muted">${esc(sub)}</div>`;
+
+const list = (items, tone) => items.map(x => `
+  <div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)">
+    <span style="flex:none;width:14px;color:${tone}">${tone === 'var(--accent)' ? '✕' : '✓'}</span>
+    <span style="flex:1">${esc(x)}</span>
+  </div>`).join('');
+
+function render(c) {
+  $('#who').textContent = c.name;
+
+  if (c.status === 'pending' && c.msLeft > 0) {
+    const a = c.ask;
+    $('#panel').innerHTML = head('Consent request · from khaali', c.name,
+        'khaali wants to check two things about this traveller for the journey on ' + c.date + '.')
+      + `<div style="margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px">
+          <div style="font-weight:700;margin-bottom:2px">What khaali will be told</div>
+          ${list(a.wants, 'var(--ok)')}
+          <div style="font-weight:700;margin:16px 0 2px">What it will never see</div>
+          ${list(a.never, 'var(--accent)')}
+        </div>
+        <div style="margin:0 0 16px">
+          <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px;margin-bottom:6px">In this locker</div>
+          ${a.holds.map(h => `<div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid var(--line)">
+              <span style="flex:1">${esc(h.label)}</span>
+              <span class="muted" style="flex:none">${esc(h.value)}</span></div>`).join('')}
+        </div>
+        <div class="timer" id="timer">5:00</div>
+        <div class="muted">The request lapses after this. A lapsed request reads nothing.</div>
+        <button class="btn" id="allow" style="display:block;width:100%;margin-top:16px">Allow · share these two answers</button>
+        <button class="btn ghost" id="decline" style="display:block;width:100%;margin-top:10px">Decline</button>
+        ${standIn}`;
+
+    const endsAt = Date.now() + c.msLeft;
+    const paint = () => {
+      const s = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      const el = $('#timer'); if (!el) return;
+      el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      el.classList.toggle('warn', s <= 60);
+      if (s <= 0) refresh();
+    };
+    paint();
+    ticker = setInterval(paint, 250);
+
+    $('#allow').onclick = async () => {
+      $('#allow').disabled = true; $('#allow').textContent = 'Sharing…';
+      try { render(await api('/api/dl/' + id + '/allow', { method: 'POST' })); }
+      catch { refresh(); }
+    };
+    $('#decline').onclick = async () => {
+      try { render(await api('/api/dl/' + id + '/decline', { method: 'POST' })); }
+      catch { refresh(); }
+    };
+    return;
+  }
+
+  stop();
+
+  if (c.status === 'allowed') {
+    const s = c.share;
+    const needWord = { senior: 'lower-berth priority · 60 or over',
+      disabled: 'lower-berth priority · disability certificate',
+      expecting: 'lower-berth priority · expecting' }[s.need] || 'no lower-berth priority';
+    $('#panel').innerHTML = head('Shared', 'Two answers sent',
+        'khaali now knows only what is listed here. Nothing else left this locker.')
+      + `<div style="margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px">
+          <div style="display:flex;gap:12px;padding:6px 0"><span style="flex:1">Date of birth</span>
+            <b style="flex:none">${esc(s.dob)}</b></div>
+          <div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1">Age on ${esc(c.date)}</span>
+            <b style="flex:none">${esc(s.age)}</b></div>
+          <div style="display:flex;gap:12px;padding:6px 0;border-top:1px solid var(--line)"><span style="flex:1">Result</span>
+            <b style="flex:none">${esc(needWord)}</b></div>
+          ${s.certificate ? `<div class="muted" style="padding-top:8px;border-top:1px solid var(--line)">
+            Answered by: ${esc(s.certificate.label)} · ${esc(s.certificate.issuer)}. khaali was not given the document.</div>` : ''}
+        </div>
+        <div class="banner ok">You can put this phone down. The booking on the other screen has updated.</div>
+        ${standIn}`;
+    return;
+  }
+
+  if (c.status === 'declined') {
+    $('#panel').innerHTML = head('Declined', 'Nothing was read',
+        'khaali was told nothing at all, and no record of this request was kept.') + standIn;
+    return;
+  }
+
+  $('#panel').innerHTML = head('Lapsed', 'Nothing was read',
+      'This request was not answered in time, so it read nothing. Ask again from the booking.') + standIn;
+}
+
+async function refresh() {
+  stop();
+  try { render(await api('/api/dl/' + id)); }
+  catch {
+    $('#panel').innerHTML = head('Not found', 'No such request',
+      'This link has expired or never existed.') + standIn;
+  }
+}
+
+// if the other screen cancels or the request settles elsewhere, follow it
+const es = new EventSource('/api/events');
+es.onmessage = e => {
+  try { const m = JSON.parse(e.data); if (m.type === 'dl' && m.id === id) refresh(); } catch {}
+};
+
+refresh();
+</script>
+</body>
+</html>

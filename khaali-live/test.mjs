@@ -9,6 +9,7 @@ import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
+import * as dl from './digilocker.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -1169,6 +1170,69 @@ t('a waitlist watches one train, closes at its departure, and counts its queue h
   assert.deepStrictEqual(orders.queueOf(later, all, d), { position: 2, flexAhead: 1 }, 'behind w1, with one flexible order ahead');
   assert.deepStrictEqual(orders.queueOf(o, all, d), { position: 1, flexAhead: 1 }, 'a pending request holds no place');
   assert.deepStrictEqual(orders.queueOf(other, all, d).position, 1, 'a different class is a different line');
+});
+
+
+console.log('\nthe document locker: a need proved instead of claimed');
+const mkC = (name, date = '2026-09-10') => {
+  const r = dl.newConsent({ id: 'c1', who: 'me@x', name, date }, 0);
+  assert.ok(r.ok, r.reason); return r.consent;
+};
+
+t('the locker holds the cast, and answers age from the travel date', () => {
+  assert.strictEqual(dl.holderOf('nobody'), null);
+  assert.strictEqual(dl.newConsent({ id: 'x', who: 'a', name: 'nobody', date: '2026-09-10' }).reason, 'unknown-holder');
+  assert.strictEqual(dl.newConsent({ id: 'x', who: 'a', name: 'Pranav', date: 'later' }).reason, 'bad-date');
+  assert.strictEqual(dl.ageOn('1958-03-11', '2026-03-10'), 67, 'the day before the birthday');
+  assert.strictEqual(dl.ageOn('1958-03-11', '2026-03-11'), 68, 'and on it');
+});
+
+t('nothing is read until the holder says yes, and nothing is kept if they say no', () => {
+  const c = mkC('Sam Altman');
+  assert.strictEqual(c.status, 'pending');
+  assert.strictEqual(c.share, null, 'a pending request has read nothing');
+  assert.strictEqual(dl.publicOf(c, 1).share, null, 'and shows nothing');
+  assert.ok(dl.publicOf(c, 1).ask, 'but does say what it would read');
+  const no = mkC('Sam Altman');
+  assert.ok(dl.decline(no, 5).ok);
+  assert.strictEqual(no.share, null);
+  assert.strictEqual(dl.publicOf(no, 6).share, null);
+  assert.strictEqual(dl.decline(no, 7).reason, 'declined', 'answered once, answered for good');
+  assert.strictEqual(dl.allow(no, 7).reason, 'declined', 'and a no cannot become a yes');
+});
+
+t('a yes shares the date of birth and the need, and never an identifier', () => {
+  const c = mkC('Sam Altman');
+  const r = dl.allow(c, 10);
+  assert.ok(r.ok);
+  assert.strictEqual(r.share.dob, '1958-03-11');
+  assert.strictEqual(r.share.age, 68);
+  assert.strictEqual(r.share.need, 'senior');
+  // the promise the whole feature rests on
+  const flat = JSON.stringify(dl.publicOf(c, 11).share);
+  assert.ok(!/xxxx|EYVPS1157B/.test(flat), 'no Aadhaar or PAN in what is shared: ' + flat);
+  assert.deepStrictEqual(Object.keys(r.share).sort(), ['age', 'certificate', 'dob', 'need']);
+});
+
+t('a certificate proves a need that age does not', () => {
+  const m = mkC('Meowy Mayya');
+  assert.ok(dl.allow(m, 10).ok);
+  assert.strictEqual(m.share.need, 'expecting');
+  assert.ok(m.share.certificate.label, 'and says which certificate answered it');
+  const y = mkC('Varun');
+  assert.ok(dl.allow(y, 10).ok);
+  assert.strictEqual(y.share.need, null, 'a young traveller with no certificate needs nothing');
+  assert.strictEqual(y.share.certificate, null);
+});
+
+t('a request lapses, and a lapsed request reads nothing', () => {
+  const c = mkC('Achina');
+  assert.strictEqual(dl.expired(c, 10), false);
+  assert.strictEqual(dl.expired(c, dl.CONSENT_MS + 1), true);
+  assert.strictEqual(dl.allow(c, dl.CONSENT_MS + 1).reason, 'expired');
+  assert.strictEqual(c.status, 'expired');
+  assert.strictEqual(c.share, null);
+  assert.strictEqual(dl.publicOf(c, dl.CONSENT_MS + 2).status, 'expired');
 });
 
 

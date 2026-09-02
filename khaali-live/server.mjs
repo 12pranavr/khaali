@@ -30,6 +30,7 @@ import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
+import * as digilocker from './digilocker.mjs';
 import crypto from 'node:crypto';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,9 @@ const simNow = () => new Date(simAtAnchor + (Date.now() - simAnchor) * simSpeed)
 // "Tell khaali what you need, not which train." The order book lives here;
 // what an order is and how it fills lives in orders.mjs.
 const ORDERS = new Map();
+// consent requests for the document-locker stand-in: short-lived, and the
+// only thing kept afterwards is the answer the holder agreed to share
+const CONSENTS = new Map();
 const orderDeps = {
   feesFor: store.feesFor, countsFor: store.countsFor, availability: store.availability,
   hold: store.hold, release: store.release, confirm: store.confirm,
@@ -959,6 +963,38 @@ async function api(req, res, url) {
     return send(res, 200, { counts });
   }
 
+  // ------------------------------------------- the document locker demo --
+  if (p === '/api/dl' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to ask for a document check.' });
+    const id = crypto.randomBytes(9).toString('hex');
+    const r = digilocker.newConsent({ id, who, name: b.name, date: String(b.date || TODAY()) });
+    if (!r.ok) return send(res, 400, { ok: false, error: r.reason === 'unknown-holder'
+      ? 'No demo locker for that traveller.' : 'Bad date.' });
+    CONSENTS.set(id, r.consent);
+    return send(res, 200, { ok: true, id, url: '/locker/' + id });
+  }
+  const mDl = p.match(/^\/api\/dl\/([a-f0-9]+)(\/allow|\/decline)?$/);
+  if (mDl) {
+    const c = CONSENTS.get(mDl[1]);
+    if (!c) return send(res, 404, { error: 'unknown request' });
+    // the phone reached this by scanning, so it carries no token; the request
+    // id is the capability, exactly as the payment page works
+    if (req.method === 'POST' && mDl[2] === '/allow') {
+      const r = digilocker.allow(c);
+      if (r.ok) sseSend({ type: 'dl', id: c.id, who: c.who, name: c.name, status: 'allowed' });
+      else if (!r.ok && r.reason === 'expired') sseSend({ type: 'dl', id: c.id, who: c.who, name: c.name, status: 'expired' });
+      return send(res, r.ok ? 200 : 409, r.ok ? digilocker.publicOf(c) : { error: r.reason });
+    }
+    if (req.method === 'POST' && mDl[2] === '/decline') {
+      const r = digilocker.decline(c);
+      if (r.ok) sseSend({ type: 'dl', id: c.id, who: c.who, name: c.name, status: 'declined' });
+      return send(res, r.ok ? 200 : 409, r.ok ? digilocker.publicOf(c) : { error: r.reason });
+    }
+    return send(res, 200, digilocker.publicOf(c));
+  }
+
   // --------------------------------------------------------------- orders --
   if (p === '/api/order/quote') {
     // what an order like this would watch, and the least it could cost
@@ -1598,6 +1634,7 @@ function serveStatic(res, urlPath) {
       sendFile(res, path.join(PUB, 'index.html'), () => send(res, 404, 'Not found', 'text/plain')));
   }
   if (rel.startsWith('/pay/')) rel = '/pay.html';           // /pay/<holdId> from the QR
+  if (rel.startsWith('/locker/')) rel = '/locker.html';   // /locker/<id> from the QR
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
