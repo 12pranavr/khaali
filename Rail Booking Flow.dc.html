@@ -1284,7 +1284,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px">
     <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
       <div style="flex:1;min-width:230px">
-        <div style="{{ travWrap }}">
+        <div data-copax="1" style="{{ travWrap }}">
           <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">{{ travHead }}</div>
           <sc-for list="{{ travSlots }}" as="tv" hint-placeholder-count="2">
             <div style="margin-bottom:12px">
@@ -2609,6 +2609,26 @@ class Component extends DCLogic {
   }
   /** Names for n travellers: what they typed, else the signed-in profile
       for passenger 1, else an honest placeholder. */
+  /**
+   * Berths nobody has been chosen for. A ticket that says "Passenger 3" is not
+   * a ticket anyone can travel on - the name has to match the ID at the door -
+   * so khaali will not take money for one. Berth 1 is exempt when somebody is
+   * signed in, because the profile already knows who they are.
+   */
+  /** "2", "2 and 3", "2, 3 and 4" - a list a person would actually say. */
+  andList(a){return a.length<2?String(a[0]==null?'':a[0])
+    :a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+  missingPax(n){
+    const t=this.state.travNames||[],A=this.state.auth;
+    const mine=A?(A.fullName||A.name||''):'';
+    const out=[];
+    for(let i=0;i<n;i++){
+      if(String(t[i]||'').trim())continue;
+      if(i===0&&mine)continue;
+      out.push(i+1);
+    }
+    return out;
+  }
   paxNamesFor(n){
     const A=this.state.auth,t=this.state.travNames||[];
     const mine=A?(A.fullName||A.name||''):'';
@@ -6603,12 +6623,18 @@ class Component extends DCLogic {
       holdTimerStyle:{font:"700 34px/1 'IBM Plex Mono',monospace",marginBottom:6,
         color:srvHold&&srvHold.expiresAt-Date.now()<60000?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'},
       holdTimerWrap:{display:srvHold?'block':'none'},
-      payLabel:srvHold?'Pay ₹'+money(total)+' now'
+      payLabel:(srvHold&&this.missingPax(nPax).length)
+          ?('Choose '+this.missingPax(nPax).length+' more traveller'+(this.missingPax(nPax).length>1?'s':''))
+        :srvHold?'Pay ₹'+money(total)+' now'
         :S.holdBusy?(this.anyInfo().isAny?'Booking…':'Locking berths…')
         :this.anyInfo().isAny?'Book any berth & pay'
         :S.picks.length<S.pax?'Pick '+(S.pax-S.picks.length)+' more berth'+(S.pax-S.picks.length>1?'s':'')
         :S.srvOn?'Lock berths & pay':'Confirm booking',
-      payCaption:srvHold?(srvHold.mode==='any'?'Your journey is reserved on the server — the berth number comes at charting, four hours before departure.'
+      payCaption:(srvHold&&this.missingPax(nPax).length)
+          ?(()=>{const m=this.missingPax(nPax);
+            return (m.length>1?'Berths ':'Berth ')+this.andList(m)+(m.length>1?' have':' has')
+              +' nobody on them yet. Every name is checked against ID at the door, so khaali will not sell a berth to "Passenger '+m[0]+'".';})()
+        :srvHold?(srvHold.mode==='any'?'Your journey is reserved on the server — the berth number comes at charting, four hours before departure.'
           :'These berths are locked on the server — every other phone sees them as being paid for.')
         :this.anyInfo().isAny?'A whole berth for your whole journey, assigned when the chart is prepared. Reserved for 5 minutes while you pay.'
         :S.srvOn?'Your berths will be locked for 5 minutes while you pay.'
@@ -6711,8 +6737,11 @@ class Component extends DCLogic {
             const list=(S.people||[]).concat([n]);
             try{localStorage.setItem('khaali-people',JSON.stringify(list));}catch(e){}
             this.setState({people:list,newPerson:''});},
-          travNote:mine?'Tap a name for each berth. Add anyone missing and khaali remembers them.'
-            :'Sign in and your name fills itself. Names print on the ticket.',
+          travNote:(()=>{const miss=this.missingPax(nT);
+            if(miss.length)return (miss.length>1?'Berths ':'Berth ')+this.andList(miss)
+              +(miss.length>1?' still need a person.':' still needs a person.')+' Tap a name, or add one below.';
+            return mine?'Tap a name for each berth. Add anyone missing and khaali remembers them.'
+              :'Sign in and your name fills itself. Names print on the ticket.';})(),
           // a signed-in traveller booking alone is not asked to type their
           // own name - the profile already knows it
           travWrap:{display:'block',marginBottom:18},
@@ -6756,10 +6785,12 @@ class Component extends DCLogic {
               border:'1px solid '+(S.payBank===n?'var(--k-d8385a)':'var(--k-d4d3ce)'),
               background:S.payBank===n?'var(--k-fdf3f5)':'var(--k-fff)',
               color:S.payBank===n?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'}})),
-          payBtnStyle:{display:F<0?'inline-block':'none',border:'none',
-            background:'var(--k-d8385a)',color:'var(--k-fg-fff)',
-            font:'700 15px/1 Manrope,sans-serif',padding:'17px 34px',borderRadius:6,
-            cursor:'pointer',minHeight:48},
+          payBtnStyle:(()=>{const short=!!(S.holdId&&this.missingPax(nPax).length);
+            return {display:F<0?'inline-block':'none',border:'none',
+              background:short?'var(--k-d4d3ce)':'var(--k-d8385a)',
+              color:short?'var(--k-fg-8a8a84)':'var(--k-fg-fff)',
+              font:'700 15px/1 Manrope,sans-serif',padding:'17px 34px',borderRadius:6,
+              cursor:short?'default':'pointer',minHeight:48};})(),
           payTrackWrap:{display:F>=0?'block':'none',marginTop:4,padding:'16px 18px',
             borderRadius:11,background:'var(--k-fafaf8)',border:'1px solid var(--k-eeede9)',maxWidth:360},
           payStages:defs.map(([title,sub],i)=>{
@@ -6793,6 +6824,13 @@ class Component extends DCLogic {
         };})(),
       goBookings:()=>this.go('bookings'),
       goTicket:()=>{
+        const miss=this.missingPax(nPax);
+        if(miss.length){
+          try{const el=document.querySelector('[data-copax]');
+            if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}
+          return this.setState({holdErr:'Choose who is on '+(miss.length>1?'berths ':'berth ')+this.andList(miss)
+            +'. The name on a ticket is checked against ID at the door, so it cannot be left blank.'});
+        }
         if(S.holdId)return this.payWithStages();
         if(S.srvOn)return this.startHold();
         const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:nPax,dayIdx:S.dayIdx,
