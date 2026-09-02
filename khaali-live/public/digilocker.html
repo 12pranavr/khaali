@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · document locker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+<style>
+  .doc{display:flex;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line)}
+  .doc .lbl{flex:1;min-width:0;font-weight:600}
+  .doc .no{flex:none;font:500 12px/1.5 "IBM Plex Mono",monospace;color:var(--ink3)}
+  .who-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:12px}
+  .who-head{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+  .who-name{font:700 18px/1.2 Manrope,sans-serif}
+  .tag{font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.09em;text-transform:uppercase;
+    padding:6px 9px;border-radius:5px;flex:none}
+  .tag.pri{background:var(--ok-bg);color:var(--ok-ink);border:1px solid var(--ok)}
+  .tag.none{background:var(--surface2);color:var(--ink3);border:1px solid var(--line)}
+  .tag.linked{background:var(--ok-bg);color:var(--ok-ink);border:1px solid var(--ok)}
+  .offers{margin-top:12px;padding:12px 14px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)}
+  .otp{font:700 34px/1 "IBM Plex Mono",monospace;letter-spacing:.22em;margin:6px 0 2px}
+  .codein{width:190px;padding:13px 15px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);font:700 21px/1 "IBM Plex Mono",monospace;
+    letter-spacing:.3em;text-align:center;outline:none}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">khaali<span>.</span><small>document locker · simulated</small></div>
+    <div class="spacer"></div>
+    <a class="who" href="/" style="text-decoration:none">Back to khaali</a>
+  </div>
+</header>
+
+<main class="wrap" id="main" style="padding-bottom:70px">
+  <div class="note" style="margin:16px 0">
+    <b>Simulated stand-in for DigiLocker.</b> This is khaali's own page. It is not DigiLocker,
+    is not connected to it, and every record below is invented. There is no real sign-in here:
+    the one-time code is generated and shown to you on this screen rather than sent anywhere.
+    Never type a real Aadhaar number, PAN or OTP into a demo.
+  </div>
+  <div id="panel"></div>
+</main>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const api = (p, o) => fetch(p, o).then(async r => {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { status: r.status, body: j });
+  return j;
+});
+const applyTheme = on => document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+applyTheme(localStorage.getItem('khaali-theme')
+  ? localStorage.getItem('khaali-theme') === 'dark'
+  : matchMedia('(prefers-color-scheme:dark)').matches);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let sid = sessionStorage.getItem('khaali-locker-sid') || null;
+let sent = null;
+
+const meta = () => { try { return JSON.parse(localStorage.getItem('khaali-people-meta') || '{}'); } catch { return {}; } };
+const setMeta = (name, p) => {
+  const m = meta(); m[name] = Object.assign({}, m[name] || {}, p);
+  try { localStorage.setItem('khaali-people-meta', JSON.stringify(m)); } catch {}
+};
+
+// ---------------------------------------------------------------- sign in --
+function lockedView(err) {
+  $('#panel').innerHTML = `
+    <div class="card">
+      <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px">Your locker</div>
+      <h2 style="margin:8px 0 4px;font-size:30px">Sign in to see the documents</h2>
+      <div class="muted">Six family lockers live behind this. Ask for a code, then type it back.</div>
+      ${err ? `<div class="banner err" style="margin-top:14px">${esc(err)}</div>` : ''}
+      ${sent ? `
+        <div style="margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px">
+          <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px">Your one-time code</div>
+          <div class="otp">${esc(sent.code)}</div>
+          <div class="muted">In a real locker this arrives by SMS. In a demo it is printed here on purpose,
+          so nothing ever asks you for a code from your own phone.</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input class="codein" id="code" inputmode="numeric" maxlength="6" placeholder="······">
+          <button class="btn" id="go">Open the locker</button>
+        </div>`
+      : `<button class="btn" id="send" style="margin-top:16px">Send me a one-time code</button>`}
+    </div>`;
+
+  if (!sent) { $('#send').onclick = async () => {
+    $('#send').disabled = true; $('#send').textContent = 'Sending…';
+    try { sent = await api('/api/locker/otp', { method: 'POST' }); sid = sent.sid; lockedView(); }
+    catch { lockedView('Could not reach the locker. Try again.'); }
+  }; return; }
+
+  const submit = async () => {
+    const code = String($('#code').value || '').replace(/\D/g, '');
+    if (code.length !== 6) return lockedView('The code is six digits.');
+    try {
+      await api('/api/locker/verify', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sid, code }) });
+      sessionStorage.setItem('khaali-locker-sid', sid);
+      open();
+    } catch (e) {
+      if (e.body && (e.body.reason === 'locked' || e.body.reason === 'expired')) sent = null;
+      lockedView(e.message);
+    }
+  };
+  $('#go').onclick = submit;
+  $('#code').onkeydown = e => { if (e.key === 'Enter') submit(); };
+  $('#code').focus();
+}
+
+// ----------------------------------------------------------- the lockers --
+function card(p, m) {
+  const linked = !!(m[p.name] && m[p.name].verified);
+  const need = { senior: 'Lower-berth priority · 60 or over',
+    disabled: 'Lower-berth priority · disability certificate',
+    expecting: 'Lower-berth priority · expecting' }[p.need];
+  return `
+    <div class="who-card">
+      <div class="who-head">
+        <div class="who-name">${esc(p.name)}</div>
+        <div class="muted" style="flex:1;min-width:120px">Born ${esc(p.dob)} · ${esc(p.age)} years</div>
+        <div class="tag ${linked ? 'linked' : 'none'}">${linked ? 'Linked to khaali' : 'Not linked'}</div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="muted" style="text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-size:10px;margin-bottom:2px">In this locker</div>
+        ${p.documents.map(d => `<div class="doc">
+            <span class="lbl">${esc(d.label)}<div class="muted" style="font-weight:400;font-size:12px">${esc(d.issuer)}</div></span>
+            <span class="no">${esc(d.no)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="offers">
+        <div style="font-weight:700;font-size:13px">What khaali would be told, and nothing else</div>
+        <div class="doc" style="border:0;padding-top:8px"><span class="lbl">Date of birth</span><span class="no">${esc(p.offers.dob)}</span></div>
+        <div class="doc"><span class="lbl">Lower-berth priority</span><span class="no">${need ? 'yes' : 'no'}</span></div>
+        ${p.offers.certificate ? `<div class="doc"><span class="lbl">Answered by</span><span class="no">${esc(p.offers.certificate)}</span></div>` : ''}
+        <div class="muted" style="margin-top:8px">The Aadhaar number, the PAN and the documents above never leave this locker.</div>
+      </div>
+      ${need ? `<div class="tag pri" style="display:inline-block;margin-top:12px">${esc(need)}</div>` : ''}
+      <div style="margin-top:12px">
+        <button class="btn ${linked ? 'ghost' : ''}" data-link="${esc(p.name)}">${linked ? 'Unlink from khaali' : 'Link to khaali'}</button>
+      </div>
+    </div>`;
+}
+
+async function open() {
+  let data;
+  try { data = await api('/api/locker/profiles?sid=' + encodeURIComponent(sid)); }
+  catch { sessionStorage.removeItem('khaali-locker-sid'); sid = null; sent = null; return lockedView(); }
+
+  const m = meta();
+  const linkedN = data.profiles.filter(p => m[p.name] && m[p.name].verified).length;
+  $('#panel').innerHTML = `
+    <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:6px 0 16px">
+      <h2 style="margin:0;font-size:30px">Six lockers</h2>
+      <div class="muted" style="flex:1;min-width:200px">${linkedN} linked to khaali · ages worked out for ${esc(data.date)}</div>
+      <button class="btn ghost" id="out">Lock it again</button>
+    </div>
+    <div class="grid2">${data.profiles.map(p => card(p, m)).join('')}</div>
+    <div class="note" style="margin-top:16px">Linking shares the two answers above and nothing else.
+      khaali uses them to seat a traveller who needs a lower berth ahead of one who merely wants one.
+      You can unlink at any time, and khaali forgets what it was told.</div>`;
+
+  $('#out').onclick = () => { sessionStorage.removeItem('khaali-locker-sid'); sid = null; sent = null; lockedView(); };
+  document.querySelectorAll('[data-link]').forEach(b => { b.onclick = () => {
+    const name = b.dataset.link;
+    const p = data.profiles.find(x => x.name === name);
+    const was = meta()[name] && meta()[name].verified;
+    if (was) setMeta(name, { verified: false, dob: '', need: '' });
+    else setMeta(name, { verified: true, dob: p.offers.dob,
+      need: (p.need === 'disabled' || p.need === 'expecting') ? p.need : '' });
+    open();
+  }; });
+}
+
+if (sid) open(); else lockedView();
+</script>
+</body>
+</html>

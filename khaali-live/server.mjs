@@ -78,6 +78,10 @@ const ORDERS = new Map();
 // consent requests for the document-locker stand-in: short-lived, and the
 // only thing kept afterwards is the answer the holder agreed to share
 const CONSENTS = new Map();
+// sign-in sessions for the locker's own page; the code is handed back to be
+// printed on screen, because a demo must never ask for a code sent to a real
+// phone - that is a phishing page whatever the label says
+const LOCKINS = new Map();
 const orderDeps = {
   feesFor: store.feesFor, countsFor: store.countsFor, availability: store.availability,
   hold: store.hold, release: store.release, confirm: store.confirm,
@@ -964,6 +968,33 @@ async function api(req, res, url) {
   }
 
   // ------------------------------------------- the document locker demo --
+  if (p === '/api/locker/otp' && req.method === 'POST') {
+    const id = crypto.randomBytes(9).toString('hex');
+    const code = String(crypto.randomInt(100000, 1000000));
+    const r = digilocker.newSignIn({ id, code });
+    if (!r.ok) return send(res, 500, { ok: false });
+    LOCKINS.set(id, r.session);
+    // handed straight back, and the page says why
+    return send(res, 200, { ok: true, sid: id, code, msLeft: digilocker.OTP_MS });
+  }
+  if (p === '/api/locker/verify' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false }); }
+    const s = LOCKINS.get(String(b.sid || ''));
+    if (!s) return send(res, 404, { ok: false, error: 'That sign-in has gone. Ask for a new code.' });
+    const r = digilocker.verify(s, String(b.code || ''));
+    if (!r.ok) return send(res, 401, { ok: false, reason: r.reason, left: r.left,
+      error: r.reason === 'wrong' ? ('That code is not right \u2014 ' + r.left + ' ' + (r.left === 1 ? 'try' : 'tries') + ' left.')
+        : r.reason === 'locked' ? 'Too many wrong codes. Ask for a new one.'
+        : r.reason === 'expired' ? 'That code has expired. Ask for a new one.' : 'Could not sign in.' });
+    return send(res, 200, { ok: true });
+  }
+  if (p === '/api/locker/profiles') {
+    const s = LOCKINS.get(String(q.get('sid') || ''));
+    if (!digilocker.signedIn(s)) return send(res, 401, { ok: false, error: 'Sign in to the locker first.' });
+    return send(res, 200, { ok: true, date: q.get('date') || TODAY(),
+      profiles: digilocker.profiles(q.get('date') || TODAY()) });
+  }
+
   if (p === '/api/dl' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);
@@ -1635,6 +1666,7 @@ function serveStatic(res, urlPath) {
   }
   if (rel.startsWith('/pay/')) rel = '/pay.html';           // /pay/<holdId> from the QR
   if (rel.startsWith('/locker/')) rel = '/locker.html';   // /locker/<id> from the QR
+  if (rel === '/digilocker') rel = '/digilocker.html';    // the locker's own page
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);

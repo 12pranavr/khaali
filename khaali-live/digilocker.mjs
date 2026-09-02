@@ -27,25 +27,67 @@ export const CONSENT_MS = 300000;             // five minutes to answer, like a 
  */
 export const VAULT = {
   'Pranav': {
-    dob: '2003-06-14', aadhaar: 'xxxx xxxx 7412', pan: 'BQRPP4417K', docs: [],
+    dob: '2003-06-14', aadhaar: 'xxxx xxxx 7412', pan: 'BQRPP4417K',
+    docs: [
+      { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-05 2022 xxxx41' },
+      { kind: 'education', label: 'Degree certificate', issuer: 'Bengaluru University', no: 'BU/2024/xxxx09' },
+    ],
   },
   'Varun': {
-    dob: '2001-11-02', aadhaar: 'xxxx xxxx 2260', pan: 'AKMPV9031C', docs: [],
+    dob: '2001-11-02', aadhaar: 'xxxx xxxx 2260', pan: 'AKMPV9031C',
+    docs: [
+      { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-03 2021 xxxx77' },
+      { kind: 'education', label: 'Class XII certificate', issuer: 'CBSE', no: 'CBSE/2019/xxxx14' },
+    ],
   },
   'Achina': {
-    dob: '2006-02-19', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L', docs: [],
+    dob: '2006-02-19', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L',
+    docs: [
+      { kind: 'education', label: 'Class XII certificate', issuer: 'CBSE', no: 'CBSE/2024/xxxx62' },
+      { kind: 'education', label: 'College enrolment card', issuer: 'Mount Carmel College', no: 'MCC/2024/xxxx18' },
+    ],
   },
   'Martin': {
-    dob: '1988-09-30', aadhaar: 'xxxx xxxx 1974', pan: 'DLTPM6642H', docs: [],
+    dob: '1988-09-30', aadhaar: 'xxxx xxxx 1974', pan: 'DLTPM6642H',
+    docs: [
+      { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-01 2011 xxxx03' },
+      { kind: 'vehicle', label: 'Vehicle registration', issuer: 'Transport Dept, Karnataka', no: 'KA-01-MJ-xxxx' },
+    ],
   },
   'Sam Altman': {
-    dob: '1958-03-11', aadhaar: 'xxxx xxxx 6690', pan: 'EYVPS1157B', docs: [],
+    dob: '1958-03-11', aadhaar: 'xxxx xxxx 6690', pan: 'EYVPS1157B',
+    docs: [
+      { kind: 'pension', label: 'Pension payment order', issuer: 'Central Pension Accounting Office', no: 'CPAO/xxxx58' },
+      { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-02 1984 xxxx26' },
+    ],
   },
   'Meowy Mayya': {
     dob: '1997-07-25', aadhaar: 'xxxx xxxx 3348', pan: 'FRDPM8804J',
-    docs: [{ kind: 'expecting', label: 'Antenatal care card', issuer: 'Health & Family Welfare' }],
+    docs: [
+      { kind: 'expecting', label: 'Antenatal care card', issuer: 'Health & Family Welfare', no: 'ANC/2026/xxxx31' },
+      { kind: 'education', label: 'Degree certificate', issuer: 'Christ University', no: 'CU/2019/xxxx55' },
+    ],
   },
 };
+
+/** Every locker as the locker's own page shows it: documents and all. */
+export function profiles(iso) {
+  return Object.keys(VAULT).map(name => {
+    const h = VAULT[name];
+    const s = shareOf(h, iso);
+    return {
+      name, dob: h.dob, age: s.age, need: s.need,
+      documents: [
+        { kind: 'aadhaar', label: 'Aadhaar', issuer: 'UIDAI', no: h.aadhaar },
+        { kind: 'pan', label: 'PAN card', issuer: 'Income Tax Department', no: h.pan },
+        ...(h.docs || []).map(d => ({ kind: d.kind, label: d.label, issuer: d.issuer, no: d.no || '' })),
+      ],
+      // the only two answers khaali is ever offered from this locker
+      offers: { dob: h.dob, need: s.need,
+        certificate: s.certificate ? s.certificate.label : null },
+    };
+  });
+}
 
 export const holderOf = name => VAULT[String(name || '').trim()] || null;
 
@@ -89,6 +131,45 @@ export function askOf(h, iso) {
     never: ['The Aadhaar number', 'The PAN', 'The documents themselves', 'Any address'],
   };
 }
+
+// --------------------------------------------------------- signing in --
+// The locker's own sign-in. In the real world the code arrives by SMS; here
+// it is generated and handed straight back so the page can print it, because
+// a demo that asked for a code sent to a real phone would be indistinguishable
+// from a phishing page. Nothing here takes a real Aadhaar number or a real OTP.
+
+export const OTP_MS = 300000;                 // the code is good for five minutes
+export const OTP_TRIES = 5;
+
+/** A six digit code, and the session waiting for it. */
+export function newSignIn({ id, code }, now = Date.now()) {
+  const c = /^\d{6}$/.test(String(code || '')) ? String(code) : null;
+  if (!c) return { ok: false, reason: 'bad-code' };
+  return { ok: true, session: {
+    id, code: c, status: 'sent', tries: 0, createdAt: now, expiresAt: now + OTP_MS,
+  } };
+}
+
+/**
+ * Check a code. Wrong codes are counted and the session dies after five, an
+ * expired session is dead whatever the code, and a code works exactly once.
+ */
+export function verify(s, code, now = Date.now()) {
+  if (!s) return { ok: false, reason: 'missing' };
+  if (s.status === 'open') return { ok: true, already: true };
+  if (s.status !== 'sent') return { ok: false, reason: s.status };
+  if (now > s.expiresAt) { s.status = 'expired'; return { ok: false, reason: 'expired' }; }
+  if (String(code || '') !== s.code) {
+    s.tries++;
+    if (s.tries >= OTP_TRIES) { s.status = 'locked'; return { ok: false, reason: 'locked' }; }
+    return { ok: false, reason: 'wrong', left: OTP_TRIES - s.tries };
+  }
+  s.status = 'open'; s.openedAt = now;
+  return { ok: true };
+}
+
+export const signedIn = (s, now = Date.now()) =>
+  !!s && s.status === 'open' && now < s.openedAt + 3600000;   // an hour inside the locker
 
 /** A request for consent. Nothing is read until the holder allows it. */
 export function newConsent({ id, who, name, date }, now = Date.now()) {

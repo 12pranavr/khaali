@@ -1173,6 +1173,47 @@ t('a waitlist watches one train, closes at its departure, and counts its queue h
 });
 
 
+console.log('\nthe document locker: signing in');
+t('a one-time code opens the locker, once, and only the right one', () => {
+  const s = dl.newSignIn({ id: 's1', code: '482913' }, 0).session;
+  assert.strictEqual(s.status, 'sent');
+  assert.strictEqual(dl.signedIn(s, 1), false);
+  assert.deepStrictEqual(dl.verify(s, '000000', 1), { ok: false, reason: 'wrong', left: 4 });
+  assert.ok(dl.verify(s, '482913', 2).ok);
+  assert.strictEqual(dl.signedIn(s, 3), true);
+  assert.deepStrictEqual(dl.verify(s, '482913', 4), { ok: true, already: true }, 'already open');
+  assert.strictEqual(dl.signedIn(s, 3 + 3600001), false, 'and it does not last for ever');
+  assert.strictEqual(dl.newSignIn({ id: 'x', code: '12' }).reason, 'bad-code');
+});
+
+t('five wrong codes lock it, and a lapsed code opens nothing', () => {
+  const s = dl.newSignIn({ id: 's2', code: '111111' }, 0).session;
+  for (let i = 1; i <= 4; i++) assert.strictEqual(dl.verify(s, '999999', 1).left, dl.OTP_TRIES - i);
+  assert.strictEqual(dl.verify(s, '999999', 1).reason, 'locked');
+  assert.strictEqual(dl.verify(s, '111111', 1).reason, 'locked', 'the right code cannot rescue it');
+  const e = dl.newSignIn({ id: 's3', code: '222222' }, 0).session;
+  assert.strictEqual(dl.verify(e, '222222', dl.OTP_MS + 1).reason, 'expired');
+  assert.strictEqual(dl.signedIn(e, dl.OTP_MS + 2), false);
+});
+
+t('the locker page lists every document, and offers only two answers', () => {
+  const ps = dl.profiles('2026-09-10');
+  assert.strictEqual(ps.length, 6);
+  const sam = ps.find(p => p.name === 'Sam Altman');
+  assert.ok(sam.documents.length >= 4, 'Aadhaar, PAN and his own papers');
+  assert.ok(sam.documents.some(d => d.kind === 'pension'));
+  assert.strictEqual(sam.need, 'senior');
+  assert.deepStrictEqual(Object.keys(sam.offers).sort(), ['certificate', 'dob', 'need']);
+  const may = ps.find(p => p.name === 'Meowy Mayya');
+  assert.strictEqual(may.need, 'expecting');
+  assert.strictEqual(may.offers.certificate, 'Antenatal care card');
+  const ach = ps.find(p => p.name === 'Achina');
+  assert.strictEqual(ach.age, 20);
+  assert.strictEqual(ach.need, null);
+  // adding papers to a locker must not turn them into a claim on a berth
+  assert.strictEqual(ps.find(p => p.name === 'Varun').need, null);
+});
+
 console.log('\nthe document locker: a need proved instead of claimed');
 const mkC = (name, date = '2026-09-10') => {
   const r = dl.newConsent({ id: 'c1', who: 'me@x', name, date }, 0);

@@ -666,10 +666,25 @@ leave, and a test asserts that no identifier appears in what is shared.
 Nothing is read at all until the holder says yes; a decline or a lapse reads
 nothing and keeps nothing.
 
+There is also a locker of its own at `/digilocker`. It signs in with a
+one-time code, then shows all six family lockers side by side with the
+documents each holds: Aadhaar and PAN, plus driving licences, education
+certificates, a pension payment order, an antenatal card. Every card shows,
+underneath, the only two answers khaali would ever be given, and a button to
+link or unlink that traveller. The code is generated and printed on the page
+rather than sent, because a demo that asked for a code from a real phone
+would be a phishing page whatever the label said. Five wrong codes lock the
+attempt; the code expires in five minutes and works once.
+
+The profile no longer takes an Aadhaar number at all. Where it used to ask
+for twelve digits it now points at the locker and says what khaali will be
+told.
+
 `khaali-live/digilocker.mjs` holds the demo lockers for the six saved
-travellers and the consent state machine (pending, allowed, declined,
-expired), all pure and tested. The consent page is
-`khaali-live/public/locker.html`, reached at `/locker/<id>`.
+travellers, the consent state machine (pending, allowed, declined, expired)
+and the sign-in codes, all pure and tested. The consent page is
+`khaali-live/public/locker.html` at `/locker/<id>`; the locker itself is
+`khaali-live/public/digilocker.html` at `/digilocker`.
 
 **It is not DigiLocker.** It is khaali's own consent screen standing in for a
 document locker, exactly as `pay.html` stands in for a bank: no emblem, no
