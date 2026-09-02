@@ -33,7 +33,7 @@ export const VAULT = {
     dob: '2001-11-02', aadhaar: 'xxxx xxxx 2260', pan: 'AKMPV9031C', docs: [],
   },
   'Achina': {
-    dob: '1992-02-19', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L', docs: [],
+    dob: '2006-02-19', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L', docs: [],
   },
   'Martin': {
     dob: '1988-09-30', aadhaar: 'xxxx xxxx 1974', pan: 'DLTPM6642H', docs: [],
