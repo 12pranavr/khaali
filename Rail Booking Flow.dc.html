@@ -1128,6 +1128,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
 
   <sc-if value="{{ hasPicks }}" hint-placeholder-val="{{ false }}">
+  <div style="{{ holdErrSeatsStyle }}">{{ holdErrText }}</div>
   <div class="k-actionbar" style="position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--k-fff);border-top:1px solid var(--k-e6e5e0);box-shadow:0 -6px 24px rgba(16,19,25,.08)">
     <div style="max-width:1240px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
@@ -3311,7 +3312,11 @@ class Component extends DCLogic {
   }
   async startHold(){
     const S=this.state;
-    if(S.holdId||S.holdBusy||!S.srvOn)return;
+    // srvOn used to be in this guard, which made the button dead silent
+    // after any earlier hiccup: no request, no message, no navigation.
+    // Only a hold already in flight should stop another one starting; the
+    // server decides everything else and always answers.
+    if(S.holdId||S.holdBusy)return;
     const n=S.picks.length;
     const hopMode=S.picks.some(p=>p.seg);
     if(!n)return this.setState({page:'seats',holdErr:'Pick a berth first.'});
@@ -3322,26 +3327,24 @@ class Component extends DCLogic {
       return this.setState({authOpen:true,authMode:'in',aErr:null,aPass:'',
         srvNote:'Sign in to hold a berth — it comes off the board for everyone else while you pay.'});}
     this.setState({holdBusy:true,holdErr:null});
-    const km=Math.abs(this.ST[S.to].km-this.ST[S.from].km);
-    const base=this.fare(S.cls,km);
-    const berthSum=S.picks.reduce((a,p)=>a+(p.price!=null?p.price:base),0);
-    const gst=S.cls==='SL'?0:Math.round(berthSum*.05);
-    const nTrav=hopMode?S.pax:n;                       // fees follow travellers, not berths
-    const fees=20*nTrav+(S.cls==='SL'?0:15*nTrav)+gst+12;
+    // reservation, superfast, GST and the convenience fee are the server's
+    // to compute; it ignores anything sent from here
     let r,j;
     try{
       r=await this.tfetch('/api/hold',{method:'POST',headers:this.authHdr({'content-type':'application/json'}),
         body:JSON.stringify({train:S.train,cls:S.cls,from:S.from,to:S.to,date:this.srvDate(),
-          berthIdxs:S.picks.map(p=>p.idx),pax:hopMode?S.pax:n,fees:fees,
+          berthIdxs:S.picks.map(p=>p.idx),pax:hopMode?S.pax:n,
           segs:hopMode?S.picks.map(p=>p.seg||null):undefined,hop:hopMode||undefined,
           who:(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest'})},8000);
       j=await r.json();
     }catch(e){
-      // Timeout or dead server: say so and recover, never hang on "Locking…".
+      // Timeout or dead server: say so and recover, never hang on "Locking…",
+      // and never fail without a reason on screen. A refused hold is also
+      // not evidence the server is down, so srvOn is left alone.
       const timedOut=e&&e.name==='AbortError';
       return this.setState({holdBusy:false,page:'seats',
-        holdErr:timedOut?'The server is not responding — check that it is running, then try again.':null,
-        srvOn:timedOut?this.state.srvOn:false});
+        holdErr:timedOut?'The server took too long to answer — press it again.'
+          :'Could not reach the server just now — press it again.'});
     }
     if(r.ok&&j&&j.ok)
       return this.setState({holdBusy:false,holdId:j.hold.id,hold:j.hold,holdErr:null,now:Date.now()});
@@ -5656,6 +5659,14 @@ class Component extends DCLogic {
       holdErrStyle:{display:S.holdErr?'block':'none',marginTop:14,padding:'11px 13px',borderRadius:7,
         background:'var(--k-fdf3f5)',color:'var(--k-fg-d8385a)',font:'600 13px/1.45 Manrope,sans-serif'},
       holdErrText:S.holdErr||'',
+      // every refusal sends the traveller back to the seat map, so the reason
+      // has to be there too - it used to render only on the confirm page
+      holdErrSeatsStyle:{display:S.holdErr?'block':'none',
+        position:'fixed',left:14,right:14,bottom:86,zIndex:61,
+        padding:'12px 14px',borderRadius:9,
+        background:'var(--k-fdf0e3)',border:'1px solid var(--k-d8385a)',
+        color:'var(--k-fg-8a4a12)',font:'600 13px/1.5 Manrope,sans-serif',
+        boxShadow:'0 6px 20px rgba(16,19,25,.14)'},
       seatNotice:{display:(S.srvNote||S.holdErr)?'block':'none',margin:'0 auto 18px',maxWidth:560,
         padding:'11px 14px',borderRadius:8,background:'var(--k-eaf0fd)',
         color:'var(--k-fg-1f3f8f)',font:'600 13px/1.45 Manrope,sans-serif',textAlign:'center'},
