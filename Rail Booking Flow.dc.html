@@ -3213,10 +3213,26 @@ class Component extends DCLogic {
   // from the server; the app never decides a fill on its own.
   hhOf(m){return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
   // ------------------------------------------------- travellers' needs --
-  validDob(v){const t=String(v||'').trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(t))return false;
-    const d=new Date(t+'T00:00:00');return !isNaN(d)&&d.toISOString().slice(0,10)===t&&d<new Date()&&d.getFullYear()>1900;}
-  ageOn(dob,iso){if(!this.validDob(dob))return null;const d=new Date(dob+'T00:00:00'),o=new Date(iso+'T00:00:00');
-    let a=o.getFullYear()-d.getFullYear();if(o.getMonth()<d.getMonth()||(o.getMonth()===d.getMonth()&&o.getDate()<d.getDate()))a--;return a;}
+  /**
+   * A date of birth, as three numbers. This used to compare a locally parsed
+   * Date against its own UTC string, which is off by a day everywhere east of
+   * Greenwich: in IST every birthday failed, ageOn returned null, and nobody
+   * was ever old enough for a lower berth. Dates of birth have no timezone.
+   */
+  validDob(v){const t=String(v||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(t))return false;
+    const [y,m,d]=t.split('-').map(Number);
+    if(y<1900||m<1||m>12||d<1||d>31)return false;
+    const dt=new Date(y,m-1,d);
+    if(dt.getFullYear()!==y||dt.getMonth()!==m-1||dt.getDate()!==d)return false;   // 31 Feb and friends
+    return dt<new Date();}
+  ageOn(dob,iso){
+    if(!this.validDob(dob)||!/^\d{4}-\d{2}-\d{2}$/.test(String(iso||'')))return null;
+    const [by,bm,bd]=String(dob).split('-').map(Number);
+    const [oy,om,od]=String(iso).split('-').map(Number);
+    let a=oy-by;
+    if(om<bm||(om===bm&&od<bd))a--;
+    return a;}
   peopleMeta(){try{return JSON.parse(localStorage.getItem('khaali-people-meta')||'{}');}catch(e){return {};}}
   setPersonMeta(name,p){const m=this.peopleMeta();m[name]=Object.assign({},m[name]||{},p);
     try{localStorage.setItem('khaali-people-meta',JSON.stringify(m));}catch(e){}
