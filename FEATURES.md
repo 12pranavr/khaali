@@ -649,6 +649,27 @@ A line underneath names the current holder in plain words. If the payment
 sticks, it says so explicitly: "the payment gateway, not khaali, not the
 railway", and marks that no PNR was issued.
 
+### The rule, beside the decision
+
+khaali already follows a stack of real railway rules, and in three places it
+does better than they require: no clerkage on a waitlist that never
+confirmed, lower berths without the quota's conditions, and a three-hour
+delay refunded from the sofa rather than through a form. Without the rule
+printed next to the decision, a stranger has to take our word for all three.
+
+A quiet link reading "the rule" sits under four decisions. Tapping it opens
+two lines: what the rulebook says, with its source, and what khaali did
+instead. Where khaali only matches the rule rather than beating it, the text
+says so; overclaiming would invite exactly the checking this feature asks
+for. The five rules live in one table (`RULES()` in the client) so a
+correction is a single edit, and `ruleBits`/`ruleFlat` render them.
+
+It appears on the travel check when a train is cancelled or over three hours
+late, on the ticket's passenger list where a lower berth was given on
+priority, on the seat page's waitlist banner, and on the order rows. The
+rules quoted are the ones actually in force; the data they are applied to
+stays synthetic, as the app says throughout.
+
 ### Nobody pays for a ticket they never got
 
 A waitlist on khaali is a journey order pinned to one train. When the seat

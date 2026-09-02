@@ -1093,6 +1093,15 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="font:700 13.5px/1.35 Manrope,sans-serif">{{ wlTitle }}</div>
         <div style="font:500 12px/1.55 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:4px">{{ wlSub }}</div>
         <button onClick="{{ wlJoin }}" style="margin-top:10px;border:none;background:var(--k-1f3f8f);color:#fff;font:700 13px/1 Manrope,sans-serif;padding:13px 18px;border-radius:8px;cursor:pointer;min-height:44px">{{ wlBtn }}</button>
+        <div onClick="{{ wlRule.toggle }}" style="{{ wlRule.link }}">{{ wlRule.linkText }}</div>
+        <div style="{{ wlRule.panel }}">
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84)">The rule</div>
+          <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:2px">{{ wlRule.rule }}</div>
+          <div style="font:400 10.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ wlRule.src }}</div>
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-14663a);margin-top:10px">khaali</div>
+          <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-top:2px">{{ wlRule.khaali }}</div>
+        </div>
+
       </div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:18px;margin-top:12px">
         <div style="font:600 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:14px">What the colours mean</div>
@@ -1438,6 +1447,14 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div style="flex:1;min-width:0;font:600 12.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ l.sub }}</div>
           </div>
         </sc-for>
+        <div onClick="{{ ptRule.toggle }}" style="{{ ptRule.link }}">{{ ptRule.linkText }}</div>
+        <div style="{{ ptRule.panel }}">
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84)">The rule</div>
+          <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:2px">{{ ptRule.rule }}</div>
+          <div style="font:400 10.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ ptRule.src }}</div>
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-14663a);margin-top:10px">khaali</div>
+          <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-top:2px">{{ ptRule.khaali }}</div>
+        </div>
       </div>
       <div style="{{ chartWrap }}">
         <div style="font:600 12.5px/1.5 Manrope,sans-serif;flex:1;min-width:200px">{{ chartText }}</div>
@@ -1460,6 +1477,16 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </div>
         </div>
       </sc-for>
+      <div style="{{ lowRuleWrap }}">
+        <div onClick="{{ lowRule.toggle }}" style="{{ lowRule.link }}">{{ lowRule.linkText }}</div>
+        <div style="{{ lowRule.panel }}">
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84)">The rule</div>
+          <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:2px">{{ lowRule.rule }}</div>
+          <div style="font:400 10.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ lowRule.src }}</div>
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-14663a);margin-top:10px">khaali</div>
+          <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-top:2px">{{ lowRule.khaali }}</div>
+        </div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 0 4px">
         <div style="font:600 12.5px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">Amount paid</div>
         <div style="font:700 21px/1 Manrope,sans-serif;letter-spacing:-.02em">₹{{ ticketTotal }}</div>
@@ -2044,6 +2071,15 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <div style="{{ o.badge }}">{{ o.badgeText }}</div>
         </div>
         <div style="{{ o.warnStyle }}">{{ o.warn }}</div>
+        <div onClick="{{ o.ruleToggle }}" style="{{ o.ruleLink }}">{{ o.ruleLinkText }}</div>
+        <div style="{{ o.rulePanel }}">
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-8a8a84)">The rule</div>
+          <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:2px">{{ o.ruleText }}</div>
+          <div style="font:400 10.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84);margin-top:3px">{{ o.ruleSrc }}</div>
+          <div style="font:600 9.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:var(--k-fg-14663a);margin-top:10px">khaali</div>
+          <div style="font:600 12px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a);margin-top:2px">{{ o.ruleKhaali }}</div>
+        </div>
+
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
           <button onClick="{{ o.onOpen }}" style="{{ o.openStyle }}">Open the ticket &#8594;</button>
           <button onClick="{{ o.onCancel }}" style="{{ o.cancelStyle }}">Cancel order &#183; release the block</button>
@@ -3373,8 +3409,60 @@ class Component extends DCLogic {
       :dl?(tr.no+' is about '+Math.floor(dl.min/60)+'h '+(dl.min%60)+'m late \u00b7 the whole fare is yours back.')
       :near?('Platform '+this.plat(tr,rec.from)+' \u00b7 be there by '+this.toHHMM(dep-20)+' \u00b7 carry photo ID.')
       :('Go or no-go opens eight hours before departure.');
-    return {verdict,head,sub,brief,lines,act,actLabel,near,mins};
+    return {verdict,head,sub,brief,lines,act,actLabel,near,mins,
+      ruleId:cx?'cxrefund':dl?'delay3h':null};
   }
+  /**
+   * The rulebook, beside the decision. khaali already follows these rules and
+   * in three of them it does better than they require; without the rule
+   * printed next to it a stranger has to take our word for that. Every rule
+   * lives here once, so a correction is one edit.
+   *
+   * Real rules, simulated data: the rules quoted are the ones in force.
+   */
+  RULES(){return{
+    clerkage:{
+      rule:'A waitlisted ticket that never confirms still costs clerkage of \u20b960 per passenger, plus GST, even when the system cancels it for you after charting.',
+      src:'Railway Passengers (Cancellation of Tickets and Refund of Fare) Rules, 2015 \u00b7 confirmed in Parliament',
+      khaali:'\u20b90. The fare was blocked in your bank and never taken, so there is no debit to deduct a fee from.'},
+    lower:{
+      rule:'The lower berth quota is a fixed count of berths per coach, for men aged 60 and over and women aged 45 and over, travelling alone or two on one ticket. Add a third passenger and the system stops considering it.',
+      src:'IRCTC lower berth and senior citizen quota conditions',
+      khaali:'Any traveller aged 60 or over on the travel date, disabled, or expecting. No quota and no party-size condition, and a need is seated ahead of anyone\u2019s \u20b925 choice fee.'},
+    delay3h:{
+      rule:'Full fare refunded with no cancellation charge if the journey is not made because the train is over three hours late. File a ticket deposit receipt within 72 hours; delay refunds take roughly five to seven working days.',
+      src:'Refund Rules, Indian Railways \u00b7 IRCTC TDR filing',
+      khaali:'The same rule, and no form. One tap from home, and the money is in your wallet before you close the tab.'},
+    cxrefund:{
+      rule:'When the railway cancels a train the full fare is refunded. An e-ticket is refunded automatically; a counter ticket has to be surrendered at a window.',
+      src:'Refund Rules, Indian Railways',
+      khaali:'The same rule, paid into your wallet the moment you ask, with the reason written on the line.'},
+    wlboard:{
+      rule:'Since 1 May 2025 a passenger holding a waitlisted ticket may not board a Sleeper or AC coach. The penalty is \u20b9250 in Sleeper and \u20b9440 in AC, plus the fare.',
+      src:'Indian Railways reservation rules, effective 1 May 2025',
+      khaali:'Said before you leave the house, with the fine named, and the next train that has a whole berth offered beside it.'},
+  };}
+  /** Bindings for one rule link and the two lines it opens. */
+  ruleBits(id){
+    const R=id?this.RULES()[id]:null;
+    if(!R)return {toggle:()=>{},link:{display:'none'},linkText:'',
+      panel:{display:'none'},rule:'',src:'',khaali:''};
+    const open=this.state.ruleOpen===id;
+    return {
+      toggle:()=>this.setState({ruleOpen:open?null:id}),
+      linkText:open?'hide the rule':'the rule',
+      link:{display:'inline-block',marginTop:9,cursor:'pointer',
+        font:"600 11.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',
+        borderBottom:'1px dashed var(--k-d4d3ce)',paddingBottom:2},
+      panel:{display:open?'block':'none',marginTop:10,paddingLeft:12,
+        borderLeft:'2px solid var(--k-d4d3ce)'},
+      rule:R.rule,src:R.src,khaali:R.khaali,
+    };
+  }
+  /** The same bindings flattened, for use inside a repeated row. */
+  ruleFlat(id){const b=this.ruleBits(id);
+    return {ruleToggle:b.toggle,ruleLink:b.link,ruleLinkText:b.linkText,rulePanel:b.panel,
+      ruleText:b.rule,ruleSrc:b.src,ruleKhaali:b.khaali};}
   onOrderEvent(m){
     const me=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})();
     if(!me||m.who!==me)return;
@@ -3442,6 +3530,7 @@ class Component extends DCLogic {
           wlSub:'\u20b9'+A.total+' is blocked, not taken. You are confirmed the moment a whole berth frees or at charting. If the train leaves without one, \u20b90 is debited and there is nothing to claim.',
           wlBtn:'Join the waitlist \u2192',
           wlJoin:()=>this.openOrder({train:S.train,cls:S.cls}),
+          wlRule:this.ruleBits(wl?'clerkage':null),
         };})(),
       ordSheetStyle:{display:S.ordOpen?'flex':'none',position:'fixed',inset:0,zIndex:70,background:'rgba(10,12,16,.62)',
         alignItems:'center',justifyContent:'center',padding:16},
@@ -3508,6 +3597,8 @@ class Component extends DCLogic {
           badge:{flex:'none',font:"700 10px/1 'IBM Plex Mono',monospace",letterSpacing:'.12em',textTransform:'uppercase',padding:'7px 9px',borderRadius:6,
             color:'#fff',background:col},
           badgeText:filled?'Booked':open?(o.train?('WL '+(o.position||1)):'Watching'):pending?'Awaiting block':o.status,
+          // the rule behind whichever thing this row is saying
+          ...this.ruleFlat(o.status==='expired'?'clerkage':(open&&o.train)?'wlboard':null),
           ...(()=>{
             // a pinned waitlist with the train about to leave and nothing
             // confirmed is the one case the bookings page cannot already warn
@@ -5083,6 +5174,10 @@ class Component extends DCLogic {
           note:later?'Yours from '+ST[pk.at].n:'Yours for your whole journey',
           noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:later?'var(--k-fg-1f3f8f)':'var(--k-fg-8a8a84)'}};
       });})(),
+      ...(()=>{const bkR=S.bookings.find(b=>b.pnr===S.viewPnr);
+        const anyNeed=!!(bkR&&(bkR.travellers||[]).some(t=>this.needOf(t,this.dateIsoFor(bkR.dayIdx||0))));
+        return {lowRuleWrap:{display:anyNeed?'block':'none',paddingTop:2},
+          lowRule:this.ruleBits(anyNeed?'lower':null)};})(),
       ...(()=>{const bk=S.bookings.find(b=>b.pnr===S.viewPnr);
         const P=this.preTravel(bk);
         const tone=!P?null:P.verdict==='stop'?{bg:'var(--k-fdf3f5)',bd:'var(--k-d8385a)',fg:'var(--k-fg-d8385a)',dot:'\u26a0'}
@@ -5103,6 +5198,7 @@ class Component extends DCLogic {
           ptActionStyle:{display:(P&&P.act)?'inline-block':'none',flex:'none',border:'none',
             background:tone?tone.bd:'var(--k-14161a)',color:'#fff',font:'700 12.5px/1 Manrope,sans-serif',
             padding:'12px 15px',borderRadius:7,cursor:'pointer',minHeight:42},
+          ptRule:this.ruleBits(P?P.ruleId:null),
         };})(),
       ...(()=>{const bk=S.bookings.find(b=>b.pnr===S.viewPnr);
         const isAny=!!(bk&&bk.mode==='any');const doneC=!!(bk&&bk.assigned);
