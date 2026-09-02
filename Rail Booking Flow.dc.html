@@ -761,6 +761,20 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </div>
         </div>
       </div>
+      <div style="margin-top:16px">
+        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Who is travelling</div>
+        <sc-for list="{{ ordTravSlots }}" as="ov" hint-placeholder-count="2">
+          <div style="margin-bottom:10px">
+            <div style="font:600 11px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-bottom:6px">{{ ov.label }}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ ov.people }}" as="op" hint-placeholder-count="6">
+                <div onClick="{{ op.onPick }}" style="{{ op.style }}">{{ op.n }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <div style="{{ ordTravNoteStyle }}">{{ ordTravNote }}</div>
+      </div>
       <div style="margin-top:16px;border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 15px;background:var(--k-fafaf8)">
         <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">{{ ordCapLabel }}</div>
         <div style="{{ ordCapRowStyle }}">
@@ -3257,6 +3271,12 @@ class Component extends DCLogic {
   }
   async placeOrder(){
     const S=this.state;if(S.ordBusy)return;
+    // the same rule as the booking flow: khaali does not buy a berth for
+    // somebody called "Traveller 3"
+    const miss=this.missingPax(S.pax||1);
+    if(miss.length)return this.setState({ordErr:'Choose who is on '
+      +(miss.length>1?'berths ':'berth ')+this.andList(miss)
+      +'. Names print on the ticket and are checked against ID at the door.'});
     const cap=parseInt(S.ordCap,10);
     if(!(cap>0))return this.setState({ordErr:'Say the most you would pay.'});
     const method=S.ordMethod||'upi';
@@ -3597,6 +3617,41 @@ class Component extends DCLogic {
       ordClsChips:['SL','3A','2A'].map(k=>({t:this.CLS.find(c=>c.k===k).label,style:chip(cls.includes(k)),
         onClick:()=>{const nx=cls.includes(k)?cls.filter(x=>x!==k):cls.concat([k]);if(!nx.length)return;
           this.setState({ordCls:nx,ordCap:''},()=>this.orderQuote());}})),
+      ...(()=>{
+        // an order books a real berth for a real person, so it asks the same
+        // question the confirm page asks, in the same words
+        const nT=S.pax||1;
+        const mine=S.auth?(S.auth.fullName||S.auth.name||''):'';
+        const miss=this.missingPax(nT);
+        return {
+          ordTravSlots:Array.from({length:nT},(_,i)=>{
+            const chosen=String((S.travNames||[])[i]||'').trim()||(i===0&&mine?this.capFirst(mine):'');
+            return {
+              label:nT>1?('Traveller '+(i+1)+(chosen?(' \u00b7 '+chosen):' \u00b7 pick a name')):(chosen||'Pick a name'),
+              people:(S.people||[]).map(nm=>{
+                const on=chosen===nm;
+                const busy=(S.travNames||[]).slice(0,nT).some((x,j)=>j!==i&&String(x||'').trim()===nm);
+                return {n:nm,
+                  onPick:()=>{if(busy)return;
+                    const arr=(this.state.travNames||[]).slice();
+                    while(arr.length<nT)arr.push('');
+                    arr[i]=on?'':nm;
+                    try{localStorage.setItem('khaali-copax',JSON.stringify(arr));}catch(e){}
+                    this.setState({travNames:arr,ordErr:null});},
+                  style:{font:'700 12px/1 Manrope,sans-serif',padding:'9px 12px',borderRadius:999,
+                    cursor:busy?'default':'pointer',opacity:busy?0.55:1,
+                    border:'1px solid '+(on?'var(--k-1f3f8f)':'var(--k-d4d3ce)'),
+                    background:on?'var(--k-1f3f8f)':'var(--k-fff)',
+                    color:on?'#fff':'var(--k-fg-14161a)'}};}),
+            };}),
+          ordTravNote:miss.length
+            ?((miss.length>1?'Travellers ':'Traveller ')+this.andList(miss)
+              +(miss.length>1?' still need a name.':' still needs a name.')
+              +' khaali books a real berth for whoever is named here.')
+            :'Anyone you have linked in the locker brings their date of birth with them, so a lower berth can be given on proof.',
+          ordTravNoteStyle:{font:'500 11.5px/1.6 Manrope,sans-serif',
+            color:miss.length?'var(--k-fg-8a4a12)':'var(--k-fg-8a8a84)'},
+        };})(),
       ordPax:String(S.pax||1),
       ordStepStyle:{width:34,height:34,borderRadius:7,border:'1px solid var(--k-d4d3ce)',display:'flex',alignItems:'center',
         justifyContent:'center',cursor:'pointer',font:'700 16px/1 Manrope,sans-serif',background:'var(--k-fff)'},
@@ -3621,11 +3676,15 @@ class Component extends DCLogic {
       ordErrStyle:{display:S.ordErr?'block':'none',marginTop:10,padding:'10px 13px',borderRadius:7,
         background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
       placeOrder:()=>this.placeOrder(),
-      ordBtnLabel:S.ordBusy?'Placing\u2026':S.ordTrain?('Join the waitlist \u00b7 '+(meth==='wallet'?'hold':'block')+' \u20b9'+(cap||0))
+      ordBtnLabel:S.ordBusy?'Placing\u2026'
+        :this.missingPax(S.pax||1).length
+          ?('Choose '+this.missingPax(S.pax||1).length+' more traveller'+(this.missingPax(S.pax||1).length>1?'s':''))
+        :S.ordTrain?('Join the waitlist \u00b7 '+(meth==='wallet'?'hold':'block')+' \u20b9'+(cap||0))
         :(meth==='wallet'?('Hold \u20b9'+(cap||0)+' & place the order'):('Block \u20b9'+(cap||0)+' & place the order')),
-      ordBtnStyle:{width:'100%',marginTop:14,border:'none',background:S.ordBusy?'var(--k-d4d3ce)':'var(--k-1f3f8f)',
-        color:S.ordBusy?'var(--k-fg-8a8a84)':'#fff',font:'700 15px/1 Manrope,sans-serif',padding:16,borderRadius:9,
-        cursor:S.ordBusy?'default':'pointer',minHeight:50},
+      ordBtnStyle:(()=>{const dim=S.ordBusy||this.missingPax(S.pax||1).length>0;
+        return {width:'100%',marginTop:14,border:'none',background:dim?'var(--k-d4d3ce)':'var(--k-1f3f8f)',
+          color:dim?'var(--k-fg-8a8a84)':'#fff',font:'700 15px/1 Manrope,sans-serif',padding:16,borderRadius:9,
+          cursor:dim?'default':'pointer',minHeight:50};})(),
       ordQrStyle:{display:P?'block':'none'},
       ordQrSrc:P?('/api/qr?d='+encodeURIComponent((S.lanBase||location.origin)+'/pay/'+P.payId)):'',
       ordQrAmt:P?('\u20b9'+P.cap):'',
