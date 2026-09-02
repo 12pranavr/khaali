@@ -118,6 +118,11 @@ phonetically, so Bangalore, Bengaluru, बेंगलुरु and ಬೆಂಗ
 station. Relative dates and times of day resolve to concrete values, so "around
 7:30 in the evening" becomes 19:30.
 
+**Tell khaali what you need, not which train.** Give two stations, a window
+of departure times, the classes you would take and the most you would pay.
+khaali watches every train that fits and books the first whole berth, taking
+only what it costs and releasing the rest of your block.
+
 **Blocked, not taken.** A Tatkal entry never pays the fare. Your bank blocks
 it, the way an IPO application does, and the money is debited only if you are
 allotted a berth. Not allotted means the block is released and nothing was

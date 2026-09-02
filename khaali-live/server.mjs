@@ -29,6 +29,8 @@ import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
+import * as orders from './orders.mjs';
+import crypto from 'node:crypto';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
@@ -39,9 +41,11 @@ const PORT = Number(process.env.PORT) || 5173;
 const monthOf = () => TODAY().slice(0, 7);
 const monthKey = who => who + '|' + monthOf();
 global.__tk = { users: new Map(), month: new Map(), pays: new Map() };
+let JREC = [];
 {
   const file = journal.open();
   const recs = journal.readAll();
+  JREC = recs;
   const got = store.replay(recs);
   let wins = 0;
   for (const r of recs) {
@@ -65,6 +69,79 @@ let simAnchor = Date.now();        // real ms when the clock was last adjusted
 let simAtAnchor = Date.now();      // simulated ms at that moment
 let simSpeed = 1;                  // 1 = real time
 const simNow = () => new Date(simAtAnchor + (Date.now() - simAnchor) * simSpeed);
+
+// ------------------------------------------------------------------ orders --
+// "Tell khaali what you need, not which train." The order book lives here;
+// what an order is and how it fills lives in orders.mjs.
+const ORDERS = new Map();
+const orderDeps = {
+  feesFor: store.feesFor, countsFor: store.countsFor, availability: store.availability,
+  hold: store.hold, release: store.release, confirm: store.confirm,
+  now: () => simNow(), today: () => TODAY(),
+};
+const publicOrder = o => ({
+  id: o.id, who: o.who, from: o.from, to: o.to, date: o.date, after: o.after, before: o.before,
+  classes: o.classes, pax: o.pax, cap: o.cap, cheapest: o.cheapest, method: o.method, payId: o.payId,
+  status: o.status, placedAt: o.placedAt, openedAt: o.openedAt, filledAt: o.filledAt || null,
+  endedAt: o.endedAt || null, pnr: o.pnr || null, paid: o.paid == null ? null : o.paid, fill: o.fill || null,
+  watching: o.status === 'open' ? orders.candidates(o, orderDeps).length : 0,
+});
+function orderFilled(o, r) {
+  const s = global.__tk.pays.get(o.payId);
+  if (s) { tatkal.settle(s, true, Date.now(), o.paid); s.fill = o.fill; s.pnr = o.pnr; }
+  journal.append({ t: 'orderfill', id: o.id, pnr: o.pnr, paid: o.paid, fill: o.fill, filledAt: o.filledAt });
+  const berth = (r.booking.berths || []).join(', ') || null;
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'filled', pnr: o.pnr, paid: o.paid, cap: o.cap,
+    fill: o.fill, berths: r.booking.berths || [], assigned: !!r.booking.assigned });
+  if (s) sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'captured', amount: s.amount,
+    captured: s.captured, released: s.amount - s.captured, berth, fill: o.fill });
+}
+function orderEnded(o, status) {
+  o.status = status; o.endedAt = Date.now();
+  const s = global.__tk.pays.get(o.payId);
+  if (s) { if (s.status === 'pending') s.status = 'cancelled'; else tatkal.settle(s, false); }
+  journal.append({ t: 'orderend', id: o.id, status });
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status, cap: o.cap });
+  if (s && s.status === 'released')
+    sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'released', amount: s.amount, captured: 0 });
+}
+let matching = false;
+function matchOrders() {
+  if (matching) return;
+  matching = true;
+  try {
+    // oldest order first: waiting is what earns the place in the queue
+    const open = [...ORDERS.values()].filter(o => o.status === 'open').sort((a, b) => a.openedAt - b.openedAt);
+    for (const o of open) {
+      if (orders.expired(o, orderDeps)) { orderEnded(o, 'expired'); continue; }
+      const r = orders.tryFill(o, orderDeps);
+      if (r.ok) orderFilled(o, r);
+    }
+  } catch (e) { console.error('orders:', e); }
+  finally { matching = false; }
+}
+let matchT = null;
+const matchSoon = () => { clearTimeout(matchT); matchT = setTimeout(matchOrders, 250); };
+store.subscribe(m => { if (['released', 'booked', 'chart', 'reset'].includes(m.type)) matchSoon(); });
+setInterval(matchOrders, 20000).unref();
+// orders outlive a restart: rebuild the book and the blocks behind it
+{
+  for (const r of JREC) {
+    if (r.t === 'order' && r.order) ORDERS.set(r.order.id, { ...r.order });
+    if (r.t === 'orderfill') { const o = ORDERS.get(r.id); if (o) Object.assign(o, { status: 'filled', pnr: r.pnr, paid: r.paid, fill: r.fill, filledAt: r.filledAt }); }
+    if (r.t === 'orderend') { const o = ORDERS.get(r.id); if (o) { o.status = r.status; } }
+  }
+  for (const o of ORDERS.values()) {
+    const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
+      method: o.method, title: ST[o.from].n + ' \u2192 ' + ST[o.to].n + ' \u00b7 ' + o.date,
+      status: o.status === 'open' ? 'authorised' : o.status === 'filled' ? 'captured' : 'released',
+      captured: o.status === 'filled' ? o.paid : 0, fill: o.fill || null, pnr: o.pnr || null };
+    global.__tk.pays.set(o.payId, s);
+  }
+  const openN = [...ORDERS.values()].filter(o => o.status === 'open').length;
+  if (ORDERS.size) console.log(`orders: ${ORDERS.size} replayed, ${openN} open`);
+  setTimeout(matchOrders, 500).unref();
+}
 const simShiftMin = () => Math.round((simNow().getTime() - Date.now()) / 60000);
 
 const MIME = {
@@ -852,6 +929,58 @@ async function api(req, res, url) {
     return send(res, 200, { counts });
   }
 
+  // --------------------------------------------------------------- orders --
+  if (p === '/api/order/quote') {
+    // what an order like this would watch, and the least it could cost
+    const b = { from: q.get('from'), to: q.get('to'), date: q.get('date') || TODAY(), after: q.get('after') || 0,
+      before: q.get('before') || 1440, classes: String(q.get('classes') || 'SL').split(','), pax: q.get('pax') || 1, cap: 1e9 };
+    const v = orders.validate(b, orderDeps);
+    if (!v.ok) return send(res, 400, { ok: false, error: v.error });
+    const cands = orders.candidates(v.order, orderDeps);
+    return send(res, 200, { ok: true, cheapest: v.order.cheapest, watching: cands.length,
+      trains: cands.map(c => ({ train: c.train, name: c.name, cls: c.cls, dep: hhmm(c.dep), price: c.price })) });
+  }
+  if (p === '/api/order' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to place an order \u2014 it blocks money in your name.' });
+    const v = orders.validate(b, orderDeps);
+    if (!v.ok) return send(res, 400, { ok: false, error: v.error, cheapest: v.cheapest });
+    const mine = [...ORDERS.values()].filter(o => o.who === who && (o.status === 'open' || o.status === 'pending'));
+    if (mine.length >= orders.MAX_OPEN_ORDERS)
+      return send(res, 429, { ok: false, error: 'Two open orders at a time \u2014 cancel one first.' });
+    const cands = orders.candidates(v.order, orderDeps);
+    if (!cands.length) return send(res, 409, { ok: false, error: 'No train leaves in that window at or under that price.' });
+    const id = crypto.randomBytes(9).toString('hex');
+    const sid = crypto.randomBytes(9).toString('hex');
+    const method = ['upi', 'card', 'netbanking', 'wallet'].includes(b.method) ? b.method : 'upi';
+    const o = { id, who, ...v.order, method, payId: sid, status: 'pending', placedAt: Date.now(), openedAt: null };
+    ORDERS.set(id, o);
+    global.__tk.pays.set(sid, { id: sid, kind: 'order', orderId: id, who, amount: o.cap, method,
+      expiresAt: Date.now() + 300000, status: 'pending',
+      title: ST[o.from].n + ' \u2192 ' + ST[o.to].n + ' \u00b7 ' + o.date });
+    return send(res, 200, { ok: true, order: publicOrder(o), payId: sid, watching: cands.length,
+      trains: cands.slice(0, 12).map(c => ({ train: c.train, name: c.name, cls: c.cls, dep: hhmm(c.dep), price: c.price })) });
+  }
+  if (p === '/api/orders') {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to see your orders.' });
+    return send(res, 200, { orders: [...ORDERS.values()].filter(o => o.who === who)
+      .sort((a, b) => b.placedAt - a.placedAt).map(publicOrder) });
+  }
+  const mOrd = p.match(/^\/api\/order\/([a-f0-9]+)$/);
+  if (mOrd) {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in first.' });
+    const o = ORDERS.get(mOrd[1]);
+    if (!o || o.who !== who) return send(res, 404, { error: 'unknown order' });
+    if (req.method === 'DELETE') {
+      if (o.status === 'open' || o.status === 'pending') orderEnded(o, 'cancelled');
+      return send(res, 200, { ok: true, order: publicOrder(o) });
+    }
+    return send(res, 200, { ok: true, order: publicOrder(o), booking: o.pnr ? store.getBooking(o.pnr) : null });
+  }
+
   if (p === '/api/hold' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     // holding a berth takes it away from everyone else, so it needs a name
@@ -915,12 +1044,17 @@ async function api(req, res, url) {
       const msLeft = Math.max(0, tq.expiresAt - Date.now());
       const status = tq.status === 'pending' && msLeft <= 0 ? 'expired' : tq.status;
       const inWindow = status === 'authorised' || status === 'captured' || status === 'released';
+      const isOrder = tq.kind === 'order';
       return send(res, 200, {
         id: tq.id, status, msLeft, amount: tq.amount, fees: 0, fullPrice: tq.amount,
-        train: '16021 \u00b7 Tatkal entry', from: 0, to: 13, pax: 1,
-        journeyKm: journeyKm(0, 13), berths: [], tatkal: true, method: tq.method || 'upi',
-        captured: tq.captured == null ? null : tq.captured, berth: tkBerthLabel(tq.berthIdx),
-        pnr: inWindow ? 'TQ-ENTRY' : undefined,
+        train: isOrder ? tq.title : '16021 \u00b7 Tatkal entry', from: 0, to: 13, pax: 1,
+        journeyKm: journeyKm(0, 13), berths: [], tatkal: !isOrder, order: isOrder, orderId: tq.orderId || null,
+        title: isOrder ? tq.title : null, method: tq.method || 'upi',
+        captured: tq.captured == null ? null : tq.captured,
+        released: tq.captured == null ? null : tq.amount - tq.captured,
+        berth: isOrder ? (tq.pnr && store.getBooking(tq.pnr) ? (store.getBooking(tq.pnr).berths || []).join(', ') || null : null) : tkBerthLabel(tq.berthIdx),
+        fill: tq.fill || null,
+        pnr: inWindow ? (isOrder ? (tq.pnr || 'ORDER') : 'TQ-ENTRY') : undefined,
       });
     }
     if (req.method === 'DELETE') return send(res, 200, store.release(mHold[1]));
@@ -931,6 +1065,23 @@ async function api(req, res, url) {
   const mPay = p.match(/^\/api\/pay\/([a-f0-9]+)$/);
   if (mPay && req.method === 'POST') {
     const tq = global.__tk && global.__tk.pays && global.__tk.pays.get(mPay[1]);
+    if (tq && tq.kind === 'order') {
+      const o = ORDERS.get(tq.orderId);
+      if (tq.status === 'authorised' || tq.status === 'captured' || tq.status === 'released')
+        return send(res, 200, { ok: true, status: tq.status, order: o ? publicOrder(o) : null,
+          booking: o && o.pnr ? store.getBooking(o.pnr) : null });
+      if (tq.status !== 'pending' || Date.now() > tq.expiresAt)
+        return send(res, 410, { error: 'the block request lapsed \u2014 nothing was blocked, nothing was taken' });
+      if (!o || o.status !== 'pending') return send(res, 409, { error: 'this order is no longer waiting for its block' });
+      tatkal.authorise(tq);
+      o.status = 'open'; o.openedAt = Date.now();
+      journal.append({ t: 'order', order: { ...o } });
+      sseSend({ type: 'tkpay', id: tq.id, who: tq.who, status: 'authorised', amount: tq.amount });
+      sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'open', cap: o.cap });
+      matchOrders();                                   // a berth may be there right now
+      return send(res, 200, { ok: true, status: tq.status, order: publicOrder(o),
+        booking: o.pnr ? store.getBooking(o.pnr) : null });
+    }
     if (tq) {
       if (tq.status === 'authorised' || tq.status === 'captured' || tq.status === 'released')
         return send(res, 200, { ok: true, status: tq.status, booking: { pnr: 'TQ-ENTRY', amount: tq.amount } });

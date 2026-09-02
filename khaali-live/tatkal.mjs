@@ -197,11 +197,13 @@ export function authorise(s, now = Date.now()) {
  * is, so settling twice, or settling a session the bank never approved, does
  * nothing.
  */
-export function settle(s, won, now = Date.now()) {
+export function settle(s, won, now = Date.now(), amount = null) {
   if (!s) return { ok: false, reason: 'missing' };
   if (s.status !== 'authorised') return { ok: false, reason: s.status };
   s.status = won ? 'captured' : 'released';
-  s.captured = won ? s.amount : 0;
+  // an order blocks the most the traveller would pay and takes what the
+  // berth actually cost; never more than was blocked
+  s.captured = won ? Math.min(s.amount, amount == null ? s.amount : amount) : 0;
   s.settledAt = now;
   return { ok: true, status: s.status, captured: s.captured };
 }

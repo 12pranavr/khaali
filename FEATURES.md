@@ -649,6 +649,43 @@ A line underneath names the current holder in plain words. If the payment
 sticks, it says so explicitly: "the payment gateway, not khaali, not the
 railway", and marks that no PNR was issued.
 
+### One order, many trains
+
+"Tell khaali what you need, not which train." On any search results page
+the traveller can place a journey order instead of picking a train: the two
+stations and date from the search, a window of departure times, the classes
+they would accept, how many are travelling, and the most they would pay in
+total. khaali quotes how many trains that watches and the cheapest fare
+among them, then blocks the cap the way a Tatkal entry is blocked.
+
+The order book lives on the server (`khaali-live/orders.mjs` for what an
+order is and how it fills; the server for the book, the matcher and the
+routes). An order is disbelieved on arrival: stations must be served, the
+date within sixty days, the window non-empty, the classes known, the party
+at most six, and the cap at least the cheapest fare with fees. Two open
+orders per identity.
+
+Matching runs when a block is approved, whenever a hold is released, a
+chart is prepared or the store resets, and every twenty seconds. Orders are
+served oldest first, so waiting is what earns the place in the queue. A fill
+is whole berths only, on the cheapest candidate that has them: before
+charting that is an any-berth booking, after it the free berths themselves.
+The hold is placed outside the traveller's own hold cap, so a fill never
+knocks out a checkout they are in the middle of. The block is captured for
+exactly the booking's amount and the rest released; a window closing with
+nothing booked releases all of it. Orders and their fills are journaled and
+rebuilt at boot, blocks included.
+
+The scanned page plays the bank for an order too: approve the block, then
+"berth found, ₹142 debited, ₹38 released" or "order closed, ₹0 debited",
+updated live. In the app, the order sheet closes itself when the phone
+approves, the bell announces the fill with the train and what was taken, and
+My bookings lists every order with its state. A fill made while the device
+was away is adopted onto it when the ticket is opened.
+
+Not in an order: seat-hop stitches. A stitched journey is a different
+promise, and the traveller did not make it.
+
 ### Blocked, not taken
 
 A Tatkal entry is a bet on an allotment, and most entrants lose. Charging

@@ -236,7 +236,7 @@ export function snapshot(train, date, cls) {
  *   mode 'any'    no berths; pax journeys join the pool if they can be seated
  * Returns { ok:true, hold } or { ok:false, reason, conflicts }.
  */
-export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, segs, hop, mode = 'exact' }) {
+export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, segs, hop, mode = 'exact', cap = true }) {
   const key = keyOf(train, date, cls);
   const v = inv(key);
   const j = journeyMask(from, to);
@@ -246,7 +246,7 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
   // instead locked out anyone who refreshed twice, for five minutes, with
   // nothing to pay for. The cap is against hoarding, not against changing
   // your mind.
-  if (who) {
+  if (who && cap) {
     let mine = [...holds.values()].filter(h => h.status === 'pending' && h.who === who)
       .sort((a, b) => a.createdAt - b.createdAt);
     while (mine.length >= MAX_OPEN_HOLDS) release(mine.shift().id, 'superseded');

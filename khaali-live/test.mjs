@@ -8,6 +8,7 @@ import * as limits from './limits.mjs';
 import * as activity from './activity.mjs';
 import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
+import * as orders from './orders.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -917,6 +918,116 @@ t('abandoning a window releases every approved block, and only those', () => {
   assert.strictEqual(a.captured, 0);
   assert.strictEqual(b.status, 'captured', 'a berth already bought is not undone by a reset');
   assert.strictEqual(c.status, 'pending');
+});
+
+
+console.log('\norders: tell khaali what you need, not which train');
+const oDeps = (at = '2026-09-10T08:00:00+05:30') => ({
+  feesFor: S.feesFor, countsFor: S.countsFor, availability: S.availability,
+  hold: S.hold, release: S.release, confirm: S.confirm,
+  now: () => new Date(at), today: () => '2026-09-10',
+});
+const oReq = (x = {}) => ({ from: 5, to: 13, date: '2026-09-12', after: 0, before: 1440, classes: ['SL'], pax: 1, cap: 400, ...x });
+const place = (x, deps) => { const v = orders.validate(oReq(x), deps); assert.ok(v.ok, v.error);
+  return { ...v.order, id: 'o1', who: 'me@x', status: 'open', openedAt: 1 }; };
+
+t('an order is disbelieved: window, class, party size, and a cap below the cheapest fare', () => {
+  const d = oDeps();
+  assert.strictEqual(orders.validate(oReq({ after: 600, before: 600 }), d).ok, false, 'empty window');
+  assert.strictEqual(orders.validate(oReq({ classes: ['1A'] }), d).ok, false, 'unknown class');
+  assert.strictEqual(orders.validate(oReq({ pax: 7 }), d).ok, false, 'seven is a group, not a party');
+  assert.strictEqual(orders.validate(oReq({ date: '2026-09-09' }), d).ok, false, 'yesterday');
+  const low = orders.validate(oReq({ cap: 10 }), d);
+  assert.strictEqual(low.ok, false);
+  assert.ok(low.cheapest > 10, 'says what the cheapest actually is');
+  assert.ok(orders.validate(oReq({ cap: low.cheapest }), d).ok, 'exactly the cheapest fare is enough');
+});
+
+t('candidates honour the window, the classes, the cap, and trains that already left today', () => {
+  const d = oDeps();
+  const all = orders.candidates(place({}, d), d);
+  assert.ok(all.length > 1, 'more than one train serves SBC to MYS');
+  assert.ok(all.every((c, i) => i === 0 || c.price >= all[i - 1].price), 'cheapest first');
+  const narrow = orders.candidates(place({ after: 300, before: 420 }, d), d);
+  assert.ok(narrow.length && narrow.every(c => c.dep >= 300 && c.dep < 420), 'window respected');
+  const both = orders.candidates(place({ classes: ['SL', '3A'], cap: 5000 }, d), d);
+  assert.ok(both.some(c => c.cls === '3A') && both.some(c => c.cls === 'SL'));
+  const tight = orders.candidates(place({ classes: ['SL', '3A'], cap: 400 }, d), d);
+  assert.ok(tight.every(c => c.cls === 'SL'), 'the cap prices AC out');
+  // today at 23:50: nearly everything has gone
+  const late = oDeps('2026-09-10T23:50:00+05:30');
+  const gone = orders.candidates({ ...place({ date: '2026-09-10' }, late) }, late);
+  assert.ok(gone.length < all.length, 'today only sells what has not left');
+});
+
+t('an open order fills with a whole berth on the cheapest train that has one, for what it costs', () => {
+  S.reset();
+  const d = oDeps();
+  const o = place({ classes: ['SL', '3A'], cap: 900 }, d);
+  const r = orders.tryFill(o, d);
+  assert.ok(r.ok, r.reason);
+  assert.strictEqual(o.status, 'filled');
+  assert.strictEqual(r.booking.who, 'me@x', 'booked in the traveller\'s own name');
+  assert.ok(o.paid <= o.cap, 'never more than the cap');
+  assert.strictEqual(o.paid, r.pick.price, 'paid exactly the candidate price');
+  assert.strictEqual(r.booking.mode, 'any', 'before charting it is an any-berth booking');
+  assert.strictEqual(S.getBooking(o.pnr).pnr, o.pnr);
+  assert.strictEqual(orders.tryFill(o, d).ok, false, 'a filled order does not fill twice');
+});
+
+t('nothing fits, the order waits; a berth freeing up fills it; the window closing expires it', () => {
+  S.reset();
+  const d = oDeps();
+  // one train alone, isolated by a one-minute window: fill it to the brim first
+  const first = orders.candidates(place({ cap: 300 }, d), d)[0];
+  const o = place({ after: first.dep, before: first.dep + 1, cap: 300 }, d);
+  const cands = orders.candidates(o, d);
+  assert.strictEqual(cands.length, 1, 'one train in that slice: ' + cands.map(c => c.train));
+  const tr = cands[0].train;
+  const holds = [];
+  while (S.countsFor(tr, o.date, 'SL', 5, 13).anySeats > 0) {
+    const h = S.hold({ train: tr, date: o.date, cls: 'SL', from: 5, to: 13, pax: 1, who: 'crowd' + holds.length, mode: 'any' });
+    if (!h.ok) break;
+    holds.push(h.hold.id);
+  }
+  assert.strictEqual(orders.tryFill(o, d).ok, false, 'no whole berth, no fill');
+  assert.strictEqual(o.status, 'open');
+  S.release(holds[0], 'changed-mind');
+  assert.ok(orders.tryFill(o, d).ok, 'the released berth goes to the order');
+  assert.strictEqual(o.fill.train, tr);
+  const o2 = place({ after: 230, before: 240, cap: 300 }, d);
+  assert.strictEqual(orders.expired(o2, oDeps('2026-09-12T03:59:00+05:30')), false);
+  assert.strictEqual(orders.expired(o2, oDeps('2026-09-12T04:00:00+05:30')), true, 'the window has closed');
+});
+
+t('a fill never knocks out the traveller\'s own checkout, and never overpays after charting', () => {
+  S.reset();
+  const d = oDeps();
+  const a = S.hold({ train: '16021', date: '2026-09-12', cls: 'SL', from: 0, to: 5, pax: 1, who: 'me@x', mode: 'any' });
+  const b = S.hold({ train: '16021', date: '2026-09-12', cls: 'SL', from: 6, to: 9, pax: 1, who: 'me@x', mode: 'any' });
+  assert.ok(a.ok && b.ok);
+  const o = place({ classes: ['SL'], cap: 400 }, d);
+  assert.ok(orders.tryFill(o, d).ok);
+  assert.strictEqual(S.getHold(a.hold.id).status, 'pending', 'first checkout still alive');
+  assert.strictEqual(S.getHold(b.hold.id).status, 'pending', 'second checkout still alive');
+  // after the chart, the order books real berths and still pays the plain fare
+  const c = orders.candidates(place({}, d), d)[0];
+  S.chart(c.train, '2026-09-12', c.cls);
+  const o2 = { ...place({}, d), id: 'o2' };
+  const r2 = orders.tryFill(o2, d);
+  assert.ok(r2.ok, r2.reason);
+  assert.strictEqual(r2.booking.mode, 'exact');
+  assert.ok(r2.booking.berths.length === 1, 'a real berth number');
+  assert.ok(o2.paid <= o2.cap);
+});
+
+t('the block behind an order is taken for the berth\'s price, and the rest released', () => {
+  const s = { id: 'p', who: 'me@x', round: 0, amount: 400, expiresAt: 1e12, status: 'pending' };
+  tatkal.authorise(s, 1);
+  assert.deepStrictEqual(tatkal.settle(s, true, 2, 186), { ok: true, status: 'captured', captured: 186 });
+  const s2 = { id: 'q', who: 'me@x', round: 0, amount: 400, expiresAt: 1e12, status: 'pending' };
+  tatkal.authorise(s2, 1);
+  assert.strictEqual(tatkal.settle(s2, true, 2, 9999).captured, 400, 'never more than was blocked');
 });
 
 

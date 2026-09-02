@@ -89,7 +89,7 @@ async function load() {
   try { hold = await api('/api/hold/' + holdId); }
   catch { return expired(); }
 
-  if (hold.tatkal) return bank(hold);
+  if (hold.tatkal || hold.order) return bank(hold);
   if (hold.status === 'paid') return done(hold.pnr);
   if (hold.status !== 'pending' || hold.msLeft <= 0) return expired();
 
@@ -158,12 +158,14 @@ function bank(h) {
     <h2 style="margin:8px 0 4px;font-size:30px">${title}</h2>
     <div class="muted">${sub}</div>`;
 
+  const what = h.order ? 'Journey order · ' + h.title : 'Tatkal entry · 16021 Kaveri Express · tomorrow';
   if (h.status === 'pending' && h.msLeft > 0) {
-    $('#panel').innerHTML = head('Block request · from khaali', amt, 'Tatkal entry · 16021 Kaveri Express · tomorrow')
+    $('#panel').innerHTML = head('Block request · from khaali', amt, what)
       + `<div style="margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px">
           <div style="font-weight:700">This blocks ${amt} in your account. It is not debited.</div>
-          <div class="muted" style="margin-top:6px">It is taken only if you are allotted a berth when the window
-          closes. Otherwise the block is released on its own. Nothing to refund, nothing to chase.</div>
+          <div class="muted" style="margin-top:6px">${h.order
+            ? 'khaali takes only what the berth it finds actually costs, and releases the rest. If no berth turns up before your window closes, the whole block is released.'
+            : 'It is taken only if you are allotted a berth when the window closes. Otherwise the block is released on its own. Nothing to refund, nothing to chase.'}</div>
         </div>
         <div class="timer" id="timer" style="margin:8px 0 2px">5:00</div>
         <div class="muted">The request lapses after this. A lapsed request blocks nothing.</div>
@@ -189,10 +191,19 @@ function bank(h) {
   }
   if (h.status === 'authorised') {
     $('#panel').innerHTML = head('Blocked · not debited', amt + ' blocked',
-        'Your money has not moved. It is set aside in your ' + via + ' until the window closes.')
-      + `<div class="banner ok" style="margin-top:16px">Waiting for allotment. This page updates by itself.</div>
-        <div class="muted" style="margin-top:10px">Allotted: ${amt} is debited and the berth is yours.<br>
-        Not allotted: the block is released. ₹0 debited.</div>${back}${simNote}`;
+        'Your money has not moved. It is set aside in your ' + via + (h.order ? ' while khaali watches every train that fits.' : ' until the window closes.'))
+      + `<div class="banner ok" style="margin-top:16px">${h.order ? 'Watching for a berth. This page updates by itself.' : 'Waiting for allotment. This page updates by itself.'}</div>
+        <div class="muted" style="margin-top:10px">${h.order
+          ? 'Berth found: only its fare is debited, the rest of the block is released.<br>No berth in your window: the block is released. ₹0 debited.'
+          : 'Allotted: ' + amt + ' is debited and the berth is yours.<br>Not allotted: the block is released. ₹0 debited.'}</div>${back}${simNote}`;
+    return;
+  }
+  if (h.status === 'captured' && h.order) {
+    const f = h.fill || {};
+    $('#panel').innerHTML = head('Berth found', '₹' + h.captured + ' debited',
+        'Of the ' + amt + ' blocked, ₹' + h.released + ' is released back. Only the berth was paid for.')
+      + `<div class="banner ok" style="margin-top:16px">${f.train || ''} ${f.name || ''} · ${f.cls || ''}${h.berth ? ' · ' + h.berth : ' · berth comes at charting'}${h.pnr && h.pnr !== 'ORDER' ? ' · PNR ' + h.pnr : ''}</div>
+        <a class="btn ghost" href="/my-bookings" style="display:block;text-align:center;margin-top:10px;text-decoration:none">Back to my bookings</a>${simNote}`;
     return;
   }
   if (h.status === 'captured') {
@@ -202,7 +213,7 @@ function bank(h) {
     return;
   }
   if (h.status === 'released') {
-    $('#panel').innerHTML = head('Not allotted', '₹0 debited',
+    $('#panel').innerHTML = head(h.order ? 'Order closed' : 'Not allotted', '₹0 debited',
         'The block on your ' + amt + ' is released. Nothing was taken, so there is nothing to refund.')
       + `<div class="banner ok" style="margin-top:16px">Your ${via} shows the money exactly where it was.</div>${back}${simNote}`;
     return;
