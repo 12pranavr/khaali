@@ -467,34 +467,59 @@ export function packPlan(masks) {
  * layout  berthLayout(cls), for coach ids
  * Returns { ok, assign: Map(id -> idx), packed, unseated, touched, wholeFree }
  */
+export const isLowerBerth = b => !!b && (b.type === 'LB' || b.type === 'SLB');
+
 export function packInto(fixed, items, layout) {
   const n = fixed.length;
   const packed = new Int32Array(n);
   const assign = new Map();
   const unseated = [];
+  const lowerMissed = [];
   const groupCoach = new Map();               // group -> coach id of its first member
   const startOf = m => { let i = 0; while (i < SEGMENTS && !(m & (1 << i))) i++; return i; };
+  const lower = i => !!(layout && isLowerBerth(layout[i]));
 
-  // hardest first: earliest start, then longest, then earliest booking
+  // People who need a lower berth are seated first, and only on lower berths.
+  // The quota counts berths; this counts people. Among them, and among
+  // everyone else: hardest first - earliest start, then longest, then the
+  // earliest booking, so waiting is what earns the place.
   const order = items.slice().sort((a, b) =>
-    startOf(a.mask) - startOf(b.mask)
+    (b.need ? 1 : 0) - (a.need ? 1 : 0)
+    || startOf(a.mask) - startOf(b.mask)
     || popcount(b.mask) - popcount(a.mask)
     || (a.at || 0) - (b.at || 0)
     || String(a.id).localeCompare(String(b.id)));
 
-  for (const it of order) {
+  const place = (it, onlyLower) => {
     let best = -1, bestScore = Infinity;
     const wantCoach = groupCoach.get(it.group);
     for (let i = 0; i < n; i++) {
+      if (onlyLower && !lower(i)) continue;
       const used = fixed[i] | packed[i];
       if ((used & it.mask) !== 0) continue;
       // best fit: a berth already in use beats a pristine one, so whole
-      // berths stay whole; same coach as the family; then the tightest fit
+      // berths stay whole; same coach as the family; a lower berth for
+      // someone who merely prefers one, if it costs nobody a need; then
+      // the tightest fit
       const pristine = used === 0 ? 1 : 0;
       const sameCoach = (wantCoach && layout && layout[i] && layout[i].coach === wantCoach) ? 0 : 1;
+      const wantLower = (it.pref === 'lower' && !lower(i)) ? 1 : 0;
+      // and someone with no need and no wish for a lower berth leaves it
+      // for someone who has one, all else being equal
+      const spareLower = (!it.need && it.pref !== 'lower' && lower(i)) ? 1 : 0;
       const slack = SEGMENTS - popcount(used | it.mask);
-      const score = pristine * 10000 + sameCoach * 1000 + slack * 10 + (i / n);
+      const score = pristine * 10000 + sameCoach * 1000 + wantLower * 500 + spareLower * 200 + slack * 10 + (i / n);
       if (score < bestScore) { bestScore = score; best = i; }
+    }
+    return best;
+  };
+
+  for (const it of order) {
+    let best = it.need ? place(it, true) : -1;
+    if (best < 0) {
+      // no lower berth left for a need: still a berth, and named as missed
+      best = place(it, false);
+      if (best >= 0 && it.need) lowerMissed.push(it.id);
     }
     if (best < 0) { unseated.push(it.id); continue; }
     packed[best] |= it.mask;
@@ -507,5 +532,8 @@ export function packInto(fixed, items, layout) {
     if (packed[i]) touched++;
     if ((fixed[i] | packed[i]) === 0) wholeFree++;
   }
-  return { ok: unseated.length === 0, assign, packed, unseated, touched, wholeFree };
+  const lowerNeeded = items.filter(x => x.need).length;
+  const lowerGiven = items.filter(x => x.need && assign.has(x.id) && !lowerMissed.includes(x.id)).length;
+  return { ok: unseated.length === 0, assign, packed, unseated, touched, wholeFree,
+    lowerNeeded, lowerGiven, lowerMissed };
 }

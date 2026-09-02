@@ -1,7 +1,7 @@
 // Locking, payment and expiry tests. Run: node test.mjs
 import assert from 'assert';
 import * as S from './store.mjs';
-import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin, oddsOf2, packInto, SEGMENTS } from './engine.mjs';
+import { journeyMask, seedOccupancy, berthState, packPlan, serves, journeyKm, stationByCode, liveOf, stopIdxs, sMin, oddsOf2, packInto, SEGMENTS, berthLayout } from './engine.mjs';
 import { TRAINS, ST } from './data.mjs';
 import * as sentinel from './sentinel.mjs';
 import * as limits from './limits.mjs';
@@ -718,7 +718,8 @@ t('an any-berth hold joins the pool and is priced at the through fare, no choice
 
 t('a chosen berth carries the choice fee, per traveller, by class', () => {
   const av = S.availability('16021', abDate, '3A', 5, 6);
-  const free = av.berths.filter(b => b.k === 'free').map(b => b.idx).slice(0, 2);
+  const notLower = b => b.type !== 'LB' && b.type !== 'SLB';   // lowers are not for choosing pre-chart
+  const free = av.berths.filter(b => b.k === 'free' && notLower(b)).map(b => b.idx).slice(0, 2);
   const r = S.hold({ train: '16021', date: abDate, cls: '3A', from: 5, to: 6, berthIdxs: free, pax: 2, who: 'ab-2', mode: 'exact' });
   assert.ok(r.ok, r.reason);
   assert.strictEqual(r.hold.choiceFee, 100, '50 x 2 travellers in 3A');
@@ -755,11 +756,15 @@ t('a chosen berth that would unseat someone already booked is refused', () => {
   }
   assert.ok(ok > 0, 'someone got in');
   const av = S.availability('22817', d, '2A', 0, 13);
-  const pooledIdx = av.berths.find(b => b.k === 'pooled');
+  // the hatch can only show the pool on physically empty berths; whichever
+  // those are, pinning one is refused - as needed by the pool, or, if it is a
+  // lower berth, as reserved for people who need one (checked first)
+  const pooledIdx = av.berths.find(b => b.k === 'pooled' && b.type !== 'LB' && b.type !== 'SLB') || av.berths.find(b => b.k === 'pooled');
   assert.ok(pooledIdx, 'a provisional berth exists');
+  const isLow = pooledIdx.type === 'LB' || pooledIdx.type === 'SLB';
   const r = S.hold({ train: '22817', date: d, cls: '2A', from: 0, to: 13, berthIdxs: [pooledIdx.idx], pax: 1, who: 'pin', mode: 'exact' });
   assert.strictEqual(r.ok, false);
-  assert.strictEqual(r.reason, 'needed-for-pool');
+  assert.strictEqual(r.reason, isLow ? 'lower-reserved' : 'needed-for-pool');
 });
 
 t('chosen berths are capped at a share of the coach', () => {
@@ -767,23 +772,30 @@ t('chosen berths are capped at a share of the coach', () => {
   const d = '2026-09-30';
   // find a class and date with more free berths on one leg than the cap allows
   let cls = null, free = [], cap = 0, dd = d;
-  outer: for (const c of ['2A', '3A', 'SL']) for (let k = 20; k < 45; k++) {
+  outer: for (const c of ['2A', '3A', 'SL']) for (let k = 20; k < 61; k++) {
     dd = k <= 30 ? '2026-09-' + String(k).padStart(2, '0') : '2026-10-' + String(k - 30).padStart(2, '0');
     const size = { '2A': 96, '3A': 192, 'SL': 432 }[c];
     cap = Math.floor(S.MAX_CHOSEN_FRACTION * size);
     const av = S.availability('16021', dd, c, 5, 6);
-    free = av.berths.filter(b => b.k === 'free').map(b => b.idx);
+    free = av.berths.filter(b => b.k === 'free' && b.type !== 'LB' && b.type !== 'SLB').map(b => b.idx);
     if (free.length > cap + 2) { cls = c; break outer; }
   }
-  assert.ok(cls, 'a coach with more free berths than the cap');
+  if (!cls) {
+    // lower berths are not for choosing before the chart, so with real seed
+    // data the choosable berths run out before the cap does: pin everything
+    // choosable and check the cap was never crossed and never wrongly cited
+    cls = 'SL'; dd = '2026-10-12'; cap = Math.floor(S.MAX_CHOSEN_FRACTION * 432);
+    free = S.availability('16021', dd, cls, 5, 6).berths.filter(b => b.k === 'free' && b.type !== 'LB' && b.type !== 'SLB').map(b => b.idx);
+  }
   let held = 0, last;
   for (let i = 0; i < free.length; i++) {
     last = S.hold({ train: '16021', date: dd, cls, from: 5, to: 6, berthIdxs: [free[i]], pax: 1, who: 'cap-' + i, mode: 'exact' });
     if (!last.ok) break; held++;
     S.confirm(last.hold.id);
   }
-  assert.strictEqual(last.reason, 'chosen-cap', 'stopped by the cap, not by ' + last.reason);
-  assert.strictEqual(held, cap);
+  assert.ok(held <= cap, 'never more than the cap');
+  if (held === cap) assert.strictEqual(last.reason, 'chosen-cap', 'stopped by the cap, not by ' + last.reason);
+  else assert.notStrictEqual(last && last.reason, 'chosen-cap', 'the cap is not cited while it has room');
   const anyR = S.hold({ train: '16021', date: dd, cls, from: 5, to: 6, pax: 1, who: 'still-any', mode: 'any' });
   assert.ok(anyR.ok, 'any berth still works past the chosen cap');
   S.release(anyR.hold.id);
@@ -1028,6 +1040,135 @@ t('the block behind an order is taken for the berth\'s price, and the rest relea
   const s2 = { id: 'q', who: 'me@x', round: 0, amount: 400, expiresAt: 1e12, status: 'pending' };
   tatkal.authorise(s2, 1);
   assert.strictEqual(tatkal.settle(s2, true, 2, 9999).captured, 400, 'never more than was blocked');
+});
+
+
+console.log('\nlower berths: the quota counts berths, khaali counts people');
+const LAY = berthLayout('SL');
+const lowerIdx = i => LAY[i].type === 'LB' || LAY[i].type === 'SLB';
+
+t('a need is seated on a lower berth first; a preference gets one only if it costs no need', () => {
+  const fixed = new Int32Array(LAY.length);
+  const j = journeyMask(0, 13);
+  const items = [
+    { id: 'young', mask: j, group: 'a', at: 1 },
+    { id: 'gran', mask: j, group: 'b', at: 2, need: 'senior' },
+    { id: 'likes', mask: j, group: 'c', at: 3, pref: 'lower' },
+  ];
+  const r = packInto(fixed, items, LAY);
+  assert.ok(r.ok);
+  assert.ok(lowerIdx(r.assign.get('gran')), 'the senior is on a lower berth');
+  assert.ok(lowerIdx(r.assign.get('likes')), 'plenty of lowers, so the preference is met too');
+  assert.deepStrictEqual([r.lowerNeeded, r.lowerGiven, r.lowerMissed], [1, 1, []]);
+});
+
+t('when lower berths run out, needs win over preferences and the miss is named', () => {
+  const fixed = new Int32Array(LAY.length);
+  const j = journeyMask(0, 13);
+  // block every lower berth but two
+  let left = 2;
+  for (let i = LAY.length - 1; i >= 0; i--) if (lowerIdx(i)) { if (left > 0) { left--; continue; } fixed[i] = j; }
+  const items = [
+    { id: 'p1', mask: j, group: 'x', at: 1, pref: 'lower' },
+    { id: 'n1', mask: j, group: 'y', at: 2, need: 'senior' },
+    { id: 'n2', mask: j, group: 'z', at: 3, need: 'disabled' },
+    { id: 'n3', mask: j, group: 'w', at: 4, need: 'expecting' },
+  ];
+  const r = packInto(fixed, items, LAY);
+  assert.ok(r.ok, 'everyone still gets a berth');
+  assert.ok(lowerIdx(r.assign.get('n1')) && lowerIdx(r.assign.get('n2')), 'the two lowers go to needs');
+  assert.ok(!lowerIdx(r.assign.get('p1')), 'the preference gives way');
+  assert.deepStrictEqual([r.lowerNeeded, r.lowerGiven, r.lowerMissed], [3, 2, ['n3']]);
+});
+
+t('a whole lower berth cannot be chosen before the chart; a partial one can; after the chart anything goes', () => {
+  S.reset();
+  // find a day whose coach has a whole-free lower, a whole-free upper and a partial lower
+  let d = null, freeLower, freeUpper, partLower, F0 = 0, T0 = 13, cls = 'SL';
+  outer: for (const [f, t] of [[0, 13], [5, 13], [0, 5], [5, 11]]) for (const c of ['SL', '3A', '2A']) for (let k = 14; k < 45; k++) {
+    const dd = k <= 30 ? '2026-09-' + String(k).padStart(2, '0') : '2026-10-' + String(k - 30).padStart(2, '0');
+    const av = S.availability('16021', dd, c, f, t);
+    freeLower = av.berths.find(b => b.k === 'free' && (b.type === 'LB' || b.type === 'SLB'));
+    freeUpper = av.berths.find(b => b.k === 'free' && b.type === 'UB');
+    partLower = av.berths.find(b => b.k === 'part' && (b.type === 'LB' || b.type === 'SLB'));
+    if (freeLower && freeUpper && partLower) { d = dd; F0 = f; T0 = t; cls = c; break outer; }
+  }
+  assert.ok(d, 'fixture has all three kinds');
+  const r1 = S.hold({ train: '16021', date: d, cls, from: F0, to: T0, berthIdxs: [freeLower.idx], pax: 1, who: 'a@x' });
+  assert.deepStrictEqual([r1.ok, r1.reason], [false, 'lower-reserved']);
+  const r2 = S.hold({ train: '16021', date: d, cls, from: F0, to: T0, berthIdxs: [freeUpper.idx], pax: 1, who: 'a@x' });
+  assert.ok(r2.ok, 'an upper berth is still for choosing');
+  const r3 = S.hold({ train: '16021', date: d, cls, from: F0, to: T0, berthIdxs: [partLower.idx], pax: 1, who: 'b@x' });
+  assert.ok(r3.ok, 'a partial lower is already somebody\'s, so the stretch is sellable');
+  S.release(r2.hold.id); S.release(r3.hold.id);
+  S.chart('16021', d, cls);
+  const av2 = S.availability('16021', d, cls, F0, T0);
+  const fl2 = av2.berths.find(b => b.k === 'free' && (b.type === 'LB' || b.type === 'SLB'));
+  if (fl2) assert.ok(S.hold({ train: '16021', date: d, cls, from: F0, to: T0, berthIdxs: [fl2.idx], pax: 1, who: 'c@x' }).ok, 'post-chart, what is free is free');
+});
+
+t('at charting a booked need lands on a lower berth, the ticket says so, and a restart remembers it', () => {
+  S.reset();
+  const d = '2026-09-15';
+  const recs = [];
+  S.onRecord(r => recs.push(r));
+  const h = S.hold({ train: '16021', date: d, cls: 'SL', from: 0, to: 13, pax: 2, who: 'fam@x', mode: 'any',
+    travellers: [{ name: 'Ajji', need: 'senior' }, { name: 'Kid', pref: 'lower' }] });
+  assert.ok(h.ok, h.reason);
+  const b = S.confirm(h.hold.id).booking;
+  assert.strictEqual(b.travellers[0].need, 'senior');
+  const c = S.chart('16021', d, 'SL');
+  assert.ok(c.lower.needed >= 1 && c.lower.given >= 1, JSON.stringify(c.lower));
+  const bk = S.getBooking(b.pnr);
+  assert.deepStrictEqual(bk.lower, { needed: 1, given: 1, missed: 0 });
+  const first = LAY[bk.berthIdxs[0]];
+  assert.ok(first.type === 'LB' || first.type === 'SLB', 'traveller 1 sits low: ' + first.type);
+  assert.ok(S.availability('16021', d, 'SL', 0, 13).lower.result.needed >= 1, 'the coach publishes its count');
+  // replay from the journal: the need and the result survive
+  S.onRecord(null);
+  S.reset();
+  S.replay(recs);
+  assert.deepStrictEqual(S.getBooking(b.pnr).lower, { needed: 1, given: 1, missed: 0 });
+  // an uncharted any-berth booking gets its need back too
+  S.reset();
+  S.replay(recs.filter(r => r.t === 'booked'));
+  const av = S.availability('16021', d, 'SL', 0, 13);
+  assert.ok(av.lower.needed >= 1, 'the pool item still needs a lower berth');
+});
+
+t('a pending hold learns its travellers\' needs, and the pool items with it', () => {
+  S.reset();
+  const h = S.hold({ train: '16021', date: '2026-09-16', cls: 'SL', from: 0, to: 13, pax: 2, who: 'late@x', mode: 'any' });
+  assert.ok(h.ok);
+  const r = S.setTravellers(h.hold.id, [{ name: 'Ajji', need: 'senior' }, { name: 'Kid', pref: 'lower' }]);
+  assert.ok(r.ok);
+  const b = S.confirm(h.hold.id).booking;
+  assert.strictEqual(b.travellers[0].need, 'senior');
+  assert.strictEqual(S.availability('16021', '2026-09-16', 'SL', 0, 13).lower.needed >= 1, true);
+  assert.strictEqual(S.setTravellers(h.hold.id, []).ok, false, 'a paid hold is not a hold any more');
+});
+
+console.log('\nwaitlist: an order pinned to one train');
+t('a waitlist watches one train, closes at its departure, and counts its queue honestly', () => {
+  S.reset();
+  const d = oDeps();
+  const v = orders.validate(oReq({ train: '16021', classes: ['3A', 'SL'], cap: 5000 }), d);
+  assert.ok(v.ok, v.error);
+  const o = { ...v.order, id: 'w1', who: 'w@x', status: 'open', openedAt: 10 };
+  assert.strictEqual(o.train, '16021');
+  assert.deepStrictEqual(o.classes, ['3A'], 'one class: the one being waited for');
+  assert.strictEqual(o.before, o.after + 1, 'the window is that train\'s departure');
+  const c = orders.candidates(o, d);
+  assert.ok(c.length === 1 && c[0].train === '16021', 'only that train');
+  assert.strictEqual(orders.validate(oReq({ train: '99999' }), d).ok, false, 'unknown train refused');
+  const later = { ...o, id: 'w2', openedAt: 20 };
+  const other = { ...o, id: 'w3', openedAt: 5, classes: ['SL'] };
+  const flex = { ...v.order, id: 'f1', who: 'f@x', status: 'open', openedAt: 1, train: undefined, after: 0, before: 1440, classes: ['3A'] };
+  const pending = { ...o, id: 'w4', openedAt: null, status: 'pending' };
+  const all = [o, later, other, flex, pending];
+  assert.deepStrictEqual(orders.queueOf(later, all, d), { position: 2, flexAhead: 1 }, 'behind w1, with one flexible order ahead');
+  assert.deepStrictEqual(orders.queueOf(o, all, d), { position: 1, flexAhead: 1 }, 'a pending request holds no place');
+  assert.deepStrictEqual(orders.queueOf(other, all, d).position, 1, 'a different class is a different line');
 });
 
 

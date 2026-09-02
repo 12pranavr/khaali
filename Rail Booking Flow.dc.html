@@ -727,13 +727,14 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <div style="background:var(--k-fff);color:var(--k-fg-14161a);border-radius:14px;max-width:580px;width:100%;max-height:calc(100vh - 32px);overflow-y:auto;padding:22px 24px 26px">
     <div style="display:flex;align-items:flex-start;gap:12px">
       <div>
-        <div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-1f3f8f);text-transform:uppercase;margin-bottom:7px">Journey order</div>
+        <div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-1f3f8f);text-transform:uppercase;margin-bottom:7px">{{ ordKicker }}</div>
         <div style="font:700 19px/1.25 Manrope,sans-serif">{{ ordRoute }}</div>
         <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px">{{ ordDate }} &#183; {{ ordPaxLabel }}</div>
       </div>
       <div onClick="{{ ordClose }}" style="margin-left:auto;cursor:pointer;font-size:22px;line-height:1;color:var(--k-fg-8a8a84);padding:2px 6px">&#215;</div>
     </div>
     <div style="{{ ordFormStyle }}">
+      <div style="{{ ordFlexStyle }}">
       <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin:18px 0 8px">Leave after</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <sc-for list="{{ ordAfterChips }}" as="c" hint-placeholder-count="6"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.t }}</div></sc-for>
@@ -742,8 +743,10 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <sc-for list="{{ ordBeforeChips }}" as="c" hint-placeholder-count="6"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.t }}</div></sc-for>
       </div>
+      </div>
+      <div style="{{ ordPinStyle }}">{{ ordPinLine }}</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px">
-        <div>
+        <div style="{{ ordFlexStyle }}">
           <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Any of these classes</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <sc-for list="{{ ordClsChips }}" as="c" hint-placeholder-count="3"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.t }}</div></sc-for>
@@ -759,8 +762,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         </div>
       </div>
       <div style="margin-top:16px;border:1px solid var(--k-e6e5e0);border-radius:10px;padding:14px 15px;background:var(--k-fafaf8)">
-        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">The most you would pay, in total</div>
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">{{ ordCapLabel }}</div>
+        <div style="{{ ordCapRowStyle }}">
           <span style="font:700 18px/1 Manrope,sans-serif">&#8377;</span>
           <input inputmode="numeric" value="{{ ordCap }}" onChange="{{ setOrdCap }}" placeholder="250" style="width:120px;padding:11px 13px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 17px/1 'IBM Plex Mono',monospace;outline:none"></input>
         </div>
@@ -768,7 +771,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <sc-for list="{{ ordTrains }}" as="r" hint-placeholder-count="4">
           <div style="display:flex;gap:10px;font:500 11.5px/1.7 'IBM Plex Mono',monospace;color:var(--k-fg-6a6d75)"><span style="flex:none;width:66px">{{ r.dep }}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span><span style="flex:none">{{ r.cls }}</span><span style="flex:none;width:52px;text-align:right">&#8377;{{ r.price }}</span></div>
         </sc-for>
-        <div style="font:500 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:9px">This amount is <b>blocked, not paid</b>. When a berth is booked khaali takes only its fare and releases the rest. No berth by the end of your window, and the whole block is released.</div>
+        <div style="font:500 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:9px">{{ ordBlockNote }}</div>
       </div>
       <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin:16px 0 8px">Block it with</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1086,6 +1089,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <span style="{{ pickBannerDot }}">{{ pickBannerGlyph }}</span>
         <span>{{ pickBannerText }}</span>
       </div>
+      <div style="{{ wlBannerStyle }}">
+        <div style="font:700 13.5px/1.35 Manrope,sans-serif">{{ wlTitle }}</div>
+        <div style="font:500 12px/1.55 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:4px">{{ wlSub }}</div>
+        <button onClick="{{ wlJoin }}" style="margin-top:10px;border:none;background:var(--k-1f3f8f);color:#fff;font:700 13px/1 Manrope,sans-serif;padding:13px 18px;border-radius:8px;cursor:pointer;min-height:44px">{{ wlBtn }}</button>
+      </div>
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:18px;margin-top:12px">
         <div style="font:600 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:14px">What the colours mean</div>
         <sc-for list="{{ seatLegend }}" as="l" hint-placeholder-count="4">
@@ -1108,6 +1116,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="text-align:center;margin-bottom:26px">
       <div style="font:700 20px/1.3 Manrope,sans-serif">{{ seatHeadline }}</div>
       <div style="font-size:13.5px;color:var(--k-fg-8a8a84);margin-top:5px">{{ seatSub }}</div>
+        <div style="{{ seatLowerStyle }}">{{ seatLower }}</div>
     </div>
     <div style="{{ seatNotice }}">{{ seatNoticeText }}</div>
 
@@ -1275,6 +1284,16 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
                 <sc-for list="{{ tv.people }}" as="pp" hint-placeholder-count="6">
                   <div onClick="{{ pp.onPick }}" style="{{ pp.style }}">{{ pp.n }}</div>
                 </sc-for>
+              </div>
+              <div style="{{ tv.metaStyle }}">
+                <div onClick="{{ tv.dobClick }}" style="{{ tv.dobLineStyle }}">{{ tv.dobLine }}</div>
+                <div style="{{ tv.dobEditStyle }}">
+                  <input value="{{ tv.dob }}" onChange="{{ tv.setDob }}" placeholder="Date of birth YYYY-MM-DD" inputmode="numeric" style="flex:1;min-width:170px;max-width:220px;padding:9px 11px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:600 12.5px/1.3 'IBM Plex Mono',monospace;outline:none"></input>
+                  <div onClick="{{ tv.saveDob }}" style="font:700 12px/1 Manrope,sans-serif;padding:10px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8)">Save once</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                  <sc-for list="{{ tv.needChips }}" as="nc" hint-placeholder-count="3"><div onClick="{{ nc.onClick }}" style="{{ nc.style }}">{{ nc.t }}</div></sc-for>
+                </div>
               </div>
             </div>
           </sc-for>
@@ -1930,6 +1949,9 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <input value="{{ pName }}" onChange="{{ setPName }}" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
     <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Full name &#183; as on ID</div>
     <input value="{{ pFull }}" onChange="{{ setPFull }}" placeholder="Matches your travel document" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
+    <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Date of birth &#183; as on ID</div>
+    <div style="{{ pDobLockedStyle }}">{{ pDobLocked }}</div>
+    <input value="{{ pDob }}" onChange="{{ setPDob }}" placeholder="YYYY-MM-DD" inputmode="numeric" style="{{ pDobStyle }}"></input>
     <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Phone</div>
     <input value="{{ pPhone }}" onChange="{{ setPPhone }}" inputmode="tel" style="width:100%;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fafaf8);color:var(--k-fg-14161a);font:600 13.5px/1.3 Manrope,sans-serif;outline:none;margin:6px 0 12px"></input>
     <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Address</div>
@@ -2412,7 +2434,7 @@ class Component extends DCLogic {
       if(!j.access_token)return this.setState({aBusy:false,
         aErr:'Account created, but email confirmation is switched on in Supabase \u2014 confirm from your inbox, then sign in.'});
       const auth={email:u.email||email,name:md.name||name||'traveller',phone:md.phone||phone||'',
-        fullName:md.fullName||'',address:md.address||'',aad4:md.aad4||'',aadOk:!!md.aadOk,
+        fullName:md.fullName||'',address:md.address||'',aad4:md.aad4||'',aadOk:!!md.aadOk,dob:md.dob||'',
         token:j.access_token,refresh:j.refresh_token||'',at:Date.now()};
       try{localStorage.setItem('khaali-auth',JSON.stringify(auth));
         localStorage.setItem('khaali-who',auth.email);}catch(e){}
@@ -2475,8 +2497,11 @@ class Component extends DCLogic {
       phone:String(S.pPhone!=null?S.pPhone:A.phone||'').trim(),
       address:String(S.pAddr!=null?S.pAddr:A.address||'').trim(),
       aad4:A.aad4||'',aadOk:!!A.aadOk,
+      dob:A.dob||(this.validDob(S.pDob)?String(S.pDob).trim():''),
       ...(extra||{}),
     };
+    if(!A.dob&&String(S.pDob||'').trim()&&!this.validDob(S.pDob))
+      return this.setState({pErr:'Date of birth as YYYY-MM-DD, and it has to be a real past date.'});
     this.setState({pBusy:true,pErr:null,pMsg:null});
     const put=async tk=>fetch(this.SUPA+'/auth/v1/user',{method:'PUT',
       headers:{apikey:this.SUPA_KEY,Authorization:'Bearer '+tk,'content-type':'application/json'},
@@ -2501,7 +2526,7 @@ class Component extends DCLogic {
         return this.setState({pBusy:false,pErr:raw||('Could not save (http '+r.status+')')});
       }
       const auth={...this.state.auth,name:data.name,fullName:data.fullName,phone:data.phone,
-        address:data.address,aad4:data.aad4,aadOk:data.aadOk};
+        address:data.address,aad4:data.aad4,aadOk:data.aadOk,dob:data.dob||''};
       try{localStorage.setItem('khaali-auth',JSON.stringify(auth));}catch(e){}
       // a plain save closes the sheet - the updated greeting IS the receipt.
       // An Aadhaar verify stays open so the new VERIFIED chip is seen.
@@ -2524,7 +2549,7 @@ class Component extends DCLogic {
     const A=this.state.auth;
     if(!A)return;
     this.setState({profOpen:true,authMenu:false,pName:A.name||'',pFull:A.fullName||'',
-      pPhone:A.phone||'',pAddr:A.address||'',pAadhaar:'',pErr:null,pMsg:null,pBusy:false});
+      pPhone:A.phone||'',pAddr:A.address||'',pAadhaar:'',pDob:'',pErr:null,pMsg:null,pBusy:false});
   }
   /** Names for n travellers: what they typed, else the signed-in profile
       for passenger 1, else an honest placeholder. */
@@ -2851,7 +2876,7 @@ class Component extends DCLogic {
   async refreshBooking(pnr){
     try{const r=await this.tfetch('/api/booking/'+pnr,null,6000);if(!r.ok)return;const b=await r.json();
       if(b&&b.assigned&&b.berths&&b.berths.length){
-        this.bstatSet(pnr,{berths:b.berths,berthIdxs:b.berthIdxs||[],assigned:true});
+        this.bstatSet(pnr,{berths:b.berths,berthIdxs:b.berthIdxs||[],assigned:true,lower:b.lower||null});
         this.setState({bookings:this.bstatApply(this.state.bookings)});}}catch(e){}}
   /** Demo button: prepare the chart now instead of four hours out. */
   async chartNow(rec){
@@ -2867,7 +2892,7 @@ class Component extends DCLogic {
   onCharted(m){
     const mine=(this.state.bookings||[]).find(b=>b.pnr===String(m.pnr));
     if(!mine)return;
-    this.bstatSet(mine.pnr,{berths:m.berths||[],berthIdxs:m.berthIdxs||[],assigned:true});
+    this.bstatSet(mine.pnr,{berths:m.berths||[],berthIdxs:m.berthIdxs||[],assigned:true,lower:m.lower||null});
     this.setState({bookings:this.bstatApply(this.state.bookings)});this.syncAv();}
 
   chip(active,pad){return{padding:pad||'11px 15px',borderRadius:6,border:'1px solid '+(active?'var(--k-d8385a)':'var(--k-e2ccd3)'),
@@ -3096,13 +3121,45 @@ class Component extends DCLogic {
   // a whole berth is booked. Everything the traveller sees here is read back
   // from the server; the app never decides a fill on its own.
   hhOf(m){return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
-  openOrder(){
-    const S=this.state;
+  // ------------------------------------------------- travellers' needs --
+  validDob(v){const t=String(v||'').trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(t))return false;
+    const d=new Date(t+'T00:00:00');return !isNaN(d)&&d.toISOString().slice(0,10)===t&&d<new Date()&&d.getFullYear()>1900;}
+  ageOn(dob,iso){if(!this.validDob(dob))return null;const d=new Date(dob+'T00:00:00'),o=new Date(iso+'T00:00:00');
+    let a=o.getFullYear()-d.getFullYear();if(o.getMonth()<d.getMonth()||(o.getMonth()===d.getMonth()&&o.getDate()<d.getDate()))a--;return a;}
+  peopleMeta(){try{return JSON.parse(localStorage.getItem('khaali-people-meta')||'{}');}catch(e){return {};}}
+  setPersonMeta(name,p){const m=this.peopleMeta();m[name]=Object.assign({},m[name]||{},p);
+    try{localStorage.setItem('khaali-people-meta',JSON.stringify(m));}catch(e){}
+    this.setState({metaTick:(this.state.metaTick||0)+1});}
+  isMe(name){const A=this.state.auth;if(!A||!name)return false;const mine=A.fullName||A.name||'';
+    return name===mine||name===this.capFirst(mine);}
+  /** One record per traveller, the way the server wants it: name, date of
+      birth, declared need, preference. Age is the server's to work out. */
+  travellersFor(n,iso){
+    const names=this.paxNamesFor(n);const A=this.state.auth;const M=this.peopleMeta();
+    return names.map(nm=>{const me=this.isMe(nm);const m=M[nm]||{};
+      const dob=me?(A.dob||''):(m.dob||'');
+      return {name:nm,dob:dob||null,need:m.need||null,pref:m.pref||null};});}
+  /** What a traveller's record means on the given travel date, for wording. */
+  needOf(t,iso){const age=t.dob?this.ageOn(t.dob,iso):null;
+    if(age!=null&&age>=60)return 'senior';return t.need||null;}
+  needWord(k){return {senior:'senior',disabled:'disabled',expecting:'expecting'}[k]||'';}
+  lowerNote(rec,i,bt){
+    const t=(rec&&rec.travellers||[])[i];if(!t)return null;
+    const need=this.needOf(t,this.dateIsoFor(rec.dayIdx||0));
+    if(!need)return t.pref==='lower'?'Prefers a lower berth \u00b7 given if one is left after needs':null;
+    if(!bt)return 'Lower berth priority \u00b7 '+this.needWord(need)+' \u00b7 applied at charting, checked against ID at boarding';
+    const L=rec.lower;
+    if(L&&L.missed>0&&i>=L.given)return 'No lower berth was left \u00b7 first for any lower that frees on board';
+    return 'Lower berth \u00b7 priority ('+this.needWord(need)+') \u00b7 checked against ID at boarding';}
+  /** A flexible order across the window, or - with a train - the waitlist
+      for that one train: the same machine, pinned. */
+  openOrder(opts){
+    const S=this.state;const o=opts||{};
     const now=this.simNowDate();
     const hours=[0,4,6,8,10,12,14,16,18,20,22];
     const after=(S.dayIdx||0)===0?hours.filter(h=>h<=now.getHours()).pop()*60:0;
-    this.setState({ordOpen:true,ordPay:null,ordErr:null,ordPin:'',ordQuote:null,
-      ordAfter:after,ordBefore:1440,ordCls:[S.cls||'SL'],ordCap:'',ordMethod:S.ordMethod||'upi'},()=>this.orderQuote());
+    this.setState({ordOpen:true,ordPay:null,ordErr:null,ordPin:'',ordQuote:null,ordTrain:o.train||null,
+      ordAfter:after,ordBefore:1440,ordCls:[o.cls||S.cls||'SL'],ordCap:'',ordMethod:S.ordMethod||'upi'},()=>this.orderQuote());
   }
   orderQuote(){
     clearTimeout(this._ordQT);
@@ -3110,11 +3167,13 @@ class Component extends DCLogic {
       const S=this.state;if(!S.ordOpen)return;
       try{
         const qs='from='+S.from+'&to='+S.to+'&date='+this.dateIsoFor(S.dayIdx||0)+'&after='+(S.ordAfter||0)+'&before='+(S.ordBefore!=null?S.ordBefore:1440)
-          +'&classes='+encodeURIComponent((S.ordCls||['SL']).join(','))+'&pax='+(S.pax||1);
+          +'&classes='+encodeURIComponent((S.ordCls||['SL']).join(','))+'&pax='+(S.pax||1)+(S.ordTrain?('&train='+S.ordTrain):'');
         const r=await this.tfetch('/api/order/quote?'+qs,null,6000);const j=await r.json();
         const up={ordQuote:j};
-        // a sensible cap the first time: a fifth over the cheapest, rounded up
-        if(j.ok&&!String(this.state.ordCap||'').trim())up.ordCap=String(Math.ceil(j.cheapest*1.2/10)*10);
+        // a sensible cap the first time: a fifth over the cheapest, rounded
+        // up; a waitlist blocks exactly the fare
+        if(j.ok&&S.ordTrain)up.ordCap=String(j.cheapest);
+        else if(j.ok&&!String(this.state.ordCap||'').trim())up.ordCap=String(Math.ceil(j.cheapest*1.2/10)*10);
         this.setState(up);
       }catch(e){}
     },250);
@@ -3131,7 +3190,8 @@ class Component extends DCLogic {
     this.setState({ordBusy:true,ordErr:null});
     try{
       const body={from:S.from,to:S.to,date:this.dateIsoFor(S.dayIdx||0),after:S.ordAfter||0,before:S.ordBefore!=null?S.ordBefore:1440,
-        classes:S.ordCls||[S.cls||'SL'],pax:S.pax||1,cap,method};
+        classes:S.ordCls||[S.cls||'SL'],pax:S.pax||1,cap,method,train:S.ordTrain||undefined,
+        travellers:this.travellersFor(S.pax||1,this.dateIsoFor(S.dayIdx||0))};
       const r=await this.authFetch('/api/order',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},8000);
       const j=await r.json().catch(()=>({}));
       if(r.status===401){this.setState({ordBusy:false,ordOpen:false});
@@ -3181,7 +3241,8 @@ class Component extends DCLogic {
       const dayIdx=Math.max(0,Math.round((d-today)/864e5));
       const rec={from:bk.from,to:bk.to,train:bk.train,cls:bk.cls,quota:'General',pax:bk.pax,dayIdx,
         picks:[],pnr:String(bk.pnr),total:bk.amount,mode:'any',assigned:!!bk.assigned,berths:bk.berths||[],
-        berthIdxs:bk.berthIdxs||[],names:this.paxNamesFor(bk.pax),viaOrder:true,chartSeen:!!bk.assigned};
+        berthIdxs:bk.berthIdxs||[],names:this.paxNamesFor(bk.pax),viaOrder:true,chartSeen:!!bk.assigned,
+        travellers:bk.travellers||[],lower:bk.lower||null};
       if((this.state.bookings||[]).some(b=>b.pnr===rec.pnr))return;
       this.setState({bookings:[rec].concat(this.state.bookings||[])});
     }catch(e){}
@@ -3195,6 +3256,17 @@ class Component extends DCLogic {
       dayIdx:rec.dayIdx,pax:rec.pax,allCls:false,picks:[],holdId:null,hold:null});
     this.go('ticket');
   }
+  /** The confirm page is where needs get ticked; the hold on the server
+      has to know before it is paid, or charting seats blind. */
+  syncTravellers(){
+    const S=this.state;if(!S.holdId||!S.hold)return;
+    const list=this.travellersFor(S.hold.pax||S.pax||1,this.srvDate());
+    const sig=S.holdId+'|'+JSON.stringify(list);
+    if(this._travSig===sig)return;this._travSig=sig;
+    clearTimeout(this._travT);
+    this._travT=setTimeout(()=>{this.authFetch('/api/hold/'+S.holdId+'/travellers',{method:'POST',
+      headers:{'content-type':'application/json'},body:JSON.stringify({travellers:list})},6000).catch(()=>{});},300);
+  }
   onOrderEvent(m){
     const me=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})();
     if(!me||m.who!==me)return;
@@ -3205,8 +3277,14 @@ class Component extends DCLogic {
     if(m.status==='open'){
       clearInterval(this._ordPoll);
       if(S.ordPay&&S.ordPay.orderId===m.id)this.setState({ordPay:null,ordOpen:false});
-      push({t:'Order placed \u00b7 \u20b9'+m.cap+' blocked, not taken',
+      if(m.train)push({t:'Waitlist joined \u00b7 '+m.train+(m.position?' \u00b7 WL '+m.position:'')+' \u00b7 \u20b9'+m.cap+' blocked, not taken',
+        sub:'Confirmed the moment a whole berth frees or at charting. If the train leaves without one, \u20b90 is debited.',page:'bookings'});
+      else push({t:'Order placed \u00b7 \u20b9'+m.cap+' blocked, not taken',
         sub:'khaali is watching every train that fits. The bell rings the moment a whole berth is booked.',page:'bookings'});
+    }
+    if(m.status==='superseded'){
+      this.walletRelease(ref,'Another of your orders booked this journey \u2014 block released, nothing taken');
+      push({t:'Order closed \u00b7 \u20b9'+m.cap+' released',sub:'Another of your orders booked this journey first. One journey, one seat; \u20b90 taken here.',page:'bookings'});
     }
     if(m.status==='filled'){
       const rest=Math.max(0,(m.cap||0)-(m.paid||0));
@@ -3239,6 +3317,24 @@ class Component extends DCLogic {
     const orders=S.orders||[];
     return {
       openOrder:()=>this.openOrder(),
+      ordKicker:S.ordTrain?'Waitlist \u00b7 blocked, not taken':'Journey order',
+      ordFlexStyle:{display:S.ordTrain?'none':'block'},
+      ordPinStyle:{display:S.ordTrain?'block':'none',marginTop:16,padding:'12px 14px',borderRadius:9,background:'var(--k-fafaf8)',border:'1px solid var(--k-e6e5e0)',font:'600 12.5px/1.6 Manrope,sans-serif'},
+      ordPinLine:S.ordTrain?((()=>{const t=this.TRAINS.find(x=>x.no===S.ordTrain);return S.ordTrain+' '+(t?t.name:'')+' \u00b7 '+(this.CLS.find(c=>c.k===(S.ordCls||[S.cls])[0])||{}).label
+        +' \u00b7 no whole berth left for your party. Your place in line starts when the block is approved.';})()):'',
+      ordCapLabel:S.ordTrain?'Fare \u00b7 blocked, not taken':'The most you would pay, in total',
+      ordBlockNote:S.ordTrain?'The fare is blocked, not paid. It is taken only when a whole berth is booked for you \u2014 when one frees up, or at charting. If the train leaves without one, the block is released and \u20b90 was debited. Cancel any time before that: \u20b90, no clerkage.'
+        :'This amount is blocked, not paid. When a berth is booked khaali takes only its fare and releases the rest. No berth by the end of your window, and the whole block is released.',
+      ordCapRowStyle:{display:S.ordTrain?'none':'flex',alignItems:'center',gap:10},
+      ...(()=>{const A=this.anyInfo();
+        const wl=!!(A.av&&!A.charted&&A.seats!=null&&A.seats<(S.pax||1)&&S.page==='seats');
+        return {
+          wlBannerStyle:{display:wl?'block':'none',margin:'12px 0 0',padding:'14px 16px',borderRadius:10,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderLeft:'4px solid var(--k-1f3f8f)'},
+          wlTitle:'No whole berth left for '+(S.pax||1)+(S.pax>1?' travellers':' traveller')+' \u2014 join the waitlist',
+          wlSub:'\u20b9'+A.total+' is blocked, not taken. You are confirmed the moment a whole berth frees or at charting. If the train leaves without one, \u20b90 is debited and there is nothing to claim.',
+          wlBtn:'Join the waitlist \u2192',
+          wlJoin:()=>this.openOrder({train:S.train,cls:S.cls}),
+        };})(),
       ordSheetStyle:{display:S.ordOpen?'flex':'none',position:'fixed',inset:0,zIndex:70,background:'rgba(10,12,16,.62)',
         alignItems:'center',justifyContent:'center',padding:16},
       ordClose:()=>{clearInterval(this._ordPoll);this.setState({ordOpen:false,ordPay:null});},
@@ -3262,6 +3358,7 @@ class Component extends DCLogic {
       setOrdCap:e=>this.setState({ordCap:String(e.target.value||'').replace(/[^0-9]/g,'').slice(0,5),ordErr:null}),
       ordQuoteText:!Q?'Working out which trains fit\u2026'
         :!Q.ok?(Q.error||'')
+        :S.ordTrain?('You would be WL '+(Q.position||1)+(Q.flexAhead?(' \u00b7 '+Q.flexAhead+' flexible order'+(Q.flexAhead>1?'s':'')+' ahead could take this train too'):'')+' \u00b7 \u20b9'+Q.cheapest+' blocked')
         :Q.watching===0?'No train leaves in that window. Widen it.'
         :('khaali will watch '+Q.watching+' train'+(Q.watching>1?'s':'')+' \u00b7 cheapest \u20b9'+Q.cheapest
           +(cap&&cap<Q.cheapest?' \u2014 your cap is below it':cap?(' \u00b7 '+Q.trains.filter(t=>t.price<=cap).length+' fit under \u20b9'+cap):'')),
@@ -3276,7 +3373,8 @@ class Component extends DCLogic {
       ordErrStyle:{display:S.ordErr?'block':'none',marginTop:10,padding:'10px 13px',borderRadius:7,
         background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
       placeOrder:()=>this.placeOrder(),
-      ordBtnLabel:S.ordBusy?'Placing\u2026':(meth==='wallet'?('Hold \u20b9'+(cap||0)+' & place the order'):('Block \u20b9'+(cap||0)+' & place the order')),
+      ordBtnLabel:S.ordBusy?'Placing\u2026':S.ordTrain?('Join the waitlist \u00b7 '+(meth==='wallet'?'hold':'block')+' \u20b9'+(cap||0))
+        :(meth==='wallet'?('Hold \u20b9'+(cap||0)+' & place the order'):('Block \u20b9'+(cap||0)+' & place the order')),
       ordBtnStyle:{width:'100%',marginTop:14,border:'none',background:S.ordBusy?'var(--k-d4d3ce)':'var(--k-1f3f8f)',
         color:S.ordBusy?'var(--k-fg-8a8a84)':'#fff',font:'700 15px/1 Manrope,sans-serif',padding:16,borderRadius:9,
         cursor:S.ordBusy?'default':'pointer',minHeight:50},
@@ -3293,14 +3391,15 @@ class Component extends DCLogic {
         return {
           card:{background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderLeft:'4px solid '+col,borderRadius:12,padding:'16px 18px',marginBottom:10},
           route:ST[o.from].n+' \u2192 '+ST[o.to].n,
-          when:dateLabel(o.date)+' \u00b7 leave '+this.hhOf(o.after)+'\u2013'+(o.before>=1440?'midnight':this.hhOf(o.before))+' \u00b7 '+o.classes.join(' / ')+' \u00b7 '+o.pax+(o.pax>1?' travellers':' traveller')+' \u00b7 up to \u20b9'+o.cap,
+          when:dateLabel(o.date)+' \u00b7 '+(o.train?('waitlist for '+o.train+' \u00b7 '+this.hhOf(o.after)):('leave '+this.hhOf(o.after)+'\u2013'+(o.before>=1440?'midnight':this.hhOf(o.before))))+' \u00b7 '+o.classes.join(' / ')+' \u00b7 '+o.pax+(o.pax>1?' travellers':' traveller')+' \u00b7 '+(o.train?'\u20b9':'up to \u20b9')+o.cap,
           line:filled?(o.fill.train+' '+o.fill.name+' \u00b7 '+this.hhOf(o.fill.dep)+' \u00b7 '+o.fill.cls+' \u00b7 \u20b9'+o.paid+' taken, \u20b9'+rest+' released \u00b7 PNR '+o.pnr)
+            :open&&o.train?('WL '+(o.position||1)+(o.flexAhead?' \u00b7 '+o.flexAhead+' flexible order'+(o.flexAhead>1?'s':'')+' ahead':'')+' \u00b7 \u20b9'+o.cap+' blocked, not taken \u00b7 confirmed when a whole berth frees or at charting')
             :open?('Watching '+o.watching+' train'+(o.watching===1?'':'s')+' \u00b7 \u20b9'+o.cap+' blocked, not taken \u00b7 the bell rings when a whole berth is booked')
             :pending?('Waiting for your bank to approve the \u20b9'+o.cap+' block')
             :('\u20b90 taken \u00b7 the block was released'),
           badge:{flex:'none',font:"700 10px/1 'IBM Plex Mono',monospace",letterSpacing:'.12em',textTransform:'uppercase',padding:'7px 9px',borderRadius:6,
             color:'#fff',background:col},
-          badgeText:filled?'Booked':open?'Watching':pending?'Awaiting block':o.status,
+          badgeText:filled?'Booked':open?(o.train?('WL '+(o.position||1)):'Watching'):pending?'Awaiting block':o.status,
           onOpen:()=>{this.adoptBooking(o.pnr).then(()=>this.openTicket(o.pnr));},
           openStyle:{display:filled?'inline-block':'none',border:'none',background:'var(--k-1f9d55)',color:'#fff',font:'700 12.5px/1 Manrope,sans-serif',padding:'12px 16px',borderRadius:7,cursor:'pointer',minHeight:42},
           onCancel:()=>this.cancelOrder(o.id),
@@ -3778,6 +3877,7 @@ class Component extends DCLogic {
           mode:anyMode?'any':'exact',
           berthIdxs:anyMode?[]:S.picks.map(p=>p.idx),pax:(anyMode||hopMode)?S.pax:n,
           segs:hopMode?S.picks.map(p=>p.seg||null):undefined,hop:hopMode||undefined,
+          travellers:this.travellersFor((anyMode||hopMode)?S.pax:n,this.srvDate()),
           who:(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})()||'guest'})},8000);
       j=await r.json();
     }catch(e){
@@ -3805,6 +3905,7 @@ class Component extends DCLogic {
       :why==='needed-for-pool'?'That berth is needed for travellers already booked \u2014 pick another, or choose Any berth.'
       :why==='not-served'?'This train does not stop at both of your stations.'
       :why==='bad-date'?'Bookings run from today to sixty days ahead.'
+      :why==='lower-reserved'?'Lower berths are not for choosing before the chart \u2014 they go to travellers who need them. Pick another, or choose Any berth and mark who needs a lower.'
       :why==='no-berths'?'Pick a berth first.'
       :'Could not lock those berths ('+why+').';
     this.setState({holdBusy:false,holdErr:msg,page:'seats'});
@@ -3860,7 +3961,7 @@ class Component extends DCLogic {
     const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:S.pax,dayIdx:S.dayIdx,
       picks:picks,pnr:String(pnr),total:total,
       mode:hm,assigned:hm!=='any',berths:hm==='any'?[]:hb.map(b=>b.coach+'/'+b.no),
-      names:this.paxNamesFor(S.pax)};
+      names:this.paxNamesFor(S.pax),travellers:this.travellersFor(S.pax,this.srvDate()),lower:null};
     const dupOf=S.bookings.find(b=>b.status!=='refunded'&&!b.dupOk&&b.train===rec.train
       &&b.dayIdx===rec.dayIdx&&b.from===rec.from&&b.to===rec.to&&b.cls===rec.cls);
     if(dupOf)setTimeout(()=>this.setState({dupAsk:{a:dupOf.pnr,b:rec.pnr,total:rec.total,
@@ -3872,7 +3973,8 @@ class Component extends DCLogic {
     this.syncUrl();
     {const S0=this.state;
       if(S0.page==='bookings'&&this._ordPage!==true){this._ordPage=true;this.loadOrders();}
-      if(S0.page!=='bookings')this._ordPage=false;}
+      if(S0.page!=='bookings')this._ordPage=false;
+      if(S0.page==='confirm'&&S0.holdId)this.syncTravellers();}
     // opening an any-berth ticket asks the server whether charting has happened
     {const S0=this.state;
       if(S0.page==='ticket'&&S0.viewPnr&&this._lastTk!==S0.viewPnr){this._lastTk=S0.viewPnr;
@@ -4738,6 +4840,11 @@ class Component extends DCLogic {
         if(A.charted)return 'Chart prepared \u00b7 '+ct.free+' whole '+(ct.free===1?'berth':'berths')+' free'+(ct.part?', '+ct.part+' cover part of it':'');
         if(A.seats!=null)return A.seats+' seats on any berth \u00b7 '+ct.free+' whole '+(ct.free===1?'berth':'berths')+' to choose'+(ct.part?', '+ct.part+' cover part of it':'');
         return ct.free+' free your whole way'+(ct.part?', '+ct.part+' cover part of it':'')+(ct.locked?', '+ct.locked+' being paid for':'');})(),
+      ...(()=>{const A=this.anyInfo();const L=A.av&&A.av.lower;
+        if(!L)return {seatLower:'',seatLowerStyle:{display:'none'}};
+        const txt=L.charted&&L.result?('Lower berths at charting: '+L.result.needed+' needed, '+L.result.given+' given'+(L.result.missed?', '+L.result.missed+' missed':'')+'.')
+          :(L.total+' lower berths in this class \u00b7 '+L.spoken+' already spoken for by people who need one \u00b7 they are not for choosing before the chart.');
+        return {seatLower:txt,seatLowerStyle:{display:'block',font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)',marginTop:4}};})(),
       seatSub:(()=>{const A=this.anyInfo();
         if(A.charted)return 'Berths were assigned at charting \u00b7 pick from what is left, no choice fee now.';
         if(A.isAny){const pk=A.av&&A.av.pack;const today=pk?(pk.total-pk.booked):null;
@@ -4836,9 +4943,10 @@ class Component extends DCLogic {
            noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:'var(--k-fg-c2870a)'}}]
         :(bkRec&&bkRec.mode==='any')?Array.from({length:nPax},(_,i)=>{
           const nm=nmArr[i]||'Passenger '+(i+1);const bt=(bkRec.berths||[])[i];
+          const ln=this.lowerNote(bkRec,i,bt);
           return {name:nm,berth:bt?bt.replace('/',' / '):'Any berth',type:bt?'assigned':'at charting',
-            note:bt?'Yours for your whole journey':'Berth number arrives 4 h before departure',
-            noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:bt?'var(--k-fg-14663a)':'var(--k-fg-c2870a)'}};})
+            note:ln||(bt?'Yours for your whole journey':'Berth number arrives 4 h before departure'),
+            noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:(ln&&/No lower/.test(ln))?'var(--k-fg-c2870a)':bt?'var(--k-fg-14663a)':'var(--k-fg-c2870a)'}};})
         :Array.from({length:nPax},(_,i)=>{
         const nm=nmArr[i]||'Passenger '+(i+1);
         const pk=S.picks[i];
@@ -5398,6 +5506,14 @@ class Component extends DCLogic {
           profEmail:A?A.email:'',
           pName:S.pName||'',setPName:e=>this.setState({pName:e.target.value,pErr:null,pMsg:null}),
           pFull:S.pFull||'',setPFull:e=>this.setState({pFull:e.target.value,pErr:null,pMsg:null}),
+          // the date of birth decides lower-berth priority, so it is written
+          // once and then locked - a birthday cannot move for one journey
+          pDob:S.pDob||'',setPDob:e=>this.setState({pDob:String(e.target.value||'').replace(/[^0-9-]/g,'').slice(0,10),pErr:null,pMsg:null}),
+          pDobStyle:{display:(A&&A.dob)?'none':'block',width:'100%',padding:'12px 14px',borderRadius:7,border:'1px solid var(--k-d4d3ce)',
+            background:'var(--k-fafaf8)',color:'var(--k-fg-14161a)',font:"600 13.5px/1.3 'IBM Plex Mono',monospace",outline:'none',margin:'6px 0 12px'},
+          pDobLocked:(A&&A.dob)?(A.dob+' \u00b7 '+this.ageOn(A.dob,this.dateIsoFor(0))+' today \u00b7 locked, ask support to change'
+            +(this.ageOn(A.dob,this.dateIsoFor(0))>=60?' \u00b7 lower-berth priority as a senior':'')):'',
+          pDobLockedStyle:{display:(A&&A.dob)?'block':'none',font:"600 12.5px/1.5 'IBM Plex Mono',monospace",color:'var(--k-fg-14663a)',margin:'6px 0 12px'},
           pPhone:S.pPhone||'',
           setPPhone:e=>this.setState({pPhone:String(e.target.value||'').replace(/[^0-9+ ]/g,'').slice(0,14),pErr:null,pMsg:null}),
           pAddr:S.pAddr||'',setPAddr:e=>this.setState({pAddr:e.target.value,pErr:null,pMsg:null}),
@@ -6232,6 +6348,33 @@ class Component extends DCLogic {
                     border:'1px solid '+(on?'var(--k-d8385a)':'var(--k-d4d3ce)'),
                     background:on?'var(--k-d8385a)':'var(--k-fff)',
                     color:on?'var(--k-fg-fff)':'var(--k-fg-14161a)'}};}),
+              ...(()=>{
+                if(!chosen)return {metaStyle:{display:'none'},needChips:[],dobEditStyle:{display:'none'},dobLineStyle:{},dobLine:'',dob:'',setDob:()=>{},saveDob:()=>{},dobClick:()=>{}};
+                const me=this.isMe(chosen);const M=this.peopleMeta()[chosen]||{};
+                const dob=me?(S.auth&&S.auth.dob||''):(M.dob||'');
+                const iso=this.dateIsoFor(S.dayIdx||0);const age=dob?this.ageOn(dob,iso):null;
+                const senior=age!=null&&age>=60;
+                const draft=(S.dobDraft||{})[chosen]||'';
+                const small=on=>({font:'700 11.5px/1 Manrope,sans-serif',padding:'8px 11px',borderRadius:999,cursor:'pointer',
+                  border:'1px solid '+(on?'var(--k-1f3f8f)':'var(--k-d4d3ce)'),background:on?'var(--k-1f3f8f)':'var(--k-fff)',color:on?'#fff':'var(--k-fg-14161a)'});
+                const chips=[];
+                if(senior)chips.push({t:'Senior \u00b7 lower berth priority',style:Object.assign(small(true),{cursor:'default'}),onClick:()=>{}});
+                else for(const [k,t] of [['disabled','Needs lower \u00b7 disabled'],['expecting','Needs lower \u00b7 expecting']])
+                  chips.push({t,style:small(M.need===k),onClick:()=>this.setPersonMeta(chosen,{need:M.need===k?'':k})});
+                chips.push({t:'Prefers lower \u00b7 free',style:small(M.pref==='lower'),onClick:()=>this.setPersonMeta(chosen,{pref:M.pref==='lower'?'':'lower'})});
+                return {
+                  metaStyle:{display:'block',marginTop:8,padding:'10px 12px',borderRadius:8,background:'var(--k-fafaf8)',border:'1px solid var(--k-e6e5e0)'},
+                  dobLine:dob?('Born '+dob+' \u00b7 '+age+' on travel day'+(senior?' \u00b7 lower berth priority, checked against ID at boarding':''))
+                    :(me?'Add your date of birth in your profile \u2192 it decides lower-berth priority':'Date of birth decides lower-berth priority \u00b7 saved once, as on ID'),
+                  dobLineStyle:{font:'600 11.5px/1.5 Manrope,sans-serif',color:dob?'var(--k-fg-14663a)':'var(--k-fg-6a6d75)',cursor:(me&&!dob)?'pointer':'default'},
+                  dobClick:()=>{if(me&&!dob)this.openProfile();},
+                  dobEditStyle:{display:(!dob&&!me)?'flex':'none',gap:7,flexWrap:'wrap',alignItems:'center',marginTop:6},
+                  dob:draft,
+                  setDob:e=>{const dd=Object.assign({},this.state.dobDraft||{});dd[chosen]=String(e.target.value||'').replace(/[^0-9-]/g,'').slice(0,10);this.setState({dobDraft:dd});},
+                  saveDob:()=>{if(!this.validDob(draft))return this.setState({srvNote:'Date of birth as YYYY-MM-DD, a real past date. It is saved once.'});
+                    this.setPersonMeta(chosen,{dob:draft});},
+                  needChips:chips,
+                };})(),
             };}),
           newPerson:S.newPerson||'',
           setNewPerson:e=>this.setState({newPerson:e.target.value}),

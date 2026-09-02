@@ -123,6 +123,17 @@ of departure times, the classes you would take and the most you would pay.
 khaali watches every train that fits and books the first whole berth, taking
 only what it costs and releasing the rest of your block.
 
+**Nobody pays for a ticket they never got.** A waitlist blocks the fare and
+takes it only when a whole berth is booked; the train leaving without one
+releases it, ₹0 debited, no clerkage. Your number is the number the matcher
+honours.
+
+**The quota counts berths, khaali counts people.** Dates of birth in the
+profile decide who needs a lower berth; disability and pregnancy are declared
+and checked at boarding. Needs are seated first and only on lower berths,
+before any preference and before any choice fee, and the chart publishes
+needed, given and missed.
+
 **Blocked, not taken.** A Tatkal entry never pays the fare. Your bank blocks
 it, the way an IPO application does, and the money is debited only if you are
 allotted a berth. Not allotted means the block is released and nothing was

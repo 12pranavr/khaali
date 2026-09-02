@@ -79,9 +79,32 @@ const orderDeps = {
   hold: store.hold, release: store.release, confirm: store.confirm,
   now: () => simNow(), today: () => TODAY(),
 };
+/**
+ * What each traveller needs, as the server will believe it. Age comes from
+ * the date of birth and the travel date, never from a flag the client sets;
+ * disability and pregnancy are declared here and checked against ID at
+ * boarding, exactly as the railway's own quota is.
+ */
+function travellersIn(list, date) {
+  if (!Array.isArray(list)) return undefined;
+  return list.slice(0, 6).map(t => {
+    t = t || {};
+    let need = ['disabled', 'expecting'].includes(t.need) ? t.need : null;
+    const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(t.dob || '')) ? String(t.dob) : null;
+    if (dob) {
+      const d = new Date(dob + 'T00:00:00'), on = new Date(date + 'T00:00:00');
+      let age = on.getFullYear() - d.getFullYear();
+      if (on.getMonth() < d.getMonth() || (on.getMonth() === d.getMonth() && on.getDate() < d.getDate())) age--;
+      if (age >= 60) need = 'senior';
+    }
+    return { name: String(t.name || '').slice(0, 60), dob, need, pref: t.pref === 'lower' ? 'lower' : null };
+  });
+}
 const publicOrder = o => ({
   id: o.id, who: o.who, from: o.from, to: o.to, date: o.date, after: o.after, before: o.before,
   classes: o.classes, pax: o.pax, cap: o.cap, cheapest: o.cheapest, method: o.method, payId: o.payId,
+  train: o.train || null, travellers: o.travellers || [],
+  ...(o.status === 'open' ? orders.queueOf(o, [...ORDERS.values()], orderDeps) : { position: null, flexAhead: 0 }),
   status: o.status, placedAt: o.placedAt, openedAt: o.openedAt, filledAt: o.filledAt || null,
   endedAt: o.endedAt || null, pnr: o.pnr || null, paid: o.paid == null ? null : o.paid, fill: o.fill || null,
   watching: o.status === 'open' ? orders.candidates(o, orderDeps).length : 0,
@@ -91,7 +114,7 @@ function orderFilled(o, r) {
   if (s) { tatkal.settle(s, true, Date.now(), o.paid); s.fill = o.fill; s.pnr = o.pnr; }
   journal.append({ t: 'orderfill', id: o.id, pnr: o.pnr, paid: o.paid, fill: o.fill, filledAt: o.filledAt });
   const berth = (r.booking.berths || []).join(', ') || null;
-  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'filled', pnr: o.pnr, paid: o.paid, cap: o.cap,
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'filled', pnr: o.pnr, paid: o.paid, cap: o.cap, train: o.train || null,
     fill: o.fill, berths: r.booking.berths || [], assigned: !!r.booking.assigned });
   if (s) sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'captured', amount: s.amount,
     captured: s.captured, released: s.amount - s.captured, berth, fill: o.fill });
@@ -101,7 +124,7 @@ function orderEnded(o, status) {
   const s = global.__tk.pays.get(o.payId);
   if (s) { if (s.status === 'pending') s.status = 'cancelled'; else tatkal.settle(s, false); }
   journal.append({ t: 'orderend', id: o.id, status });
-  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status, cap: o.cap });
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status, cap: o.cap, train: o.train || null });
   if (s && s.status === 'released')
     sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'released', amount: s.amount, captured: 0 });
 }
@@ -115,7 +138,14 @@ function matchOrders() {
     for (const o of open) {
       if (orders.expired(o, orderDeps)) { orderEnded(o, 'expired'); continue; }
       const r = orders.tryFill(o, orderDeps);
-      if (r.ok) orderFilled(o, r);
+      if (r.ok) {
+        orderFilled(o, r);
+        // one journey, one seat: the same person's other open orders for the
+        // same journey and date are done, and their blocks go back
+        for (const x of ORDERS.values())
+          if (x !== o && x.status === 'open' && x.who === o.who && x.date === o.date && x.from === o.from && x.to === o.to)
+            orderEnded(x, 'superseded');
+      }
     }
   } catch (e) { console.error('orders:', e); }
   finally { matching = false; }
@@ -933,22 +963,28 @@ async function api(req, res, url) {
   if (p === '/api/order/quote') {
     // what an order like this would watch, and the least it could cost
     const b = { from: q.get('from'), to: q.get('to'), date: q.get('date') || TODAY(), after: q.get('after') || 0,
-      before: q.get('before') || 1440, classes: String(q.get('classes') || 'SL').split(','), pax: q.get('pax') || 1, cap: 1e9 };
+      before: q.get('before') || 1440, classes: String(q.get('classes') || 'SL').split(','), pax: q.get('pax') || 1, cap: 1e9,
+      train: q.get('train') || undefined };
     const v = orders.validate(b, orderDeps);
     if (!v.ok) return send(res, 400, { ok: false, error: v.error });
     const cands = orders.candidates(v.order, orderDeps);
-    return send(res, 200, { ok: true, cheapest: v.order.cheapest, watching: cands.length,
+    const queue = v.order.train ? orders.queueOf({ ...v.order, id: null, openedAt: null }, [...ORDERS.values()], orderDeps) : null;
+    return send(res, 200, { ok: true, cheapest: v.order.cheapest, watching: cands.length, train: v.order.train || null,
+      position: queue ? queue.position : null, flexAhead: queue ? queue.flexAhead : 0,
       trains: cands.map(c => ({ train: c.train, name: c.name, cls: c.cls, dep: hhmm(c.dep), price: c.price })) });
   }
   if (p === '/api/order' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);
     if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to place an order \u2014 it blocks money in your name.' });
-    const v = orders.validate(b, orderDeps);
+    const v = orders.validate({ ...b, travellers: travellersIn(b.travellers, String(b.date || '')) }, orderDeps);
     if (!v.ok) return send(res, 400, { ok: false, error: v.error, cheapest: v.cheapest });
     const mine = [...ORDERS.values()].filter(o => o.who === who && (o.status === 'open' || o.status === 'pending'));
     if (mine.length >= orders.MAX_OPEN_ORDERS)
       return send(res, 429, { ok: false, error: 'Two open orders at a time \u2014 cancel one first.' });
+    // one place in one line: a second waitlist on the same train is the same person twice
+    if (v.order.train && mine.some(o => o.train === v.order.train && o.date === v.order.date && o.classes[0] === v.order.classes[0]))
+      return send(res, 409, { ok: false, error: 'You are already on the waitlist for this train.' });
     const cands = orders.candidates(v.order, orderDeps);
     if (!cands.length) return send(res, 409, { ok: false, error: 'No train leaves in that window at or under that price.' });
     const id = crypto.randomBytes(9).toString('hex');
@@ -1024,11 +1060,22 @@ async function api(req, res, url) {
       train: tr.no, date, cls, from, to, berthIdxs, mode,
       pax: Number.isInteger(+b.pax) ? +b.pax : (berthIdxs.length || 1),
       who: signedIn, segs: segsIn, hop: !!b.hop,
+      travellers: travellersIn(b.travellers, date),
     });
     const code = r.ok ? 200 : (r.reason === 'too-many-open-holds' ? 429 : 409);
     return send(res, code, r);
   }
 
+  const mTrav = p.match(/^\/api\/hold\/([a-f0-9]+)\/travellers$/);
+  if (mTrav && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true });
+    const h = store.getHold(mTrav[1]);
+    if (!h) return send(res, 404, { ok: false, error: 'unknown hold' });
+    if (h.who !== who) return send(res, 403, { ok: false, error: 'not your hold' });
+    return send(res, 200, store.setTravellers(mTrav[1], travellersIn(b.travellers, h.date) || []));
+  }
   const mHold = p.match(/^\/api\/hold\/([a-f0-9]+)$/);
   if (mHold) {
     // a Tatkal payment session answers the same protocol pay.html speaks,
@@ -1077,7 +1124,8 @@ async function api(req, res, url) {
       o.status = 'open'; o.openedAt = Date.now();
       journal.append({ t: 'order', order: { ...o } });
       sseSend({ type: 'tkpay', id: tq.id, who: tq.who, status: 'authorised', amount: tq.amount });
-      sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'open', cap: o.cap });
+      sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'open', cap: o.cap, train: o.train || null,
+        ...orders.queueOf(o, [...ORDERS.values()], orderDeps) });
       matchOrders();                                   // a berth may be there right now
       return send(res, 200, { ok: true, status: tq.status, order: publicOrder(o),
         booking: o.pnr ? store.getBooking(o.pnr) : null });

@@ -649,6 +649,49 @@ A line underneath names the current holder in plain words. If the payment
 sticks, it says so explicitly: "the payment gateway, not khaali, not the
 railway", and marks that no PNR was issued.
 
+### Nobody pays for a ticket they never got
+
+A waitlist on khaali is a journey order pinned to one train. When the seat
+page finds no whole berth for the party, it offers "Join the waitlist": the
+fare is blocked, not paid, the same way a Tatkal entry or an order is. Your
+place in line starts when the bank approves the block; a pending request
+holds nothing. The number shown is the number the matcher honours: one more
+than the approved, still-open waitlists on that train, date and class whose
+journey overlaps yours and which were approved earlier. Flexible orders that
+could also take the train are shown as an honest footnote, "N flexible orders
+ahead".
+
+A whole berth freeing before the chart fills the oldest overlapping order;
+at charting the packer seats the waitlist with everyone else; after the chart,
+freed whole berths go the same way. All or nothing per party. The train
+leaving without a berth releases the block: ₹0 debited, nothing to claim, no
+clerkage. Cancel before that: ₹0. One waitlist per person per train, date and
+class; two open orders in all; and when any of a person's orders books a
+journey, their other open orders for the same journey and date close and
+release ("one journey, one seat").
+
+### The quota counts berths. khaali counts people.
+
+Each traveller carries a date of birth, set once in the profile (or once per
+saved co-passenger) and then locked, because a birthday must not move for one
+journey. The server works out age on the travel date; sixty and over is a
+need. Disability and pregnancy are declared per traveller and, like the
+railway's own quota, checked against ID at boarding, which the app says.
+
+Needs are hard rules in the packer (`packInto`): travellers with a need are
+seated first and only on lower or side-lower berths; if none is left they
+still get a berth and are named as missed. Everyone else follows, and among
+them someone who merely prefers a lower berth gets one if it costs no need;
+someone with neither leaves lowers alone when an equal berth exists. Before
+the chart a whole lower berth cannot be chosen for a fee at all (`lower-
+reserved`), so ₹25 never outranks a seventy-year-old; after the chart what is
+free is free. The seat page shows lower berths in the class and how many are
+already spoken for; the chart publishes needed, given and missed, per
+booking and per coach, and the ticket says which it was. Needs are chosen on
+the confirm page and pushed to the pending hold, and they travel with orders
+and waitlists. The simulated railway bookings carry a realistic share of
+needs, so a demo chart visibly moves seniors down.
+
 ### One order, many trains
 
 "Tell khaali what you need, not which train." On any search results page

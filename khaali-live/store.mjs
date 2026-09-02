@@ -32,8 +32,7 @@
 import crypto from 'crypto';
 import {
   SEGMENTS, journeyMask, spanMask, berthState, seedOccupancy, berthLayout,
-  packPlan, packInto, classByKey, fare, journeyKm, priceFor, coveredKm, popcount,
-} from './engine.mjs';
+  packPlan, packInto, classByKey, fare, journeyKm, priceFor, coveredKm, popcount, isLowerBerth } from './engine.mjs';
 
 export const HOLD_MS = 5 * 60 * 1000;          // 5 minutes at the payment screen
 // One request used to be able to lock every free berth on a train. Six is
@@ -93,8 +92,10 @@ function inv(key) {
     // The seed is the railway's own bookings, pinned at booking time the way
     // the railway pins them. Physically they sit where they sit (`booked`);
     // for charting they are journeys that may move (`movable`).
+    // a realistic share of the railway's own travellers need a lower berth
     const movable = [];
-    seeded.forEach((m, i) => { if (m) movable.push({ id: 'seed#' + i, mask: m, group: null, at: i }); });
+    seeded.forEach((m, i) => { if (m) movable.push({ id: 'seed#' + i, mask: m, group: null, at: i,
+      need: ((i * 7919 + seeded.length) % 100) < 12 ? 'senior' : null }); });
     v = {
       booked: Int32Array.from(seeded),   // what is physically on each berth now
       pinned: new Int32Array(seeded.length),  // the legs a chosen booking nailed down
@@ -207,7 +208,20 @@ export function availability(train, date, cls, from, to) {
     anySeats: anySeatsFor(v, j),
     anyBerth: { ok: !!probe.ok, price: fullPrice, choiceFee: v.charted ? 0 : choiceFeeFor(cls) },
     chosenCap: { used: v.chosen.size, max: chosenCap(v) },
+    lower: lowerPicture(v),
   };
+}
+
+/** Lower berths in this coach, and how many people already need one. */
+function lowerPicture(v) {
+  let total = 0, free = 0;
+  for (let i = 0; i < v.layout.length; i++) {
+    if (!isLowerBerth(v.layout[i])) continue;
+    total++;
+    if ((v.booked[i] | v.held[i]) === 0) free++;
+  }
+  const needed = movableItems(v).filter(p => p.need).length;
+  return { total, free, needed, spoken: Math.min(total, needed), charted: v.charted, result: v.lower || null };
 }
 
 /** Counts only — no berth objects, no packing plan. Cheap enough for 61 dates.
@@ -236,11 +250,23 @@ export function snapshot(train, date, cls) {
  *   mode 'any'    no berths; pax journeys join the pool if they can be seated
  * Returns { ok:true, hold } or { ok:false, reason, conflicts }.
  */
-export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, segs, hop, mode = 'exact', cap = true }) {
+export const NEEDS = ['senior', 'disabled', 'expecting'];
+/** One entry per traveller: what they need and what they would like. */
+export function travellersOf(list, paxN) {
+  return Array.from({ length: paxN }, (_, k) => {
+    const t = (Array.isArray(list) && list[k]) || {};
+    return { name: String(t.name || '').slice(0, 60),
+      need: NEEDS.includes(t.need) ? t.need : null,
+      pref: t.pref === 'lower' ? 'lower' : null };
+  });
+}
+
+export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, segs, hop, mode = 'exact', cap = true, travellers }) {
   const key = keyOf(train, date, cls);
   const v = inv(key);
   const j = journeyMask(from, to);
   const paxN = Math.floor(+pax || 0);
+  const trav = travellersOf(travellers, Math.max(0, paxN));
 
   // At the cap, the oldest of this person's own holds gives way. Refusing
   // instead locked out anyone who refreshed twice, for five minutes, with
@@ -263,7 +289,8 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
     if (anySeatsFor(v, j) < paxN) return { ok: false, reason: 'no-whole-berth' };
     const now = Date.now();
     const items = [];
-    for (let k = 0; k < paxN; k++) items.push({ id: id + '#' + k, mask: j, from, to, group: id, at: now, who: who || 'guest', status: 'held', holdId: id });
+    for (let k = 0; k < paxN; k++) items.push({ id: id + '#' + k, mask: j, from, to, group: id, at: now, who: who || 'guest', status: 'held', holdId: id,
+      need: trav[k].need, pref: trav[k].pref });
     // --- check: can everyone who may move, plus these, be seated? ---
     if (!seatable(v, items).ok) return { ok: false, reason: 'no-whole-berth' };
     // --- set ---
@@ -272,7 +299,7 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
     const extra = feesFor(cls, paxN, berthSum, false);
     const h = {
       mode: 'any', hop: false,
-      id, key, train, date, cls, from, to, berthIdxs: [], grants: [], mask: j, pax: paxN, who: who || 'guest',
+      id, key, train, date, cls, from, to, berthIdxs: [], grants: [], mask: j, pax: paxN, who: who || 'guest', travellers: trav,
       amount: berthSum + extra, berthSum, fees: extra, choiceFee: 0, fullPrice: berthSum + extra, journeyKm: jkm,
       status: 'pending', createdAt: now, expiresAt, berths: [], items: items.map(x => x.id),
     };
@@ -320,6 +347,11 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
   // still move must be seatable with these legs nailed down.
   const chosenNow = !v.charted;                            // post-chart, picking is just picking
   if (chosenNow) {
+    // a whole lower berth is not for sale before the chart: lower berths go
+    // to the people who need them at charting, and a choice fee never
+    // outranks a seventy-year-old. Partial lowers are already somebody's.
+    for (const i of berthIdxs)
+      if (v.booked[i] === 0 && isLowerBerth(v.layout[i])) return { ok: false, reason: 'lower-reserved' };
     const newlyChosen = berthIdxs.filter(i => !v.chosen.has(i)).length;
     if (v.chosen.size + newlyChosen > chosenCap(v)) return { ok: false, reason: 'chosen-cap' };
     if (!seatable(v, [], grants).ok) return { ok: false, reason: 'needed-for-pool' };
@@ -349,7 +381,7 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
   const hopFlag = !!(hop || segs);
   const h = {
     mode: 'exact', hop: hopFlag, chosen: chosenNow,
-    id, key, train, date, cls, from, to, berthIdxs, grants, mask: j, pax: paxN, who: who || 'guest',
+    id, key, train, date, cls, from, to, berthIdxs, grants, mask: j, pax: paxN, who: who || 'guest', travellers: trav,
     amount, berthSum, fees: extra, choiceFee: chosenNow ? choiceFeeFor(cls) * paxN : 0,
     fullPrice: fare(cls, jkm) * paxN + extra, journeyKm: jkm,
     status: 'pending', createdAt: Date.now(), expiresAt, berths,
@@ -359,6 +391,20 @@ export function hold({ train, date, cls, from, to, berthIdxs = [], pax, who, seg
   h.timer = setTimeout(() => release(id, 'expired'), HOLD_MS);
   emit('held', { key, train, date, cls, berthIdxs, holdId: id, mode: 'exact' });
   return { ok: true, hold: publicHold(h) };
+}
+
+/** The travellers behind a pending hold changed their needs: the hold and
+    its pool items learn it, so charting seats them right. */
+export function setTravellers(id, list) {
+  const h = holds.get(id);
+  if (!h || h.status !== 'pending') return { ok: false, reason: h ? h.status : 'unknown-hold' };
+  const trav = travellersOf(list, h.pax);
+  h.travellers = trav;
+  if (h.mode === 'any') {
+    const v = inv(h.key);
+    (h.items || []).forEach((itId, k) => { const it = v.pool.get(itId); if (it) { it.need = trav[k].need; it.pref = trav[k].pref; } });
+  }
+  return { ok: true, travellers: trav };
 }
 
 export function release(id, reason = 'released') {
@@ -397,7 +443,7 @@ export function confirm(id) {
     h.status = 'paid'; h.pnr = pnr;
     const booking = {
       pnr, mode: 'any', train: h.train, date: h.date, cls: h.cls, from: h.from, to: h.to,
-      pax: h.pax, amount: h.amount, who: h.who,
+      pax: h.pax, amount: h.amount, who: h.who, travellers: h.travellers || [],
       berths: [], berthIdxs: [], assigned: false, paidAt: Date.now(),
     };
     for (const itId of h.items) { const it = v.pool.get(itId); if (it) { it.status = 'booked'; it.pnr = pnr; } }
@@ -426,7 +472,7 @@ export function confirm(id) {
   h.status = 'paid'; h.pnr = pnr;
   const booking = {
     pnr, mode: 'exact', chosen: !!h.chosen, train: h.train, date: h.date, cls: h.cls, from: h.from, to: h.to,
-    pax: h.pax, amount: h.amount, who: h.who,
+    pax: h.pax, amount: h.amount, who: h.who, travellers: h.travellers || [],
     berths: h.berths.map(b => `${b.coach}/${b.no}`), berthIdxs: h.berthIdxs.slice(), assigned: true,
     paidAt: Date.now(),
   };
@@ -476,6 +522,7 @@ export function chart(train, date, cls) {
   const booked = new Int32Array(v.booked.length);
   for (let i = 0; i < booked.length; i++) booked[i] = v.pinned[i];
   const byPnr = new Map();
+  const lowerByPnr = new Map();
   for (const it of items) {
     const idx = r.assign.get(it.id);
     if (idx == null) continue;
@@ -484,6 +531,11 @@ export function chart(train, date, cls) {
       it.status = 'assigned'; it.idx = idx;
       if (!byPnr.has(it.pnr)) byPnr.set(it.pnr, []);
       byPnr.get(it.pnr).push({ idx, mask: it.mask });
+      if (it.need) {
+        const L = lowerByPnr.get(it.pnr) || { needed: 0, given: 0, missed: 0 };
+        L.needed++; if (r.lowerMissed.includes(it.id)) L.missed++; else L.given++;
+        lowerByPnr.set(it.pnr, L);
+      }
     }
   }
   // a railway traveller the packer could not seat keeps the berth they had
@@ -496,21 +548,24 @@ export function chart(train, date, cls) {
   const assignments = [];
   for (const [pnr, grants] of byPnr) {
     const b = bookings.get(pnr);
+    const lower = lowerByPnr.get(pnr) || null;
     if (b) {
       b.berthIdxs = grants.map(g => g.idx);
       b.berths = grants.map(g => `${v.layout[g.idx].coach}/${v.layout[g.idx].no}`);
       b.assigned = true;
-      emit('charted', { key, train, date, cls, pnr, berths: b.berths, berthIdxs: b.berthIdxs, who: b.who });
+      if (lower) b.lower = lower;
+      emit('charted', { key, train, date, cls, pnr, berths: b.berths, berthIdxs: b.berthIdxs, who: b.who, lower });
     }
-    assignments.push({ pnr, grants });
+    assignments.push({ pnr, grants, lower });
   }
   v.charted = true; v.chartedAt = Date.now();
+  v.lower = { needed: r.lowerNeeded, given: r.lowerGiven, missed: r.lowerMissed.length };
   let wholeFree = 0;
   for (let i = 0; i < v.booked.length; i++) if (v.booked[i] === 0) wholeFree++;
-  if (recorder) recorder({ t: 'charted', key, train, date, cls, assignments,
+  if (recorder) recorder({ t: 'charted', key, train, date, cls, assignments, lower: v.lower,
     booked: Array.from(v.booked), pinned: Array.from(v.pinned), unseated: r.unseated.filter(x => !x.startsWith('seed#')) });
-  emit('chart', { key, train, date, cls, assigned: assignments.length, wholeFree });
-  return { ok: true, assigned: assignments.length, unseated: r.unseated.filter(x => !x.startsWith('seed#')).length, wholeFree };
+  emit('chart', { key, train, date, cls, assigned: assignments.length, wholeFree, lower: v.lower });
+  return { ok: true, assigned: assignments.length, unseated: r.unseated.filter(x => !x.startsWith('seed#')).length, wholeFree, lower: v.lower };
 }
 
 /** Every inventory this process knows about, for the charting timer. */
@@ -518,7 +573,7 @@ export function inventoryKeys() { return [...inventory.keys()]; }
 export function chartInfo(train, date, cls) {
   const v = inventory.get(keyOf(train, date, cls));
   if (!v) return { charted: false, pool: 0 };
-  return { charted: v.charted, chartedAt: v.chartedAt, pool: poolItems(v).filter(p => p.status === 'booked').length };
+  return { charted: v.charted, chartedAt: v.chartedAt, pool: poolItems(v).filter(p => p.status === 'booked').length, lower: v.lower || null };
 }
 
 export const getHold = id => {
@@ -571,8 +626,10 @@ export function replay(records) {
           b.berthIdxs = (a.grants || []).map(g => g.idx);
           b.berths = b.berthIdxs.map(i => `${v.layout[i].coach}/${v.layout[i].no}`);
           b.assigned = true;
+          if (a.lower) b.lower = a.lower;
         }
       }
+      if (r.lower) v.lower = r.lower;
       v.movable = [];
       v.charted = true; v.chartedAt = r.at || Date.now();
       charted++;
@@ -591,10 +648,12 @@ export function replay(records) {
     if (booking.mode === 'any' && !grants.length) {
       // still waiting for a berth: back into the pool, one item per traveller
       const mask = journeyMask(booking.from, booking.to);
+      const trav = travellersOf(booking.travellers, booking.pax || 1);
       for (let k = 0; k < (booking.pax || 1); k++) {
         const id = String(booking.pnr) + '#' + k;
         v.pool.set(id, { id, mask, from: booking.from, to: booking.to, group: String(booking.pnr),
-          who: booking.who, at: booking.paidAt || 0, status: 'booked', pnr: String(booking.pnr) });
+          who: booking.who, at: booking.paidAt || 0, status: 'booked', pnr: String(booking.pnr),
+          need: trav[k].need, pref: trav[k].pref });
       }
     } else if (booking.mode !== 'any' && booking.chosen !== false) {
       for (const i of booking.berthIdxs || []) v.chosen.add(i);
