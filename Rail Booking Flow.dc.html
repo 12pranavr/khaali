@@ -1423,6 +1423,22 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </sc-for>
     </div>
     <div style="padding:20px 26px 6px">
+      <div style="{{ ptWrap }}">
+        <div style="display:flex;gap:11px;align-items:flex-start;flex-wrap:wrap">
+          <div style="{{ ptDotStyle }}">{{ ptDot }}</div>
+          <div style="flex:1;min-width:210px">
+            <div style="{{ ptHeadStyle }}">{{ ptHead }}</div>
+            <div style="font:500 12px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:3px">{{ ptSub }}</div>
+          </div>
+          <button onClick="{{ ptAction }}" style="{{ ptActionStyle }}">{{ ptActionLabel }}</button>
+        </div>
+        <sc-for list="{{ ptLines }}" as="l" hint-placeholder-count="3">
+          <div style="display:flex;gap:12px;align-items:baseline;padding:8px 0 0;margin-top:8px;border-top:1px solid var(--k-f0efeb)">
+            <div style="flex:none;width:86px;font:700 9.5px/1.5 Manrope,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ l.t }}</div>
+            <div style="flex:1;min-width:0;font:600 12.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ l.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
       <div style="{{ chartWrap }}">
         <div style="font:600 12.5px/1.5 Manrope,sans-serif;flex:1;min-width:200px">{{ chartText }}</div>
         <button onClick="{{ chartNow }}" style="{{ chartBtnStyle }}">{{ chartBtnLabel }}</button>
@@ -2027,6 +2043,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </div>
           <div style="{{ o.badge }}">{{ o.badgeText }}</div>
         </div>
+        <div style="{{ o.warnStyle }}">{{ o.warn }}</div>
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
           <button onClick="{{ o.onOpen }}" style="{{ o.openStyle }}">Open the ticket &#8594;</button>
           <button onClick="{{ o.onCancel }}" style="{{ o.cancelStyle }}">Cancel order &#183; release the block</button>
@@ -3267,6 +3284,83 @@ class Component extends DCLogic {
     this._travT=setTimeout(()=>{this.authFetch('/api/hold/'+S.holdId+'/travellers',{method:'POST',
       headers:{'content-type':'application/json'},body:JSON.stringify({travellers:list})},6000).catch(()=>{});},300);
   }
+  /**
+   * The travel check. Everything khaali already knows that decides whether
+   * you should set off, and what to carry when you do: booking status,
+   * berths, who needed a lower one, the delay, the cancellation, the
+   * timetable. Nothing here is a new decision. It arranges decisions the
+   * server already made into something you can act on before you leave the
+   * house, which is the one place khaali has never spoken.
+   */
+  preTravel(rec){
+    if(!rec||rec.status==='refunded'||(rec.dayIdx||0)<0)return null;
+    const tr=this.TRAINS.find(x=>x.no===rec.train);if(!tr)return null;
+    const ST=this.ST;
+    const dep=((((this.sMin(tr,rec.from,'d')||0)%1440)+1440)%1440);
+    const now=this.simNowDate();
+    const mins=(rec.dayIdx||0)*1440+dep-(now.getHours()*60+now.getMinutes());
+    if(mins<-90)return null;                        // that train has long gone
+    const near=mins<=480;                           // the go / no-go window
+    const iso=this.dateIsoFor(rec.dayIdx||0);
+    const cx=this.cxOf(rec.train,rec.dayIdx||0);
+    const dl=cx?null:this.bigDelayOf(rec.train,rec.dayIdx||0);
+    const isAny=rec.mode==='any',seated=!isAny||!!rec.assigned;
+    const rupee=v=>'\u20b9'+Number(v||0).toLocaleString('en-IN');
+    void near;
+
+    const lines=[];
+    // A cancelled train has no platform to stand on, so nothing is said about
+    // one. A late train has a platform, but not at the printed time: the hour
+    // that matters is the one it will actually leave.
+    if(!cx)lines.push({t:'Be there by',
+      sub:ST[rec.from].n+' \u00b7 Platform '+this.plat(tr,rec.from)+' \u00b7 '+this.toHHMM(dep+(dl?dl.min:0)-20)
+        +(dl?('  (running late \u2014 the printed time was '+this.toHHMM(dep-20)+')')
+             :('  (the train leaves at '+this.toHHMM(dep)+')'))});
+
+    // what to carry: always ID, plus the proof behind any lower berth we gave
+    // on priority - we are the ones who said it is checked at boarding
+    const carry=['Photo ID matching the name on this ticket'];
+    (rec.travellers||[]).forEach((t,i)=>{
+      const need=this.needOf(t,iso);if(!need)return;
+      const L=rec.lower;
+      if(L&&L.missed>0&&i>=L.given)return;          // no lower berth given, nothing to prove
+      const bt=(rec.berths||[])[i];
+      carry.push((need==='senior'?'Proof of age':need==='disabled'?'Disability certificate':'Proof of pregnancy')
+        +' for '+(t.name||('Passenger '+(i+1)))
+        +(bt?(' \u00b7 berth '+bt+' was given on lower-berth priority'):''));
+    });
+    lines.push({t:'Carry',sub:carry.join('  \u00b7  ')});
+
+    if(isAny&&!seated)lines.push({t:'Your berth',
+      sub:'Not assigned yet. The number arrives when the chart is prepared, four hours before departure, and the bell rings.'});
+    const L=rec.lower;
+    if(L&&L.missed>0)lines.push({t:'Lower berth',
+      sub:'No lower berth was left for '+L.missed+(L.missed===1?' traveller':' travellers')+' who needed one. You are first in line for any that frees on board.'});
+
+    let verdict='go',head,sub,act=null,actLabel='';
+    if(cx){
+      verdict='stop';
+      head='Do not go. This train is cancelled.';
+      sub=tr.no+' is cancelled on your date \u2014 '+cx.reason+'. The full fare comes back to your wallet now, not in five to seven bank days.';
+      act=()=>this.refundBooking(rec.pnr,'Train cancelled \u2014 refund');
+      actLabel='Refund '+rupee(rec.total)+' now';
+    }else if(dl){
+      verdict='wait';
+      head='Do not leave for the station yet.';
+      sub=tr.no+' is running about '+Math.floor(dl.min/60)+'h '+(dl.min%60)+'m late on your date. Past three hours the whole fare is yours back, and you can decide from home instead of from the platform.';
+      act=()=>this.refundBooking(rec.pnr,'Delay over 3h \u2014 full refund');
+      actLabel='Cancel & refund '+rupee(rec.total);
+    }else if(near){
+      head='You are good to travel.';
+      sub=mins>0?('Everything on this ticket checks out. About '
+        +(mins>=60?(Math.floor(mins/60)+'h '+(mins%60)+'m'):(mins+' minutes'))+' until departure.')
+        :'Everything on this ticket checks out. Departure time has passed \u2014 the live position is below.';
+    }else{
+      head='Ready to travel.';
+      sub='This becomes a go or no-go eight hours before departure. Until then, here is what to have ready.';
+    }
+    return {verdict,head,sub,lines,act,actLabel,near,mins};
+  }
   onOrderEvent(m){
     const me=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})();
     if(!me||m.who!==me)return;
@@ -3400,6 +3494,24 @@ class Component extends DCLogic {
           badge:{flex:'none',font:"700 10px/1 'IBM Plex Mono',monospace",letterSpacing:'.12em',textTransform:'uppercase',padding:'7px 9px',borderRadius:6,
             color:'#fff',background:col},
           badgeText:filled?'Booked':open?(o.train?('WL '+(o.position||1)):'Watching'):pending?'Awaiting block':o.status,
+          ...(()=>{
+            // a pinned waitlist with the train about to leave and nothing
+            // confirmed is the one case the bookings page cannot already warn
+            // about, because there is no ticket to warn on
+            if(!open||!o.train)return {warn:'',warnStyle:{display:'none'}};
+            const d0=new Date(o.date+'T00:00:00'),t0=new Date(this.dateIsoFor(0)+'T00:00:00');
+            const dayIdx=Math.round((d0-t0)/864e5);
+            const nw=this.simNowDate();
+            const mins=dayIdx*1440+o.after-(nw.getHours()*60+nw.getMinutes());
+            if(!(mins<=480&&mins>-90))return {warn:'',warnStyle:{display:'none'}};
+            return {
+              warn:'\u26a0 Nothing is confirmed yet and '+o.train+' leaves in '
+                +(mins>=60?(Math.floor(mins/60)+'h '+(mins%60)+'m'):(Math.max(0,mins)+' minutes'))
+                +'. Do not go to the station on this alone \u2014 a waitlist that has not confirmed cannot board a reserved coach. Your \u20b9'+o.cap+' is blocked, not taken; if the train leaves without a berth, \u20b90 is debited.',
+              warnStyle:{display:'block',marginTop:10,padding:'11px 13px',borderRadius:8,
+                background:'var(--k-fdf0e3)',border:'1px solid var(--k-e2ccd3)',
+                font:'600 12px/1.55 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
+            };})(),
           onOpen:()=>{this.adoptBooking(o.pnr).then(()=>this.openTicket(o.pnr));},
           openStyle:{display:filled?'inline-block':'none',border:'none',background:'var(--k-1f9d55)',color:'#fff',font:'700 12.5px/1 Manrope,sans-serif',padding:'12px 16px',borderRadius:7,cursor:'pointer',minHeight:42},
           onCancel:()=>this.cancelOrder(o.id),
@@ -4923,7 +5035,9 @@ class Component extends DCLogic {
         {label:'Total payable',value:'₹'+money(total),k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}
       ],
       pnr:S.viewPnr||'451'+String(7829063+S.dayIdx*13+S.seed+parseInt(tr.no)).slice(0,7),
-      fromCode:fromS.c,toCode:toS.c,ticketDur:dur,ticketClass:clsL,ticketTotal:money(total),
+      fromCode:fromS.c,toCode:toS.c,ticketDur:dur,ticketClass:clsL,
+      ticketTotal:(()=>{const bkT=S.bookings.find(b=>b.pnr===S.viewPnr);
+        return money(bkT&&bkT.total!=null?bkT.total:total);})(),
       dateShort:dsel.toLocaleDateString('en-GB',{day:'numeric',month:'short',weekday:'short'}),
       ticketFacts:[
         {label:'Boarding',value:disp(depJ==null?null:depJ-20)},
@@ -4955,6 +5069,27 @@ class Component extends DCLogic {
           note:later?'Yours from '+ST[pk.at].n:'Yours for your whole journey',
           noteStyle:{font:'600 11px/1.4 Manrope,sans-serif',marginTop:4,color:later?'var(--k-fg-1f3f8f)':'var(--k-fg-8a8a84)'}};
       });})(),
+      ...(()=>{const bk=S.bookings.find(b=>b.pnr===S.viewPnr);
+        const P=this.preTravel(bk);
+        const tone=!P?null:P.verdict==='stop'?{bg:'var(--k-fdf3f5)',bd:'var(--k-d8385a)',fg:'var(--k-fg-d8385a)',dot:'\u26a0'}
+          :P.verdict==='wait'?{bg:'var(--k-fdf0e3)',bd:'var(--k-e0a419)',fg:'var(--k-fg-8a4a12)',dot:'\u23f1'}
+          :{bg:'var(--k-e6f4ec)',bd:'var(--k-1f9d55)',fg:'var(--k-fg-14663a)',dot:'\u2713'};
+        return {
+          ptWrap:{display:P?'block':'none',padding:'14px 16px',borderRadius:10,marginBottom:12,
+            background:tone?tone.bg:'transparent',border:'1px solid '+(tone?tone.bd:'transparent')},
+          ptDot:tone?tone.dot:'',
+          ptDotStyle:{flex:'none',width:26,height:26,borderRadius:'50%',background:tone?tone.bd:'transparent',
+            color:'#fff',font:'700 13px/26px Manrope,sans-serif',textAlign:'center'},
+          ptHead:P?P.head:'',
+          ptHeadStyle:{font:'700 14.5px/1.35 Manrope,sans-serif',color:tone?tone.fg:'inherit'},
+          ptSub:P?P.sub:'',
+          ptLines:P?P.lines:[],
+          ptAction:(P&&P.act)?P.act:()=>{},
+          ptActionLabel:(P&&P.act)?P.actLabel:'',
+          ptActionStyle:{display:(P&&P.act)?'inline-block':'none',flex:'none',border:'none',
+            background:tone?tone.bd:'var(--k-14161a)',color:'#fff',font:'700 12.5px/1 Manrope,sans-serif',
+            padding:'12px 15px',borderRadius:7,cursor:'pointer',minHeight:42},
+        };})(),
       ...(()=>{const bk=S.bookings.find(b=>b.pnr===S.viewPnr);
         const isAny=!!(bk&&bk.mode==='any');const doneC=!!(bk&&bk.assigned);
         return {chartWrap:{display:isAny?'flex':'none',gap:12,alignItems:'center',flexWrap:'wrap',padding:'12px 14px',borderRadius:9,marginBottom:12,
