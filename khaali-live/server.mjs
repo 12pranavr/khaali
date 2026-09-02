@@ -367,6 +367,31 @@ store.subscribe(msg => {
   const line = `data: ${JSON.stringify(msg)}\n\n`;
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
 });
+// When does this train's chart get prepared? Four hours before it leaves
+// its origin, on the demo clock. Null when the train is unknown.
+function chartAtFor(no, date) {
+  const tr = trainByNo(String(no || ''));
+  if (!tr || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return null;
+  const dep = sMin(tr, stopIdxs(tr)[0], 'd');
+  if (dep == null) return null;
+  return new Date(date + 'T00:00:00').getTime() + (dep % 1440) * 60000 - store.CHART_BEFORE_MS;
+}
+// The chart prepares itself. Every minute, any train whose four-hours-out
+// moment has passed on the demo clock and still has an unseated pool is
+// charted. Idempotent, so the demo button and the timer never collide.
+setInterval(() => {
+  const now = simNow().getTime();
+  for (const key of store.inventoryKeys()) {
+    const [no, date, cls] = key.split('|');
+    const info = store.chartInfo(no, date, cls);
+    if (info.charted || !info.pool) continue;
+    const at = chartAtFor(no, date);
+    if (at != null && now >= at) {
+      const r = store.chart(no, date, cls);
+      console.log(`chart: ${no} ${date} ${cls} \u00b7 seated ${r.assigned}` + (r.unseated ? `, ${r.unseated} unseated` : ''));
+    }
+  }
+}, 60000);
 setInterval(() => {
   const line = `data: ${JSON.stringify({ type: 'tick', at: Date.now() })}\n\n`;
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
@@ -834,15 +859,17 @@ async function api(req, res, url) {
     const cls = ['SL', '3A', '2A'].includes(b.cls) ? b.cls : 'SL';
     const cxh = cancelledOn(tr.no, date);
     if (cxh) return send(res, 409, { ok: false, error: 'This train is cancelled on that date \u2014 ' + cxh.reason + '.' });
+    // 'any' books the journey and lets charting pick the berth; 'exact' pins one now
+    const mode = b.mode === 'any' ? 'any' : 'exact';
     const berthIdxs = (Array.isArray(b.berthIdxs) ? b.berthIdxs : []).map(Number);
-    if (!berthIdxs.length || berthIdxs.some(i => !Number.isInteger(i) || i < 0))
+    if (mode === 'exact' && (!berthIdxs.length || berthIdxs.some(i => !Number.isInteger(i) || i < 0)))
       return send(res, 400, { ok: false, error: 'bad berths' });
     const segsIn = Array.isArray(b.segs)
       ? b.segs.map(g => (g && g.to > g.from && g.from >= 0 && g.to <= 13) ? { from: +g.from, to: +g.to } : null)
       : undefined;
     const r = store.hold({
-      train: tr.no, date, cls, from, to, berthIdxs,
-      pax: Number.isInteger(+b.pax) ? +b.pax : berthIdxs.length,
+      train: tr.no, date, cls, from, to, berthIdxs, mode,
+      pax: Number.isInteger(+b.pax) ? +b.pax : (berthIdxs.length || 1),
       who: signedIn, segs: segsIn, hop: !!b.hop,
     });
     const code = r.ok ? 200 : (r.reason === 'too-many-open-holds' ? 429 : 409);
@@ -909,6 +936,25 @@ async function api(req, res, url) {
     const wl = Math.max(1, Math.min(200, +q.get('wl') || 10));
     if (!no) return send(res, 400, { error: 'train required' });
     return send(res, 200, { train: no, date, cls, wl, ...oddsOf(no, date, cls, wl) });
+  }
+
+  // Prepare the chart for one train and date: seat every any-berth booking.
+  // Signed in, because it changes what everyone on that train sees; and
+  // idempotent, so two people pressing it is harmless.
+  if (p === '/api/chart' && req.method === 'POST') {
+    const me = await whoIs(req);
+    if (!me) return send(res, 401, { needsAuth: true, error: 'Sign in to prepare a chart.' });
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+    const tr = trainByNo(String(b.train || ''));
+    const date = String(b.date || '');
+    const cls = ['SL', '3A', '2A'].includes(b.cls) ? b.cls : 'SL';
+    if (!tr || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { error: 'bad params' });
+    const r = store.chart(tr.no, date, cls);
+    return send(res, 200, { ok: true, train: tr.no, date, cls, ...r });
+  }
+  if (p === '/api/chart') {
+    const tr = q.get('train'), date = q.get('date') || TODAY(), cls = q.get('cls') || 'SL';
+    return send(res, 200, { train: tr, date, cls, ...store.chartInfo(tr, date, cls), chartAt: chartAtFor(tr, date) });
   }
 
   if (p === '/api/bookings') {

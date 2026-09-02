@@ -445,3 +445,67 @@ export function packPlan(masks) {
     freed: masks.length - groups.length, peak, groups,
   };
 }
+
+// ----------------------------------------------------- seating the pool --
+/**
+ * Seat journeys into the space that fixed bookings leave behind.
+ *
+ * This is what "any berth" rests on. A traveller who books a journey rather
+ * than a berth goes into a pool; at charting the pool is packed into whatever
+ * the chosen and seeded bookings have not taken. Before charting the same
+ * packing runs on every hold, as a feasibility check: a booking is accepted
+ * only if everyone already in, plus this one, can still be seated.
+ *
+ * With no fixed bookings this is the classic interval problem and the greedy
+ * below is optimal: berths used equals the busiest leg. Fixed bookings are
+ * obstacles that can cost extra berths, which is exactly why choosing one
+ * costs a fee. The greedy is then a heuristic, but it never overcommits: if
+ * it cannot seat everyone it says so, and the caller refuses the booking.
+ *
+ * fixed   masks per berth that cannot move (booked | held)
+ * items   [{ id, mask, group, at }] journeys needing one berth each
+ * layout  berthLayout(cls), for coach ids
+ * Returns { ok, assign: Map(id -> idx), packed, unseated, touched, wholeFree }
+ */
+export function packInto(fixed, items, layout) {
+  const n = fixed.length;
+  const packed = new Int32Array(n);
+  const assign = new Map();
+  const unseated = [];
+  const groupCoach = new Map();               // group -> coach id of its first member
+  const startOf = m => { let i = 0; while (i < SEGMENTS && !(m & (1 << i))) i++; return i; };
+
+  // hardest first: earliest start, then longest, then earliest booking
+  const order = items.slice().sort((a, b) =>
+    startOf(a.mask) - startOf(b.mask)
+    || popcount(b.mask) - popcount(a.mask)
+    || (a.at || 0) - (b.at || 0)
+    || String(a.id).localeCompare(String(b.id)));
+
+  for (const it of order) {
+    let best = -1, bestScore = Infinity;
+    const wantCoach = groupCoach.get(it.group);
+    for (let i = 0; i < n; i++) {
+      const used = fixed[i] | packed[i];
+      if ((used & it.mask) !== 0) continue;
+      // best fit: a berth already in use beats a pristine one, so whole
+      // berths stay whole; same coach as the family; then the tightest fit
+      const pristine = used === 0 ? 1 : 0;
+      const sameCoach = (wantCoach && layout && layout[i] && layout[i].coach === wantCoach) ? 0 : 1;
+      const slack = SEGMENTS - popcount(used | it.mask);
+      const score = pristine * 10000 + sameCoach * 1000 + slack * 10 + (i / n);
+      if (score < bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) { unseated.push(it.id); continue; }
+    packed[best] |= it.mask;
+    assign.set(it.id, best);
+    if (it.group && !groupCoach.has(it.group) && layout && layout[best]) groupCoach.set(it.group, layout[best].coach);
+  }
+
+  let touched = 0, wholeFree = 0;
+  for (let i = 0; i < n; i++) {
+    if (packed[i]) touched++;
+    if ((fixed[i] | packed[i]) === 0) wholeFree++;
+  }
+  return { ok: unseated.length === 0, assign, packed, unseated, touched, wholeFree };
+}
