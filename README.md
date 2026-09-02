@@ -87,6 +87,14 @@ rather than signing you in silently, so you can read them before you commit.
 en route and carry the station where they change hands. Blue means somebody
 else is at the payment screen right now, arriving over server-sent events.
 
+**Any berth.** Book the journey, not the berth. khaali seats you at charting,
+four hours before departure, the way an airline assigns a seat at check-in,
+and re-seats everyone who is not pinned while it does it. That is what turns
+one sellable berth into a hundred on a coach the railway had already filled.
+Choosing an exact berth still works and carries a choice fee, because a pinned
+berth is an obstacle to packing. Every hold first checks that everyone already
+booked can still be seated.
+
 **Seat hop.** When no single berth covers you, khaali chains two partial berths
 on the same train into one ticket: ride the green one, move at the change
 station, ride the amber one to the end. Both berths lock and pay together.

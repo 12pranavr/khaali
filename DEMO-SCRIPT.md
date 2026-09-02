@@ -54,9 +54,16 @@ berth is on tonight's Kaveri Express.
 >
 > On this train tonight, 215 berths like that. Not one of them is for sale
 > anywhere else.
+>
+> And here's the one nobody else can say. The railway gave every one of these
+> people a berth number two months ago and can't move them. Airlines don't do
+> that. They seat you at check-in. So khaali books you the journey, and seats
+> everyone the night before. Watch: one berth sellable today. Prepare the
+> chart. A hundred.
 
-*Pick the stations, search, scroll the coach, hover an amber berth so its
-handover station shows.*
+*Pick the stations, search, scroll the coach. Point at the headline: "N seats
+on any berth, 1 whole berth to choose". Book any berth, then on the ticket
+press Prepare the chart now, and read the berth off the ticket.*
 
 ## 0:46 - 1:00 - the second problem
 

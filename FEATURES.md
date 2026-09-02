@@ -81,6 +81,12 @@ populated rather than to be booked.
 
 ### Masks
 
+- `packInto(fixed, items, layout)` seats a set of journeys into the space
+  fixed bookings leave. With nothing fixed it is optimal: berths used equals
+  the busiest leg, because interval graphs are perfect. With pinned berths it
+  is a best-fit that prefers already-used berths, keeps a family in one coach,
+  and never overcommits. It is the feasibility check on every hold and the
+  seating at charting.
 - `journeyMask(from, to)` sets the bits for the legs a journey occupies. It is
   direction independent, so a down train and an up train share one geometry.
 - `spanMask(s, e)` is the same thing for an arbitrary stretch.
@@ -202,6 +208,44 @@ So one physical berth can be held by two different people for two
 non-overlapping stretches at the same time, and the tests assert that.
 
 Holds last 5 minutes and release themselves on a timer.
+
+### Any berth, or choose my berth
+
+Indian Railways pins your berth number sixty days before you travel and then
+cannot move it. Airlines assign your seat at check-in, once they know who is
+coming. That one difference is why a coach fragments. On tomorrow's Kaveri
+Express sleeper, 332 people at the busiest leg leave **one** berth sellable end
+to end, when **100** could be.
+
+So the seat page offers two ways to book:
+
+**Any berth**, the default. You book the journey. khaali promises one whole
+berth for your whole journey and tells you which one at charting, four hours
+before departure. Priced at the through fare plus the standard charges.
+
+**Choose my berth.** You pick S6/66 now and it is yours the moment you pay. It
+carries a berth choice fee per traveller: ₹25 sleeper, ₹50 AC 3-tier, ₹75 AC
+2-tier. The fee is the price of an obstacle: a pinned berth can cost the coach
+packing room. Chosen berths are capped at 40% of a coach, which is what
+airlines do with pre-assignable seats.
+
+Every hold of either kind passes one test first: **can everyone already booked,
+plus this one, still be seated?** The server runs the packer for real. A chosen
+berth that would unseat someone already booked is refused. The pool is never
+oversold. Two phones cannot both take the last seat, because the check and the
+set are one synchronous step.
+
+At charting, everyone who is not pinned is re-seated around the pinned
+berths: the any-berth pool and the railway's own scattered bookings alike.
+Each any-berth traveller gets a notification and their ticket updates. The
+chart is journaled with the whole physical map, so a restart restores it
+exactly. A demo button on the ticket prepares it on demand; a timer prepares
+it on the demo clock.
+
+Until charting, the seat map keeps showing the railway's scattered assignment,
+because that is what is physically true, with hatched berths where any-berth
+travellers would sit today. The headline beside it says what charting will
+make of the coach.
 
 ### Confirm
 

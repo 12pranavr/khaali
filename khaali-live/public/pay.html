@@ -95,7 +95,13 @@ async function load() {
   const meta = await api('/api/meta');
   const st = meta.stations;
   $('#amt').textContent = hold.amount;
-  const rows = hold.berths.map(b => `
+  const rows = hold.mode === 'any'
+    ? `<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
+      <b style="flex:none">Any berth × ${hold.pax}</b>
+      <span style="flex:1" class="muted">a whole berth for your whole journey — the number comes at charting, four hours before departure</span>
+      <b style="flex:none">₹${hold.berthSum}</b>
+    </div>`
+    : hold.berths.map(b => `
     <div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
       <b style="flex:none;width:64px">${b.coach}/${b.no}</b>
       <span style="flex:1" class="muted">${b.partial
@@ -109,7 +115,7 @@ async function load() {
     <div class="muted">${hold.pax} passenger${hold.pax > 1 ? 's' : ''} · ${hold.journeyKm} km</div>
     <div style="margin-top:10px">${rows}</div>
     ${hold.fees ? `<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
-      <span style="flex:1" class="muted">Reservation, GST &amp; charges</span><b style="flex:none">₹${hold.fees}</b></div>` : ''}
+      <span style="flex:1" class="muted">Reservation, GST &amp; charges${hold.choiceFee ? ` · includes ₹${hold.choiceFee} berth choice fee` : ''}</span><b style="flex:none">₹${hold.fees}</b></div>` : ''}
     <div style="display:flex;gap:10px;padding:9px 0;border-top:2px solid var(--line);font-weight:700">
       <span style="flex:1">Total</span><span>₹${hold.amount}</span></div>
     ${saved > 0 ? `<div class="muted">₹${saved} less than ${hold.pax} full-journey berth${hold.pax > 1 ? 's' : ''} (₹${hold.fullPrice}) — partial berths are charged by distance.</div>` : ''}`;
