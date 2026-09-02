@@ -2820,9 +2820,10 @@ class Component extends DCLogic {
   sessionExpired(after,note){
     try{localStorage.removeItem('khaali-auth');localStorage.removeItem('khaali-who');}catch(e){}
     if(after)this._afterAuth=after;
-    this.setState({auth:null,authOpen:true,authMode:'in',aErr:null,aPass:'',
-      authMenu:false,holdBusy:false,
-      srvNote:note||'Your session has expired \u2014 sign in again to carry on.'});
+    const why=note||'Your session has expired \u2014 sign in again to carry on.';
+    // aErr is the panel's own line; srvNote only shows on the page behind it
+    this.setState({auth:null,authOpen:true,authMode:'in',aErr:why,aPass:'',
+      authMenu:false,holdBusy:false,srvNote:why});
   }
   tfetch(url,opts,ms){const c=new AbortController();
     const t=setTimeout(()=>c.abort(),ms||8000);
@@ -3347,8 +3348,8 @@ class Component extends DCLogic {
       holdErr:'Pick '+(S.pax-n)+' more berth'+(S.pax-n>1?'s':'')+' — one for each passenger.'});
     // a hold takes a berth off the board: prove who is taking it
     if(!S.auth){this._afterAuth='hold';
-      return this.setState({authOpen:true,authMode:'in',aErr:null,aPass:'',
-        srvNote:'Sign in to hold a berth — it comes off the board for everyone else while you pay.'});}
+      const why='Sign in to hold a berth — it comes off the board for everyone else while you pay.';
+      return this.setState({authOpen:true,authMode:'in',aErr:why,aPass:'',srvNote:why});}
     this.setState({holdBusy:true,holdErr:null});
     // reservation, superfast, GST and the convenience fee are the server's
     // to compute; it ignores anything sent from here
