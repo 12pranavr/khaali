@@ -2801,6 +2801,29 @@ class Component extends DCLogic {
     if(A&&A.token)h.authorization='Bearer '+A.token;
     return h;
   }
+  /** An authenticated request that survives an expired access token.
+      Supabase tokens last an hour; a refresh is invisible and costs one
+      round trip, which is far better than telling someone who is signed in
+      to sign in. Returns the response; callers still read r.ok / r.status. */
+  async authFetch(url,opts,ms){
+    const o=Object.assign({},opts);
+    const base=Object.assign({},(opts&&opts.headers)||{});
+    o.headers=this.authHdr(base);
+    let r=await this.tfetch(url,o,ms);
+    if(r.status!==401||!this.state.auth)return r;
+    if(!(await this.refreshAuth()))return r;          // the refresh token is gone too
+    o.headers=this.authHdr(base);                     // retry with the fresh one
+    return this.tfetch(url,o,ms);
+  }
+  /** The session is genuinely over: stop the header claiming otherwise,
+      say why, and come back to whatever they were doing. */
+  sessionExpired(after,note){
+    try{localStorage.removeItem('khaali-auth');localStorage.removeItem('khaali-who');}catch(e){}
+    if(after)this._afterAuth=after;
+    this.setState({auth:null,authOpen:true,authMode:'in',aErr:null,aPass:'',
+      authMenu:false,holdBusy:false,
+      srvNote:note||'Your session has expired \u2014 sign in again to carry on.'});
+  }
   tfetch(url,opts,ms){const c=new AbortController();
     const t=setTimeout(()=>c.abort(),ms||8000);
     return fetch(url,Object.assign({},opts,{signal:c.signal})).finally(()=>clearTimeout(t));}
@@ -3113,7 +3136,7 @@ class Component extends DCLogic {
     setTimeout(scroll,60);
     try{
       // signed in, Saarthi answers about YOUR tickets; the token is how it knows
-      const r=await this.tfetch('/api/chat',{method:'POST',headers:this.authHdr({'content-type':'application/json'}),
+      const r=await this.authFetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({messages:msgs.slice(-10).map(m=>({role:m.role,content:m.content}))})},130000);
       const j=await r.json();
       if(j.lang)this.setState({chatVoiceLang:j.lang});
@@ -3331,7 +3354,7 @@ class Component extends DCLogic {
     // to compute; it ignores anything sent from here
     let r,j;
     try{
-      r=await this.tfetch('/api/hold',{method:'POST',headers:this.authHdr({'content-type':'application/json'}),
+      r=await this.authFetch('/api/hold',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({train:S.train,cls:S.cls,from:S.from,to:S.to,date:this.srvDate(),
           berthIdxs:S.picks.map(p=>p.idx),pax:hopMode?S.pax:n,
           segs:hopMode?S.picks.map(p=>p.seg||null):undefined,hop:hopMode||undefined,
@@ -3348,6 +3371,9 @@ class Component extends DCLogic {
     }
     if(r.ok&&j&&j.ok)
       return this.setState({holdBusy:false,holdId:j.hold.id,hold:j.hold,holdErr:null,now:Date.now()});
+    // still 401 after a refresh attempt: the session is over, not the berth
+    if(r.status===401||(j&&j.needsAuth))
+      return this.sessionExpired('hold','Your session has expired \u2014 sign in again and the berths are yours to lock.');
     const why=(j&&(j.reason||j.error))||('http '+r.status);
     const msg=why==='taken'?'Too slow — someone else just took one of those berths. Pick again.'
       :why==='berth-count-mismatch'?'Pick one berth for each passenger.'
@@ -4981,7 +5007,7 @@ class Component extends DCLogic {
         // a round belongs to a verified identity now: the buttons carry the
         // token, and a 401 opens sign-in and replays the tap afterwards
         const post=async(u)=>{let r=null;
-          try{r=await this.tfetch(u,{method:'POST',headers:this.authHdr({'content-type':'application/json'}),
+          try{r=await this.authFetch(u,{method:'POST',headers:{'content-type':'application/json'},
             body:JSON.stringify({who,name:(S.auth&&(S.auth.fullName||S.auth.name))||'a visitor'})},6000);}catch(e){}
           if(r&&r.status===401){this._afterAuth='tatkal';this._tkRetry=u;
             return this.setState({authOpen:true,authMode:'in',aErr:null,aPass:'',
@@ -5005,8 +5031,8 @@ class Component extends DCLogic {
             // encodes, so a phone that scans it lands on the same live bill
             (async()=>{
               let sid=null,ms=300000;
-              try{const r=await this.tfetch('/api/tatkal/paysession',{method:'POST',
-                headers:this.authHdr({'content-type':'application/json'}),
+              try{const r=await this.authFetch('/api/tatkal/paysession',{method:'POST',
+                headers:{'content-type':'application/json'},
                 body:JSON.stringify({who,name:nm})},6000);
                 const j=await r.json();if(r.ok&&j.ok){sid=j.payId;ms=j.msLeft||300000;}}catch(e){}
               this.setState({tkModal:true,tkStep:'pay',tkPayErr:null,tkPin:'',
@@ -5179,8 +5205,8 @@ class Component extends DCLogic {
             try{localStorage.setItem('khaali-tklock',JSON.stringify({round:T.id,amt:tkFareN,settled:false}));}catch(e){}
             this.setState({tkModal:false});
             (async()=>{try{
-              const r=await this.tfetch('/api/tatkal/paysession',{method:'POST',
-                headers:this.authHdr({'content-type':'application/json'}),
+              const r=await this.authFetch('/api/tatkal/paysession',{method:'POST',
+                headers:{'content-type':'application/json'},
                 body:JSON.stringify({who,name:nm})},6000);
               const j=await r.json();
               if(r.ok&&j.ok)await this.tfetch('/api/pay/'+j.payId,{method:'POST'},8000);
