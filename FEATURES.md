@@ -1005,6 +1005,23 @@ video share silently fail while photos worked.
 If the share sheet still refuses the file, the page says so plainly and offers
 **Save the recording to this phone** so she can attach it herself.
 
+### Keeping the sound
+
+The sound meter runs off a **clone** of the microphone track, never the track
+being recorded. Routing the recorder's own audio into a Web Audio graph is
+enough to make some phones write a silent file while the meter carries on
+bouncing - the worst kind of failure, because it looks like it is working.
+
+The recorder is handed a stream built from exactly the video track and the
+audio track, so there is no question about what is being written. The
+microphone is asked for three ways in turn - precise constraints, then plain
+`audio: true`, then plain everything - because an over-specified constraint set
+is a classic way to be handed nothing at all on an older phone.
+
+Afterwards the finished file is checked for an audio track (`mp4a`, `OpusHead`,
+`A_VORBIS` in the header). If the sound did not make it, the screen says so
+rather than letting her find out days later when she plays it back.
+
 ### What is honest about it
 
 The handover is simulated and the page says so. Browsers cannot record

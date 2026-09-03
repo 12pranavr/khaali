@@ -3758,15 +3758,36 @@ class Component extends DCLogic {
    * this proves the microphone is hearing, which is the half of the recording
    * she cannot see.
    */
-  sosMeterOn(stream){
+  sosMeterOn(track){
     try{
       const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC||!stream.getAudioTracks().length)return;
+      if(!AC||!track)return;
+      // A CLONE, never the track being recorded. Feeding the recorder's own
+      // audio into a Web Audio graph is enough to make some phones write a
+      // silent file while the meter here keeps happily bouncing - which is
+      // the worst possible failure: it looks like it is working.
+      const clone=track.clone();
+      this._sosClone=clone;
       const ctx=this._sosAC=new AC();
+      if(ctx.state==='suspended')ctx.resume().catch(()=>{});
       const an=ctx.createAnalyser();an.fftSize=256;
-      ctx.createMediaStreamSource(stream).connect(an);
+      ctx.createMediaStreamSource(new MediaStream([clone])).connect(an);
       this._sosAn={an,buf:new Uint8Array(an.fftSize)};
     }catch(e){this._sosAn=null;}
+  }
+
+  /**
+   * Does the finished file actually carry sound? mp4 names its audio track
+   * `mp4a` in the header, webm names it `Opus` or `A_VORBIS`. Cheap to look
+   * for, and it turns a silent recording from something she discovers days
+   * later into something khaali tells her now.
+   */
+  async sosHasSound(blob){
+    try{
+      const head=new Uint8Array(await blob.slice(0,Math.min(blob.size,262144)).arrayBuffer());
+      let t='';for(let i=0;i<head.length;i++)t+=String.fromCharCode(head[i]);
+      return /mp4a|OpusHead|A_OPUS|A_VORBIS|ac-3|\.mp3/.test(t);
+    }catch(e){return true;}          // cannot tell, so do not cry wolf
   }
   sosLevel(){
     const a=this._sosAn;if(!a)return null;
@@ -3795,7 +3816,7 @@ class Component extends DCLogic {
     try{if(this._sosShot)URL.revokeObjectURL(this._sosShot);}catch(e){}
     this._sosShot=null;
     this.setState({sosOpen:true,sosPhase:'choose',sosErr:'',
-      sosAlert:null,sosLine:'',sosSecs:0,sosShot:'',sosStall:''});
+      sosAlert:null,sosLine:'',sosSecs:0,sosShot:'',sosStall:'',sosNoMic:false});
     this.loadSos();}
   closeSos(){this.sosTearDown();this.sosLock(false);
     this.setState({sosOpen:false,sosPhase:'choose'});}
@@ -3808,6 +3829,8 @@ class Component extends DCLogic {
     this._sosRec=null;
     try{(this._sosStream?this._sosStream.getTracks():[]).forEach(t=>t.stop());}catch(e){}
     this._sosStream=null;
+    try{if(this._sosClone)this._sosClone.stop();}catch(e){}
+    this._sosClone=null;
     try{if(this._sosAC)this._sosAC.close();}catch(e){}
     this._sosAC=null;this._sosAn=null;
     if(this._sosVid){try{this._sosVid.remove();}catch(e){}this._sosVid=null;}
@@ -3841,8 +3864,10 @@ class Component extends DCLogic {
    * is worth a fraction of one that has.
    */
   sosRecType(){
-    const want=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4',
-      'video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+    // lowercase: some builds accept the mixed-case form from isTypeSupported
+    // and then quietly drop the audio when the recorder is actually built
+    const want=['video/mp4;codecs=avc1.42e01e,mp4a.40.2','video/mp4;codecs=h264,aac',
+      'video/mp4','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
     for(const t of want){
       try{if(window.MediaRecorder&&MediaRecorder.isTypeSupported(t))return t;}catch(e){}
     }
@@ -3864,12 +3889,20 @@ class Component extends DCLogic {
     if(this._sosBusy)return;this._sosBusy=true;
     this._sosAbort=false;this._sosOpened=Date.now();
     this.setState({sosPhase:'arming',sosErr:'',sosKind:kind,sosSecs:0,
-      sosLevel:null,sosFrames:false,sosStall:''});
-    let stream;
-    try{stream=await navigator.mediaDevices.getUserMedia(
-      kind==='video'?{video:{facingMode:'environment'},audio:true}
-                    :{video:{facingMode:'environment'}});}
-    catch(e){this._sosBusy=false;
+      sosLevel:null,sosFrames:false,sosStall:'',sosNoMic:false});
+    // Ask precisely, then ask plainly. An over-specified constraint set is a
+    // classic way to be handed nothing at all on an older phone, and being
+    // handed nothing is not a reason to give up on her behalf.
+    const asks=kind==='video'
+      ?[{video:{facingMode:'environment'},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}},
+        {video:{facingMode:'environment'},audio:true},
+        {video:true,audio:true}]
+      :[{video:{facingMode:'environment'}},{video:true}];
+    let stream=null;
+    for(const ask of asks){
+      try{stream=await navigator.mediaDevices.getUserMedia(ask);break;}catch(e){}
+    }
+    if(!stream){this._sosBusy=false;
       return this.setState({sosPhase:'denied',sosErr:'The camera did not open. You can still mark the moment - that needs no camera and no permission, and it still records the train, the berth and the minute.'});}
     this._sosStream=stream;
     // if the phone handed over a camera but no microphone, say so now rather
@@ -3880,17 +3913,22 @@ class Component extends DCLogic {
     v.style.cssText='position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0';
     document.body.appendChild(v);this._sosVid=v;
     try{await v.play();}catch(e){}
-    this.sosMeterOn(stream);
-    if(noMic)this.setState({sosStall:'Your phone gave the camera but not the microphone, so this video will have no sound.'});
+    this.sosMeterOn(stream.getAudioTracks()[0]);
+    if(noMic)this.setState({sosNoMic:true});
     // the tick starts the moment the stream does, so the screen is alive
     // before there is anything to count
     this._sosT=setInterval(()=>this.sosTick(0),250);
     this.sosLens();
     if(kind==='photo'){this._sosBusy=false;return this.sosSnap();}
+    // exactly the picture and the sound, nothing else the browser may have
+    // attached, so there is no question about what is being written
+    const aTrack=stream.getAudioTracks()[0]||null;
+    const recStream=new MediaStream(
+      [stream.getVideoTracks()[0],aTrack].filter(Boolean));
     let rec;const want=this.sosRecType();
-    try{rec=want?new MediaRecorder(stream,{mimeType:want}):new MediaRecorder(stream);}
-    catch(e){try{rec=new MediaRecorder(stream);}
-      catch(e2){this.sosTearDown();this._sosBusy=false;
+    try{rec=want?new MediaRecorder(recStream,{mimeType:want}):new MediaRecorder(recStream);}
+    catch(e){try{rec=new MediaRecorder(recStream);}
+      catch(e2){void 0;this.sosTearDown();this._sosBusy=false;
         return this.setState({sosPhase:'denied',sosErr:'This browser will not record video. Mark the moment instead - it still says when and where.'});}}
     const chunks=[];
     // the type the recorder settled on, which is not always the one it reports
@@ -3941,6 +3979,7 @@ class Component extends DCLogic {
     try{
       const j=await this.sosStamp(kind);
       const kept=blob?await this.sosPut(j.alert.id,{blob,kind,at:Date.now()}):false;
+      const mute=(kind==='video'&&blob)?!(await this.sosHasSound(blob)):false;
       this._sosBlob=blob||null;   // held in hand: iOS opens no share sheet after an await
       // she gets to SEE what was captured. Nothing else settles the question
       // of whether it worked.
@@ -3951,7 +3990,10 @@ class Component extends DCLogic {
       this.setState({sosPhase:'done',sosShot:this._sosShot||'',sosNoAttach:false,
         sosShotName:'khaali-'+j.alert.id+'.'+this.sosExt(this._sosType,kind),
         sosAlert:j.alert,sosLine:j.line,
-        sosErr:kept?'':'This phone would not keep the recording. The stamp survived, so the time and the place are still on record.'});
+        sosErr:[
+          kept?'':'This phone would not keep the recording. The stamp survived, so the time and the place are still on record.',
+          mute?'This phone recorded the picture but no sound. The picture, the time and the place are all still here.':'',
+        ].filter(Boolean).join(' ')});
       this.loadSos();
     }catch(e){this.sosTearDown();
       this.setState({sosPhase:'choose',sosErr:String(e.message||e)});}
@@ -4123,11 +4165,12 @@ class Component extends DCLogic {
         ?(String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'))
         :ph==='snap'?'Hold still':'Opening the camera',
       sosLiveNote:S.sosStall?S.sosStall
+        :S.sosNoMic?'Your phone gave the camera but not the microphone, so this video will have no sound. Everything else is being recorded.'
         :ph==='rec'?'Recording on this phone. Nothing has been sent, and nothing will be until you say so.'
         :ph==='snap'?'Keep the phone as it is. khaali takes one frame.'
         :'The camera is starting. Your phone may ask you first.',
       sosLiveNoteStyle:{font:'600 12.5px/1.6 Manrope,sans-serif',marginTop:9,
-        color:S.sosStall?'#f2a6b6':'#8b8b95'},
+        color:(S.sosStall||S.sosNoMic)?'#f2a6b6':'#8b8b95'},
       // the microphone, drawn. A bar that answers to the room is proof no
       // still picture can give.
       sosMeterWrap:{display:(S.sosLevel==null)?'none':'block',height:6,marginTop:14,
