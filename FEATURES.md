@@ -1000,10 +1000,19 @@ platform.
 `/rpf` is the list: every report sent to the RPF, newest first, each showing
 who, where, and the next station. A page of women's names, numbers and live
 positions is not something to leave open on the internet, so it is **shut by
-default**. With `?key=` matching `ADMIN_TOKEN` it shows everything; without one
-it shows the signed-in caller only their own reports and says why. If no
-`ADMIN_TOKEN` is configured, nobody can open the full list at all - the failure
-is closed, not open.
+default**, and there are exactly two ways through:
+
+- **Signed in to khaali** - the console shares an origin with the app, reads the
+  session from `localStorage` and sends it as a bearer token, so it shows you
+  the reports *you* raised. This is the demo path.
+- **The console key** - a field on the gate, checked against `ADMIN_TOKEN`,
+  which opens the full list.
+
+If no `ADMIN_TOKEN` is configured, nobody can open the full list at all, and the
+page says so. The failure is closed, not open. There is deliberately no key
+committed to this repository: the positions on that page are real ones, taken
+from the phone of whoever raised the report, and a key in a public repo would
+make a stranger's live location public with it.
 
 Reports are journalled in full - the alert on creation, each fix, the handover
 with its contact, and the deletion - and replayed into memory at boot. Before
