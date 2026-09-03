@@ -108,45 +108,64 @@ export function entranceFor(stopId, needs = []) {
  * steps off at Majestic. `arriveAt` is a minute of the day. Returns legs a
  * ticket can print, and a `line` a person can read in one breath.
  */
-export function plan({ arriveAt, needs = [], toIdx = STOPS.length - 1 } = {}) {
+export const stopIdx = id => STOPS.findIndex(s => s.id === id);
+
+/**
+ * `arriveAt` is the minute she is free to start: a train's arrival, or simply
+ * now. With no `from`, she is stepping off a train at Whitefield railway and
+ * the walk to the nearest metro is part of the plan. With a `from` metro stop
+ * she is already at the metro, and there is no walk. `to` is any stop down
+ * the line; Majestic if unsaid.
+ */
+export function plan({ arriveAt, needs = [], from = null, to = null, toIdx = null } = {}) {
   if (!isFinite(arriveAt)) return { ok: false, reason: 'no-arrival' };
   const b = boardStop();
+  const fromIdx = from != null ? stopIdx(from) : b.idx;
+  const endIdx = toIdx != null ? toIdx : (to != null ? stopIdx(to) : STOPS.length - 1);
+  if (fromIdx < 0 || endIdx < 0) return { ok: false, reason: 'unknown-stop' };
+  if (endIdx <= fromIdx) return { ok: false, reason: 'wrong-way',
+    line: 'This line only runs ' + STOPS[0].n + ' toward ' + STOPS[STOPS.length - 1].n + ' in khaali for now.' };
+  const walking = from == null;
+  const startStop = STOPS[fromIdx];
   const hour = Math.floor((((arriveAt % 1440) + 1440) % 1440) / 60);
-  const ent = entranceFor(b.stop.id, needs);
-  const walkMin = b.walkMin + (ent ? ent.minToPlatform : 2);
+  const ent = entranceFor(startStop.id, needs);
+  const walkMin = walking ? b.walkMin + (ent ? ent.minToPlatform : 2) : (ent ? ent.minToPlatform : 2);
   const atPlatform = arriveAt + walkMin;
-  const nm = nextMetro(atPlatform, b.idx);
+  const nm = nextMetro(atPlatform, fromIdx);
   if (!nm.ok) return { ok: false, reason: 'no-service', first: nm.first, last: nm.last,
-    line: 'No metro from ' + b.stop.n + ' at this hour. First train ' + nm.first + ', last ' + nm.last + '.' };
+    line: 'No metro from ' + startStop.n + ' at this hour. First train ' + nm.first + ', last ' + nm.last + '.' };
   const boardMin = atPlatform + nm.waitTypical;
-  const ride = metroLeg(b.idx, toIdx, boardMin);
+  const ride = metroLeg(fromIdx, endIdx, boardMin);
   const alightCrowd = crowdAt(ride.to.id, Math.floor((ride.alight % 1440) / 60));
-  const boardCrowd = crowdAt(b.stop.id, hour);
+  const boardCrowd = crowdAt(startStop.id, hour);
   const peak = (hour >= 8 && hour < 12) || (hour >= 16 && hour < 21);
-  const legs = [
-    { mode: 'walk', from: ST[ST.findIndex(s => s.c === RAIL_STATION)].n, to: b.stop.n,
-      km: b.km, min: walkMin, entrance: ent, source: 'measured' },
-    { mode: 'metro', line: LINE.name, color: LINE.color, from: ride.from.n, fromKn: ride.from.kn,
-      to: ride.to.n, toKn: ride.to.kn, stops: ride.stops, runMin: ride.runMin,
-      every: nm.every, waitMax: nm.waitMax, board: hhmm(boardMin % 1440), alight: hhmm(ride.alight % 1440),
-      crowdBoard: boardCrowd, crowdAlight: alightCrowd, source: 'timetable' },
-  ];
+  const legs = [];
+  if (walking) legs.push({ mode: 'walk', from: ST[ST.findIndex(s => s.c === RAIL_STATION)].n, to: b.stop.n,
+    km: b.km, min: walkMin, entrance: ent, source: 'measured' });
+  legs.push({ mode: 'metro', line: LINE.name, color: LINE.color, from: ride.from.n, fromKn: ride.from.kn,
+    fromId: ride.from.id, toId: ride.to.id,
+    to: ride.to.n, toKn: ride.to.kn, stops: ride.stops, runMin: ride.runMin,
+    every: nm.every, waitMax: nm.waitMax, board: hhmm(boardMin % 1440), alight: hhmm(ride.alight % 1440),
+    crowdBoard: boardCrowd, crowdAlight: alightCrowd, source: 'timetable' });
   return {
     ok: true, legs,
     arrive: ride.alight, arriveText: hhmm(ride.alight % 1440),
     fare: { qr: FARE.qr, smartcard: peak ? FARE.smartcard.peak : FARE.smartcard.offpeak, peak },
     totalMin: ride.alight - arriveAt,
-    namesake: { km: b.namesakeKm, name: STOPS.find(s => /Whitefield/.test(s.n)).n },
-    line: explain({ b, ent, walkMin, nm, ride, alightCrowd }),
+    namesake: walking ? { km: b.namesakeKm, name: STOPS.find(s => /Whitefield/.test(s.n)).n } : null,
+    line: explain({ b, ent, walkMin, nm, ride, alightCrowd, walking, startStop }),
   };
 }
 
 /** One breath. */
-export function explain({ b, ent, walkMin, nm, ride, alightCrowd }) {
+export function explain({ b, ent, walkMin, nm, ride, alightCrowd, walking = true, startStop = null }) {
   const bits = [
-    'Off the train, ' + (ent ? ent.n + ' of ' : '') + b.stop.n
-      + ' is ' + Math.round(b.km * 1000) + ' m — about ' + walkMin + ' min on foot'
-      + (ent && ent.stepFree ? ', with a lift' : ''),
+    walking
+      ? 'Off the train, ' + (ent ? ent.n + ' of ' : '') + b.stop.n
+        + ' is ' + Math.round(b.km * 1000) + ' m — about ' + walkMin + ' min on foot'
+        + (ent && ent.stepFree ? ', with a lift' : '')
+      : (ent ? ent.n + ' of ' : '') + (startStop ? startStop.n : ride.from.n)
+        + (ent && ent.stepFree ? ', with a lift' : ''),
     LINE.name + ' every ' + nm.every + ' min',
     ride.stops + ' stops to ' + ride.to.n.replace(/^.*, /, '') + ', about ' + Math.round(ride.runMin) + ' min',
     'there by ' + hhmm(ride.alight % 1440),

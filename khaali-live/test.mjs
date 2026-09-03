@@ -1760,6 +1760,29 @@ t('crowding is the station against its own worst hour', () => {
   assert.strictEqual(JY.crowdAt('NOPE', 9), null);
 });
 
+t('from one metro stop to another there is no walk, and the line reads from there', () => {
+  const p = JY.plan({ arriveAt: 9 * 60, from: 'IDN', to: 'KGWA' });
+  assert.ok(p.ok, p.reason);
+  assert.strictEqual(p.legs.length, 1, 'metro only');
+  assert.strictEqual(p.legs[0].from, 'Indiranagar');
+  assert.strictEqual(p.legs[0].stops, 7);
+  assert.match(p.line, /^Indiranagar/);
+  assert.strictEqual(p.namesake, null, 'no railway, no namesake to warn about');
+});
+
+t('rail to any stop down the line keeps the walk and stops where asked', () => {
+  const p = JY.plan({ arriveAt: 9 * 60, to: 'MAGR' });
+  assert.ok(p.ok, p.reason);
+  assert.strictEqual(p.legs[0].mode, 'walk');
+  assert.strictEqual(p.legs[1].to, 'Mahatma Gandhi Road');
+  assert.strictEqual(p.legs[1].stops, 16);
+});
+
+t('the wrong way and an unknown stop are refused, not guessed', () => {
+  assert.strictEqual(JY.plan({ arriveAt: 9 * 60, from: 'KGWA', to: 'IDN' }).reason, 'wrong-way');
+  assert.strictEqual(JY.plan({ arriveAt: 9 * 60, to: 'NOPE' }).reason, 'unknown-stop');
+});
+
 t('a pass is a right to ride, not a seat: scanned, never used up', () => {
   const r = JY.newPass({ id: 'p1', who: 'her@x', date: '2026-09-10', holder: 'Achina' }, at);
   assert.ok(r.ok);

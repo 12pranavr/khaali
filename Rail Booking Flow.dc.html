@@ -6050,14 +6050,16 @@ class Component extends DCLogic {
       // Departures left the nav on purpose: it sells no part of the story and
       // its one real job — picking a boarding point — is offered mid-booking
       // by the class modal's link. The page itself stays alive at its URL.
-      nav:[{l:'Trains',p:'home'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
+      // 'Plan a journey' is the whole trip - train, walk, metro, pass - and it
+      // lives on the live map, which is its own page. The menu takes you there.
+      nav:[{l:'Trains',p:'home'},{l:'Plan a journey',p:'plan',href:'/live-map#plan'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
         sheetStyle:{font:'700 15px/1 Manrope,sans-serif',cursor:'pointer',padding:'16px 22px',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-14161a)',
           borderBottom:'1px solid var(--k-f0efeb)',
           background:S.page===x.p?'var(--k-fdf3f5)':'transparent'},
-        onClick:()=>{this.setState({navOpen:false});this.go(x.p);}})),
+        onClick:()=>{this.setState({navOpen:false});if(x.href){location.href=x.href;return;}this.go(x.p);}})),
       navBurger:()=>this.setState({navOpen:!S.navOpen}),
       navBurgerIcon:S.navOpen?'\u2715':'\u2630',
       navBurgerLabel:(()=>{const cur={home:'Trains',map:'Route map',hop:'Seat hop',odds:'Waitlist odds',

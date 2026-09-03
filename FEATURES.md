@@ -1227,6 +1227,25 @@ the railway*.
 
 Passes and rides are journalled and replayed at boot.
 
+### Where you plan the whole journey
+
+**Plan a journey** in the menu opens the live map with a planner on the right:
+origin, destination, swap, leave-at, "I need a lift or a ramp", Search, and
+your recent searches. It plans between the corridor's 14 railway stations and
+the Purple Line's 23 metro stops - and the search box will find anywhere in
+Karnataka, then snap to the nearest of those and say so in the field rather
+than quietly substituting.
+
+Train -> metro gives the train leg, the 150 m walk, the metro leg, the arrival
+time and the fares, and one button - *Book the train . the day pass is on your
+ticket* - which opens the corridor search with the stations filled in. Metro ->
+metro gives the ride alone. A pair khaali cannot do yet says so.
+
+The chain is drawn on the map: train in red, walk dotted, metro in the line's
+own purple. Map / Satellite is a pill top-left (CARTO Voyager streets with
+Kannada labels from OpenStreetMap; Esri imagery for satellite). No API key, no
+billing, nothing that can run up a bill from a public URL.
+
 ### Scope, on purpose
 
 One corridor, one metro line, two stations, one pass. KSRTC intercity buses

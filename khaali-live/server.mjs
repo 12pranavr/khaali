@@ -1111,7 +1111,8 @@ async function api(req, res, url) {
     const arrive = parseInt(q.get('arrive'), 10);
     if (!(arrive >= 0 && arrive < 2880)) return send(res, 400, { ok: false, error: 'arrive is a minute of the day' });
     const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
-    return send(res, 200, journey.plan({ arriveAt: arrive, needs }));
+    const from = q.get('from') || null, to = q.get('to') || null;
+    return send(res, 200, journey.plan({ arriveAt: arrive, needs, from, to }));
   }
   // Issue a day pass. It is hers, it costs the metro fare, and it is scanned,
   // not consumed.
