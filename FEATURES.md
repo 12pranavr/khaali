@@ -1150,6 +1150,91 @@ recording dot are not ours to hide - and the screen says that too, then offers
 
 ---
 
+## 11b. After the train - the metro, and a pass for the city
+
+A ticket to Whitefield leaves a person on a platform 1.7 km from the metro
+station that shares its name - and 150 m from a different one, Kadugodi Tree
+Park, that does not. Nobody tells them. This is the telling.
+
+### The data, all of it real and labelled
+
+| What | Source | Status |
+|---|---|---|
+| 23 stations Whitefield (Kadugodi) -> Majestic, order, run times, entrances, lifts, fares | BMRCL timetable as GTFS, via Vonter/bmrcl-gtfs (ODbL) | real, stop times good to a minute or two |
+| headways by time of day, first and last train | the same feed's weekday schedule bands | real |
+| crowding per station per hour | BMRCL entries under RTI, Aug-Sep 2025, weekdays averaged, via Vonter/bmrcl-ridership-hourly (ODbL) | real |
+| Kannada station names | BMRCL's own translations | real |
+| the walk from the railway to the metro | measured between the two sets of coordinates | measured |
+| a metro train's position right now | nobody publishes one | not pretended |
+
+`metro.mjs` holds it; the header says where every field came from.
+
+### The engine - `journey.mjs`
+
+`boardStop()` sends the train passenger to the *nearest* metro, not the
+namesake, and records how far the namesake really is. `headwayAt` follows
+BMRCL's bands and goes dark after the last train. `nextMetro` answers with the
+headway - "every 8 minutes" - and the wait it implies, never a false 09:07,
+because frequency service has no timetable to promise. `crowdAt` scores a
+station against its own busiest hour. `entranceFor` picks a lift when the need
+says so. `plan({arriveAt, needs})` puts it together and `explain` reads it in
+one breath:
+
+> Off the train, Entrance A of Kadugodi Tree Park is 150 m - about 3 min on
+> foot, with a lift . Purple Line every 10 min . 20 stops to Majestic, about
+> 44 min . there by 09:39 AM . Majestic will be at its busiest.
+
+A late train arrives late: the plan starts from when it actually stops.
+
+### The pass - a right to ride, not a seat
+
+A city bus is not something you book; it is something you have the right to
+board, and the next one comes. So the city part of the journey is a **day
+pass**: issued once for the travel date in the traveller's name, covering the
+metro and any BMTC bus, costing the metro fare. `scan()` is the gate's or the
+conductor's tap - it records a ride, refuses the wrong day, a cancelled pass,
+or a mode it never covered, and treats the same door twice in a minute as one
+tap. A pass is never used up; that is the difference between a pass and a
+ticket. Missing a bus is not an event, it is a longer wait.
+
+`/scan/<id>` is the conductor's page: one big word - *Good today*, *Not
+today*, *No* - the holder, the date, and two buttons. Nothing to install.
+
+### On the ticket
+
+Any ticket that ends at Whitefield carries an **After the train** card:
+walk, metro, arrival, fares by QR and smart card, and one tap for the pass,
+which then becomes the card with its QR. Each leg carries its source badge -
+*measured*, *timetable*. After the last train the card says so and names the
+first and last.
+
+### On the map
+
+The Purple Line is drawn from BMRCL's own shape, stations tinted by how busy
+they are at the hour the map is showing, the 150 m walk from the railway drawn
+as a dotted line, and one label that matters: *Kadugodi Tree Park . 150 m from
+the railway*.
+
+### Routes
+
+| Route | Does |
+|---|---|
+| `GET /api/metro` | the line, for the map and the ticket |
+| `GET /api/journey?arrive=<minute>&needs=` | the plan from a train arrival |
+| `POST /api/pass` | issue a day pass (signed in) |
+| `GET /api/pass/:id`, `DELETE` | her pass; cancel it |
+| `GET/POST /api/scan/:id` | the door - open on purpose; a pass tells a stranger only whether it is good today |
+
+Passes and rides are journalled and replayed at boot.
+
+### Scope, on purpose
+
+One corridor, one metro line, two stations, one pass. KSRTC intercity buses
+have no open data and are not shown; other metro lines and the full BMTC
+network are the same code with more data. Depth first.
+
+---
+
 ## 12. Notifications
 
 A bell in the header collects live cards: cancellations on trains you have

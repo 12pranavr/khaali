@@ -32,6 +32,8 @@ import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
 import * as digilocker from './digilocker.mjs';
 import * as sos from './sos.mjs';
+import * as journey from './journey.mjs';
+import * as metro from './metro.mjs';
 import crypto from 'node:crypto';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -83,6 +85,8 @@ const CONSENTS = new Map();
 // where the train was - and never the photograph or the video, which stays on
 // the phone that took it. There is nothing here to leak.
 const ALERTS = new Map();
+// Day passes for the city: the right to ride, scanned at the door, never a seat.
+const PASSES = new Map();
 
 /**
  * The name and number khaali can honestly put to an alert. The booking is the
@@ -222,6 +226,9 @@ setInterval(matchOrders, 20000).unref();
     }
     if (r.t === 'sosmedia') { const a = ALERTS.get(r.id); if (a) a.media = r.media; }
     if (r.t === 'sosgone') { const a = ALERTS.get(r.id); if (a) sos.remove(a); }
+    if (r.t === 'pass' && r.pass && r.pass.id) PASSES.set(r.pass.id, { ...r.pass, rides: (r.pass.rides || []).slice() });
+    if (r.t === 'passride') { const p = PASSES.get(r.id); if (p && r.ride) p.rides.push(r.ride); }
+    if (r.t === 'passgone') { const p = PASSES.get(r.id); if (p) journey.cancelPass(p, r.at); }
   }
   for (const o of ORDERS.values()) {
     const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
@@ -1088,6 +1095,76 @@ async function api(req, res, url) {
     return send(res, 200, { report });
   }
 
+  // --------------------------------------------- the journey after the train --
+  // The metro line for the map and the ticket: stations, run times, crowding by
+  // hour, entrances, the line's own shape. All BMRCL's data, none of it ours.
+  if (p === '/api/metro') {
+    return send(res, 200, {
+      line: metro.LINE, stops: metro.STOPS, shape: metro.SHAPE,
+      entrances: metro.ENTRANCES, headways: metro.HEADWAYS, fare: metro.FARE,
+      first: metro.FIRST, last: metro.LAST, board: journey.boardStop(),
+    });
+  }
+  // The plan from a train arrival: which exit, how far, next metro, how full,
+  // when she gets there, what it costs. `arrive` is a minute of the day.
+  if (p === '/api/journey') {
+    const arrive = parseInt(q.get('arrive'), 10);
+    if (!(arrive >= 0 && arrive < 2880)) return send(res, 400, { ok: false, error: 'arrive is a minute of the day' });
+    const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
+    return send(res, 200, journey.plan({ arriveAt: arrive, needs }));
+  }
+  // Issue a day pass. It is hers, it costs the metro fare, and it is scanned,
+  // not consumed.
+  if (p === '/api/pass' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to hold a pass.' });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
+    const id = crypto.randomBytes(6).toString('hex');
+    const r = journey.newPass({ id, who, date, holder: b.holder ? String(b.holder).slice(0, 60) : null,
+      covers: Array.isArray(b.covers) ? b.covers : undefined }, simNow().getTime());
+    if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
+    PASSES.set(id, r.pass);
+    journal.append({ t: 'pass', pass: r.pass });
+    return send(res, 200, { ok: true, pass: journey.publicOf(r.pass),
+      scanUrl: '/scan/' + id, qr: '/api/qr?d=' + encodeURIComponent(lanBase(req) + '/scan/' + id) });
+  }
+  if (p === '/api/pass') {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true });
+    return send(res, 200, { passes: [...PASSES.values()].filter(x => x.who === who)
+      .sort((a, b) => b.issuedAt - a.issuedAt).slice(0, 10).map(journey.publicOf) });
+  }
+  const mPass = p.match(/^\/api\/pass\/([a-f0-9]+)$/);
+  if (mPass) {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true });
+    const ps = PASSES.get(mPass[1]);
+    if (!ps || ps.who !== who) return send(res, 404, { error: 'no such pass' });
+    if (req.method === 'DELETE') {
+      journey.cancelPass(ps, simNow().getTime());
+      journal.append({ t: 'passgone', id: ps.id, at: ps.cancelledAt });
+    }
+    return send(res, 200, { ok: true, pass: journey.publicOf(ps), scanUrl: '/scan/' + ps.id,
+      qr: '/api/qr?d=' + encodeURIComponent(lanBase(req) + '/scan/' + ps.id) });
+  }
+  // The door. A conductor or a gate opens the QR and taps once. Open on purpose:
+  // the only thing a pass tells a stranger is whether it is good today.
+  const mScan = p.match(/^\/api\/scan\/([a-f0-9]+)$/);
+  if (mScan) {
+    const ps = PASSES.get(mScan[1]);
+    if (!ps) return send(res, 404, { ok: false, error: 'no such pass' });
+    if (req.method === 'POST') {
+      let b; try { b = await readBody(req); } catch { b = {}; }
+      const r = journey.scan(ps, { by: b.by ? String(b.by).slice(0, 40) : null,
+        mode: b.mode, where: b.where ? String(b.where).slice(0, 40) : null }, simNow().getTime());
+      if (!r.ok) return send(res, 409, { ok: false, error: r.reason, validOn: r.validOn || null, pass: journey.publicOf(ps) });
+      if (!r.repeat) journal.append({ t: 'passride', id: ps.id, ride: r.ride });
+      return send(res, 200, { ok: true, ride: r.ride, repeat: !!r.repeat, pass: journey.publicOf(ps) });
+    }
+    return send(res, 200, { ok: true, pass: journey.publicOf(ps), today: TODAY() });
+  }
+
   // ------------------------------------------------------------- sos --
   if (p === '/api/sos' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
@@ -1894,6 +1971,7 @@ function serveStatic(res, urlPath) {
   if (rel.startsWith('/locker/')) rel = '/locker.html';   // /locker/<id> from the QR
   if (rel === '/digilocker') rel = '/digilocker.html';    // the locker's own page
   if (rel === '/rpf' || rel.startsWith('/rpf/')) rel = '/rpf.html';  // the console, and one report
+  if (rel.startsWith('/scan/')) rel = '/scan.html';       // /scan/<pass>, the conductor's tap
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);

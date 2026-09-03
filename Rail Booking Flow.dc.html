@@ -1550,6 +1550,41 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div style="{{ q }}"></div>
           </sc-for>
         </div>
+      <div style="{{ jnWrap }}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font:700 10px/1 Manrope,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ jnLabel }}</div>
+          <div style="{{ jnBadgeStyle }}">{{ jnBadge }}</div>
+        </div>
+        <div style="{{ jnLoading }}">Working out the walk and the next metro…</div>
+        <div style="{{ jnLateStyle }}">{{ jnLateText }}</div>
+        <div style="{{ jnStepsWrap }}">
+          <sc-for list="{{ jnSteps }}" as="st" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--k-f0efeb)">
+              <div style="flex:none;width:12px;height:12px;border-radius:99px;margin-top:4px;{{ st.dotStyle }}"></div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div style="font:700 13.5px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ st.title }}</div>
+                  <div style="font:700 9px/1 Manrope,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:3px;{{ st.chipStyle }}">{{ st.chip }}</div>
+                </div>
+                <div style="font:600 12.5px/1.55 Manrope,sans-serif;color:var(--k-fg-40434a);margin-top:2px">{{ st.sub }}</div>
+                <div style="font:600 11.5px/1.55 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:3px;{{ st.noteStyle }}">{{ st.note }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="{{ jnFareStyle }}">{{ jnFare }}</div>
+        <button onClick="{{ jnPassBtn }}" style="{{ jnPassBtnStyle }}">{{ jnPassBtnLabel }}</button>
+        <div style="{{ jnPassErrStyle }}">{{ jnPassErr }}</div>
+        <div style="{{ jnPassWrap }}">
+          <img src="{{ jnPassQr }}" style="{{ jnPassQrStyle }}"></img>
+          <div style="flex:1;min-width:0">
+            <div style="font:700 14px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ jnPassHead }}</div>
+            <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-40434a);margin-top:3px">{{ jnPassSub }}</div>
+            <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:5px">{{ jnPassNote }}</div>
+            <div onClick="{{ jnPassCancel }}" style="{{ jnPassCancelStyle }}">Cancel this pass</div>
+          </div>
+        </div>
+      </div>
       </div>
       <div style="flex:1;min-width:170px">
         <div style="font:500 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:6px">PNR</div>
@@ -3233,6 +3268,12 @@ class Component extends DCLogic {
         if(victim)adds.push({pnr:'4500991177',train:victim.no,dayIdx:0,from:0,to:5,
           cls:'SL',quota:'General',pax:1,total:135,names:['Martin'],
           picks:[{coach:'S2',no:18,k:'free',at:null,price:135}]});
+        // a ticket that ends at Whitefield, so the journey after the train -
+        // the 150 m walk, the metro, the pass - always has a ticket to sit on
+        if(this.TRAINS.some(x=>x.no==='16316')&&!(this.state.bookings||[]).some(b=>b.pnr==='4500770988'))
+          adds.push({pnr:'4500770988',train:'16316',dayIdx:1,from:0,to:1,
+            cls:'SL',quota:'General',pax:1,total:110,names:['Achina'],travellers:[{name:'Achina'}],
+            picks:[{coach:'S4',no:31,k:'free',at:null,price:110}]});
         // a booking whose train runs 3h+ late -> the delay-shield band
         let lateT=null,lateD=0;
         for(let d=0;d<4&&!lateT;d++)
@@ -3246,8 +3287,10 @@ class Component extends DCLogic {
         if(dupT)['4500770355','4500770356'].forEach((pnr,i)=>adds.push({pnr,train:dupT.no,dayIdx:1,
           from:5,to:11,cls:'SL',quota:'General',pax:1,total:110,names:['Varun'],
           picks:[{coach:'S1',no:30+i,k:'free',at:null,price:110}]}));
-        if(adds.length&&!this.state.bookings.some(b=>b.pnr==='4500991177'))
-          this.setState({bookings:this.bstatApply(adds).concat(this.state.bookings)});
+        const have=new Set((this.state.bookings||[]).map(b=>b.pnr));
+        const fresh=adds.filter(b=>!have.has(b.pnr));
+        if(fresh.length)
+          this.setState({bookings:this.bstatApply(fresh).concat(this.state.bookings)});
         }
     }).catch(()=>{});
     this.syncAv();
@@ -4493,6 +4536,122 @@ class Component extends DCLogic {
       sosBtnDrop:big('transparent','#8b8b95','1px solid #2b2b36'),
       sosBtnDone:Object.assign(big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
         {display:(ph==='denied'||sent)?'block':'none',textAlign:'center',marginTop:18}),
+    };
+  }
+
+  /* ------------------------------------------------ after the train --
+     A ticket to Whitefield leaves a person on a platform 1.7 km from the
+     metro that shares its name, and 150 m from one that does not. The card
+     below is the telling: which exit, how far, next metro, how full, when
+     she gets there, what it costs - and one tap for a day's right to ride.
+     The plan comes from BMRCL's own data on the server; the pass is scanned
+     at the door, never used up. Nothing here is invented, and the two
+     sources say which they are. */
+  jnArrival(rec){
+    const tr=this.TRAINS.find(x=>x.no===rec.train);if(!tr)return null;
+    let m=this.sMin(tr,rec.to,'a');if(m==null)m=this.sMin(tr,rec.to,'d');
+    if(m==null)return null;
+    m=((m%1440)+1440)%1440;
+    // a late train arrives late; the walk and the metro start from when it
+    // actually stops, not when the timetable said it would
+    try{const dl=this.bigDelayOf(rec.train,rec.dayIdx||0);const extra=dl&&(dl.min||dl.minutes||dl.delay);
+      if(extra>0)m+=extra;}catch(e){}
+    return m;
+  }
+  jnKey(rec){const need=this.needOf((rec.travellers||[])[0]||{name:(rec.names||[])[0]},this.dateIsoFor(rec.dayIdx||0));
+    return rec.pnr+'|'+this.jnArrival(rec)+'|'+(need||'');}
+  /** The plan for this ticket, fetched once per arrival minute and cached. */
+  jnFor(rec){
+    if(!rec||rec.status==='refunded'||rec.to!==1)return null;   // only a ticket that ends at Whitefield
+    const arrive=this.jnArrival(rec);if(arrive==null)return null;
+    const key=this.jnKey(rec);this._jn=this._jn||{};
+    if(this._jn[key])return this._jn[key];
+    if(this._jnBusy===key)return null;this._jnBusy=key;
+    const need=key.split('|')[2];
+    this.authFetch('/api/journey?arrive='+arrive+(need?'&needs='+encodeURIComponent(need):''),{},8000)
+      .then(r=>r.json()).then(j=>{this._jn[key]=j;if(this._jnBusy===key)this._jnBusy=null;this.setState({jnTick:Date.now()});})
+      .catch(()=>{if(this._jnBusy===key)this._jnBusy=null;});
+    return null;
+  }
+  passes(){try{return JSON.parse(localStorage.getItem('khaali-pass')||'{}');}catch(e){return {};}}
+  passSet(pnr,p){const m=this.passes();if(p)m[pnr]=p;else delete m[pnr];
+    try{localStorage.setItem('khaali-pass',JSON.stringify(m));}catch(e){}this.setState({passTick:Date.now()});}
+  /** One tap. A day's right to ride, in her name, for the day she travels. */
+  async getPass(rec){
+    if(this._passBusy)return;this._passBusy=true;this.setState({passErr:''});
+    const holder=((rec.travellers||[])[0]||{}).name||(rec.names||[])[0]||null;
+    try{const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({holder,date:this.dateIsoFor(rec.dayIdx||0)})},9000);
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok)this.passSet(rec.pnr,{...j.pass,qr:j.qr,scanUrl:j.scanUrl});
+      else this.setState({passErr:(j&&j.error)||'khaali could not issue the pass. Nothing was charged.'});
+    }catch(e){this.setState({passErr:'khaali could not issue the pass. Nothing was charged.'});}
+    this._passBusy=false;
+  }
+  async dropPass(rec){
+    const p=this.passes()[rec.pnr];if(!p)return;
+    try{await this.authFetch('/api/pass/'+p.id,{method:'DELETE'},9000);}catch(e){}
+    this.passSet(rec.pnr,null);
+  }
+  jnBindings(rec){
+    const S=this.state,gone={display:'none'};
+    const P=this.jnFor(rec);
+    const pass=rec?this.passes()[rec.pnr]:null;
+    const show=!!(rec&&rec.to===1&&rec.status!=='refunded');
+    const purple='#8C2877';
+    const crowdTone=w=>w==='crush'?{bg:'var(--k-fdf3f5)',fg:'var(--k-fg-d8385a)'}:w==='busy'?{bg:'var(--k-fdf0e3)',fg:'var(--k-fg-8a4a12)'}:{bg:'var(--k-e6f4ec)',fg:'var(--k-fg-14663a)'};
+    const steps=[];
+    if(P&&P.ok){
+      const w=P.legs[0],m=P.legs[1],ca=m.crowdAlight;
+      steps.push({dotStyle:{background:'var(--k-8a8a84)'},
+        title:'Walk '+Math.round(w.km*1000)+' m \u00b7 about '+w.min+' min',
+        sub:'Off the train, '+(w.entrance?w.entrance.n+' of ':'')+w.to+(w.entrance&&w.entrance.lift?' \u00b7 lift':''),
+        note:'Not '+P.namesake.name+' \u2014 that one is '+(Math.round(P.namesake.km*10)/10)+' km the other way.',
+        noteStyle:{display:'block'},chip:'measured',chipStyle:{background:'var(--k-f1f1ee)',color:'var(--k-fg-6a6d75)'}});
+      steps.push({dotStyle:{background:purple},
+        title:m.line+' \u00b7 every '+m.every+' min',
+        sub:m.stops+' stops \u00b7 about '+Math.round(m.runMin)+' min \u00b7 board around '+m.board+', off at '+m.alight,
+        note:ca?(ca.word==='crush'?'Majestic is at its busiest at this hour.':ca.word==='busy'?'Majestic is busy at this hour.':'Majestic is quiet at this hour.'):'',
+        noteStyle:{display:ca?'block':'none',color:crowdTone(ca&&ca.word).fg},chip:'timetable',chipStyle:{background:'var(--k-f1f1ee)',color:'var(--k-fg-6a6d75)'}});
+      steps.push({dotStyle:{background:'var(--k-1f9d55)'},
+        title:'Majestic by '+P.arriveText,
+        sub:'KSR railway 420 m \u00b7 Kempegowda Bus Station next door',
+        note:'',noteStyle:gone,chip:'',chipStyle:gone});
+    }
+    const late=P&&!P.ok&&P.reason==='no-service';
+    return {
+      jnWrap:{display:show?'block':'none',padding:'16px 16px 14px',borderRadius:10,marginBottom:12,
+        background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+        maxWidth:'calc(100vw - 96px)',boxSizing:'border-box',overflowWrap:'anywhere'},
+      jnLabel:'After the train',
+      jnBadge:'Purple Line \u00b7 BMRCL',
+      jnBadgeStyle:{marginLeft:'auto',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
+        color:'#fff',background:purple,padding:'6px 8px',borderRadius:4},
+      jnLoading:{display:(show&&!P)?'block':'none',font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:10},
+      jnSteps:steps,
+      jnStepsWrap:{display:(P&&P.ok)?'block':'none',marginTop:12},
+      jnLateStyle:{display:late?'block':'none',marginTop:10,font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
+      jnLateText:late?(P.line+' Kempegowda Bus Station runs through the night; the pass covers any BMTC bus.'):'',
+      jnFare:(P&&P.ok)?('\u20b9'+P.fare.qr+' by QR \u00b7 \u20b9'+P.fare.smartcard+' by smart card'+(P.fare.peak?' (peak)':'')):'',
+      jnFareStyle:{display:(P&&P.ok)?'block':'none',font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:12,paddingTop:10,borderTop:'1px solid var(--k-f0efeb)'},
+      // the pass: one tap, then it is the card
+      jnPassBtn:()=>rec&&this.getPass(rec),
+      jnPassBtnStyle:{display:(show&&!pass)?'block':'none',marginTop:12,border:'none',width:'100%',
+        background:purple,color:'#fff',font:'700 14px/1 Manrope,sans-serif',padding:'15px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
+      jnPassBtnLabel:'Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus'+((P&&P.ok)?'':' (for the day you travel)'),
+      jnPassErr:S.passErr||'',
+      jnPassErrStyle:{display:S.passErr?'block':'none',marginTop:8,font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
+      jnPassWrap:{display:(show&&pass)?'flex':'none',gap:14,alignItems:'center',marginTop:12,padding:14,
+        borderRadius:10,background:'var(--k-fbfbfa)',border:'1px solid var(--k-e6e5e0)'},
+      jnPassQr:pass?pass.qr:'',
+      jnPassQrStyle:{flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
+      jnPassHead:pass?('Day pass \u00b7 '+(pass.holder||'you')):'',
+      jnPassSub:pass?('Good on '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+        +' \u00b7 metro and BMTC \u00b7 '+(pass.status==='valid'?'never used up':pass.status)):'',
+      jnPassNote:'Show this at the gate or to the conductor. Each tap is a ride, not a deduction.',
+      jnPassCancel:()=>rec&&this.dropPass(rec),
+      jnPassCancelStyle:{font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',marginTop:8,textDecoration:'underline'},
+      jnPassOpen:pass?(pass.scanUrl||'#'):'#',
     };
   }
 
@@ -6258,6 +6417,7 @@ class Component extends DCLogic {
           :P.verdict==='wait'?{bg:'var(--k-fdf0e3)',bd:'var(--k-e0a419)',fg:'var(--k-fg-8a4a12)',dot:'\u23f1'}
           :{bg:'var(--k-e6f4ec)',bd:'var(--k-1f9d55)',fg:'var(--k-fg-14663a)',dot:'\u2713'};
         return {
+          ...this.jnBindings(bk),
           ptWrap:{display:P?'block':'none',padding:'14px 16px',borderRadius:10,marginBottom:12,
             background:tone?tone.bg:'transparent',border:'1px solid '+(tone?tone.bd:'transparent')},
           ptDot:tone?tone.dot:'',

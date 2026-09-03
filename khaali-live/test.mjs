@@ -11,6 +11,8 @@ import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
 import * as dl from './digilocker.mjs';
 import * as sos from './sos.mjs';
+import * as JY from './journey.mjs';
+import * as M from './metro.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -161,9 +163,11 @@ t('exactly one wins', () => {
 });
 
 t('50 phones each grabbing a different berth all succeed', () => {
-  const picks = freeIdx.slice(30, 80);
+  const now = S.availability('16021', D, 'SL', 5, 13).berths.filter(b => b.k === 'free' && b.type !== 'LB').map(b => b.idx);
+  const picks = now.slice(30, 80);
   const ok = picks.map(i => S.hold({ train: '16021', date: D, cls: 'SL', from: 5, to: 13, berthIdxs: [i], pax: 1, who: 'x' + i }));
-  assert.strictEqual(ok.filter(r => r.ok).length, picks.length);
+  const refused = ok.filter(r => !r.ok).map(r => r.reason);
+  assert.strictEqual(ok.filter(r => r.ok).length, picks.length, 'refused: ' + JSON.stringify(refused));
   const view = S.availability('16021', D, 'SL', 5, 13);
   assert.strictEqual(view.counts.locked, picks.length);
   ok.forEach(r => S.release(r.hold.id));
@@ -1675,6 +1679,118 @@ t('a moment with no journey still works, and says so', () => {
   // and a journey that is not real is refused rather than stamped with a lie
   assert.strictEqual(sos.newAlert({ id: 'x', who: 'h', kind: 'mark', journey: { train: '99999' } }).reason, 'unknown-train');
   assert.strictEqual(sos.newAlert({ id: 'x', who: 'h', kind: 'nope', journey: J }).reason, 'bad-kind');
+});
+
+console.log('\njourney: the part after the train');
+
+t('the metro data is real, ordered, and says where it came from', () => {
+  assert.strictEqual(M.STOPS.length, 23);
+  assert.match(M.STOPS[0].n, /Whitefield/);
+  assert.match(M.STOPS[22].n, /Majestic/);
+  for (let i = 1; i < M.STOPS.length; i++) assert.ok(M.STOPS[i].min > M.STOPS[i - 1].min, 'run times climb');
+  assert.ok(M.STOPS[0].kn && /[\u0C80-\u0CFF]/.test(M.STOPS[0].kn), 'Kannada names are there');
+  assert.strictEqual(M.LINE.source, 'timetable');
+  assert.ok(M.STOPS.every(s => s.crowd.length === 24), 'a crowding figure for every hour');
+});
+
+t('the train passenger is sent to the nearest metro, not the namesake', () => {
+  const b = JY.boardStop();
+  assert.strictEqual(b.stop.id, 'KDGD', 'Kadugodi Tree Park, 150 m away');
+  assert.ok(b.km < 0.3, 'not the 1.7 km walk to Whitefield (Kadugodi)');
+  assert.ok(b.namesakeKm > 1.5, 'and the difference is on record: ' + b.namesakeKm);
+});
+
+t('headways follow BMRCL bands and go dark after the last train', () => {
+  assert.strictEqual(JY.headwayAt(JY.headwayAt && 12 * 60), 8, 'midday every 8');
+  assert.strictEqual(JY.headwayAt(5 * 60 + 10), 20, 'first trains every 20');
+  assert.strictEqual(JY.headwayAt(23 * 60), null, 'nothing after the last train');
+  assert.strictEqual(JY.headwayAt(4 * 60), null, 'nothing before the first');
+  const nm = JY.nextMetro(23 * 60, 2);
+  assert.strictEqual(nm.ok, false);
+  assert.strictEqual(nm.reason, 'no-service');
+});
+
+t('a plan from a train arrival reads in one breath and adds up', () => {
+  const p = JY.plan({ arriveAt: 8 * 60 + 47 });
+  assert.ok(p.ok, p.reason);
+  assert.strictEqual(p.legs.length, 2);
+  assert.strictEqual(p.legs[0].mode, 'walk');
+  assert.strictEqual(p.legs[1].mode, 'metro');
+  assert.strictEqual(p.legs[1].stops, 20);
+  assert.ok(p.legs[1].runMin > 40 && p.legs[1].runMin < 48, 'about 44 minutes: ' + p.legs[1].runMin);
+  assert.strictEqual(p.arrive - (8 * 60 + 47), p.totalMin);
+  assert.match(p.line, /150 m/);
+  assert.match(p.line, /Purple Line every \d+ min/);
+  assert.match(p.line, /there by/);
+  assert.strictEqual(p.fare.qr, 80);
+  assert.strictEqual(p.fare.smartcard, 76, 'peak smartcard fare at 9am');
+  assert.strictEqual(p.legs[1].source, 'timetable', 'and it says the metro time is a timetable, not a sighting');
+});
+
+t('off-peak is cheaper by card, and the plan says so honestly', () => {
+  const p = JY.plan({ arriveAt: 13 * 60 });
+  assert.strictEqual(p.fare.peak, false);
+  assert.strictEqual(p.fare.smartcard, 72);
+  assert.strictEqual(p.fare.qr, 80, 'QR is the same price all day');
+});
+
+t('after the last train the plan refuses, and names the first and last', () => {
+  const p = JY.plan({ arriveAt: 23 * 60 + 30 });
+  assert.strictEqual(p.ok, false);
+  assert.strictEqual(p.reason, 'no-service');
+  assert.match(p.line, /First train 05:00, last 22:45/);
+});
+
+t('someone who needs a lift is sent to an entrance that has one', () => {
+  const p = JY.plan({ arriveAt: 8 * 60 + 47, needs: ['senior'] });
+  assert.ok(p.legs[0].entrance.lift);
+  assert.strictEqual(p.legs[0].entrance.stepFree, true);
+  assert.match(p.line, /with a lift/);
+  const q = JY.plan({ arriveAt: 8 * 60 + 47 });
+  assert.strictEqual(q.legs[0].entrance.stepFree, false);
+});
+
+t('crowding is the station against its own worst hour', () => {
+  const kg = JY.crowdAt('KGWA', 18);
+  assert.strictEqual(kg.word, 'crush');
+  assert.strictEqual(kg.peakHour, 18);
+  const wh = JY.crowdAt('WHTM', 20);
+  assert.ok(wh.level < 0.4, 'Whitefield at 8pm is quiet: ' + wh.level);
+  assert.strictEqual(wh.word, 'quiet');
+  assert.strictEqual(JY.crowdAt('NOPE', 9), null);
+});
+
+t('a pass is a right to ride, not a seat: scanned, never used up', () => {
+  const r = JY.newPass({ id: 'p1', who: 'her@x', date: '2026-09-10', holder: 'Achina' }, at);
+  assert.ok(r.ok);
+  const p = r.pass;
+  assert.deepStrictEqual(p.covers, ['metro', 'bmtc']);
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  assert.ok(JY.scan(p, { by: 'gate', mode: 'metro', where: 'KDGD' }, day).ok);
+  assert.ok(JY.scan(p, { by: 'conductor 4471', mode: 'bmtc', where: '500D' }, day + 3600000).ok);
+  assert.ok(JY.scan(p, { by: 'conductor 2210', mode: 'bmtc', where: '335E' }, day + 7200000).ok, 'a third ride is still fine');
+  assert.strictEqual(p.rides.length, 3);
+  assert.strictEqual(JY.publicOf(p).rides, 3);
+});
+
+t('the same door twice in a minute is one tap, not two rides', () => {
+  const p = JY.newPass({ id: 'p2', who: 'h', date: '2026-09-10' }, at).pass;
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  JY.scan(p, { by: 'gate', mode: 'metro', where: 'KDGD' }, day);
+  const again = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KDGD' }, day + 20000);
+  assert.strictEqual(again.repeat, true);
+  assert.strictEqual(p.rides.length, 1);
+});
+
+t('a pass refuses the wrong day, a mode it never covered, and a cancelled one', () => {
+  const p = JY.newPass({ id: 'p3', who: 'h', date: '2026-09-10', covers: ['metro'] }, at).pass;
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  assert.strictEqual(JY.scan(p, { mode: 'bmtc' }, day).reason, 'not-covered');
+  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day + 86400000).reason, 'wrong-day');
+  assert.strictEqual(JY.scan(p, { mode: 'auto' }, day).reason, 'bad-mode');
+  JY.cancelPass(p, day);
+  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'cancelled');
+  assert.strictEqual(JY.newPass({ id: 'x', who: 'h', date: '2026-09-10', covers: ['auto'] }).reason, 'no-modes');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

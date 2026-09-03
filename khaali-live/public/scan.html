@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · day pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* One thumb, one glance. A conductor in a moving bus reads this in the time it
+     takes the passenger to find their footing. */
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0f13;color:#e8e9ee;font-family:Manrope,system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 18px 40px}
+  .brand{font:800 18px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .brand span{color:#d8385a}
+  .brand small{display:block;font:600 9.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c828f;margin-top:4px}
+  .state{margin-top:18px;border-radius:16px;padding:26px 22px;text-align:center;
+    border:1px solid #222836;background:#151922}
+  .state.good{background:#0f2b1b;border-color:#1f5a38}
+  .state.bad{background:#2c1219;border-color:#5a1f2e}
+  .state.off{background:#2a2413;border-color:#5a4a1f}
+  .word{font:800 34px/1.05 Manrope,sans-serif;letter-spacing:-.02em}
+  .good .word{color:#5bd48b}.bad .word{color:#f2a6b6}.off .word{color:#e0a419}
+  .sub{font:600 13.5px/1.5 Manrope,sans-serif;color:#b9bfcc;margin-top:8px}
+  .card{background:#151922;border:1px solid #222836;border-radius:12px;padding:16px;margin-top:12px}
+  .lbl{font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#7c828f;margin-bottom:8px}
+  .row{display:flex;gap:12px;align-items:baseline;padding:8px 0;border-top:1px solid #1c202a}
+  .row:first-of-type{border-top:none}
+  .k{flex:none;width:92px;font:600 12px/1.5 Manrope,sans-serif;color:#7c828f}
+  .v{flex:1;font:600 13.5px/1.5 Manrope,sans-serif}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  button{border:none;border-radius:12px;padding:20px 12px;cursor:pointer;
+    font:800 15px/1.2 Manrope,sans-serif;color:#fff;min-height:64px}
+  button.metro{background:#8C2877}
+  button.bus{background:#1f6fd0}
+  button:disabled{opacity:.45;cursor:default}
+  input{width:100%;background:#0d1015;border:1px solid #2a3040;border-radius:10px;padding:13px;
+    color:#e8e9ee;font:600 14px/1 Manrope,sans-serif;outline:none;margin-top:10px}
+  input:focus{border-color:#3d566f}
+  .rides{margin-top:12px}
+  .ride{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid #1c202a;
+    font:600 12.5px/1.4 Manrope,sans-serif}
+  .ride:first-child{border-top:none}
+  .dot{width:9px;height:9px;border-radius:99px;flex:none}
+  .note{font:500 11.5px/1.7 Manrope,sans-serif;color:#7c828f;margin-top:16px}
+  @keyframes flash{0%{transform:scale(.98)}40%{transform:scale(1.02)}100%{transform:scale(1)}}
+  .state.pop{animation:flash .28s ease-out}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">khaali<span>.</span><small>day pass &middot; metro + BMTC &middot; simulated</small></div>
+  <div id="state" class="state"><div class="word">Opening&hellip;</div></div>
+  <div id="out"></div>
+</div>
+
+<script>
+const ID = location.pathname.split('/').filter(Boolean)[1] || '';
+const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild || d; };
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const day = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+let pass = null, today = null, busy = false;
+
+/** The big word. A conductor needs GOOD or NO before anything else. */
+function setState(cls, word, sub) {
+  const el = document.getElementById('state');
+  el.className = 'state ' + cls + ' pop';
+  el.innerHTML = '<div class="word">' + esc(word) + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '');
+  setTimeout(() => el.classList.remove('pop'), 300);
+}
+
+function render() {
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+  if (!pass) return;
+  const valid = pass.status === 'valid';
+  const isToday = pass.date === today;
+  if (!valid) setState('bad', 'Not valid', 'This pass was cancelled.');
+  else if (!isToday) setState('off', 'Not today', 'Valid on ' + esc(day(pass.date)) + ' only. Today is ' + esc(day(today)) + '.');
+  else setState('good', 'Good today', esc(pass.holder || 'Pass holder') + ' &middot; ' + pass.rides + (pass.rides === 1 ? ' ride' : ' rides') + ' so far');
+
+  out.appendChild($('<div class="card">' +
+    '<div class="row"><div class="k">Holder</div><div class="v">' + esc(pass.holder || '—') + '</div></div>' +
+    '<div class="row"><div class="k">Valid on</div><div class="v">' + esc(day(pass.date)) + '</div></div>' +
+    '<div class="row"><div class="k">Covers</div><div class="v">' + pass.covers.map(m => m === 'bmtc' ? 'BMTC bus' : 'Namma Metro').join(' &middot; ') + '</div></div>' +
+    '<div class="row"><div class="k">Paid</div><div class="v">&#8377;' + esc(pass.fare) + ' &middot; one day, any number of rides</div></div>' +
+    '<div class="row"><div class="k">Pass</div><div class="v mono">' + esc(pass.id) + '</div></div></div>'));
+
+  // The tap. One for the gate, one for the bus door. `where` is optional and
+  // costs a second; the tap itself costs nothing.
+  const can = valid && isToday && !busy;
+  const box = $('<div class="card"><div class="lbl">Mark a ride</div>' +
+    '<input id="where" placeholder="Bus number or station (optional)" autocomplete="off">' +
+    '<div class="btns"><button class="metro" ' + (can ? '' : 'disabled') + '>Metro gate</button>' +
+    '<button class="bus" ' + (can ? '' : 'disabled') + '>Bus conductor</button></div></div>');
+  const [bm, bb] = box.querySelectorAll('button');
+  bm.onclick = () => tap('metro'); bb.onclick = () => tap('bmtc');
+  out.appendChild(box);
+
+  if (pass.last) {
+    out.appendChild($('<div class="card"><div class="lbl">Last ride</div>' +
+      '<div class="ride"><span class="dot" style="background:' + (pass.last.mode === 'metro' ? '#8C2877' : '#1f6fd0') + '"></span>' +
+      'Ride ' + esc(pass.last.n) + ' &middot; ' + (pass.last.mode === 'metro' ? 'Metro' : 'BMTC') +
+      (pass.last.where ? ' &middot; ' + esc(pass.last.where) : '') + ' &middot; ' + clock(pass.last.at) + '</div></div>'));
+  }
+
+  out.appendChild($('<div class="note">A pass is a right to ride, not a ticket. It is never used up: ' +
+    'each tap is a record of a ride, not a deduction. The same door twice within a minute counts once. ' +
+    'This page is a stand-in for the gate and the conductor&rsquo;s machine; no fare has moved.</div>'));
+}
+
+async function tap(mode) {
+  if (busy) return; busy = true; render();
+  const where = (document.getElementById('where') || {}).value || '';
+  try {
+    const r = await fetch('/api/scan/' + encodeURIComponent(ID), { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode, where: where.trim() || null, by: mode === 'metro' ? 'gate' : 'conductor' }) });
+    const j = await r.json();
+    busy = false;
+    if (j.pass) pass = j.pass;
+    if (!j.ok) {
+      const why = j.error === 'wrong-day' ? 'Valid on ' + esc(day(j.validOn)) + ', not today.'
+        : j.error === 'not-covered' ? 'This pass does not cover ' + (mode === 'metro' ? 'the metro' : 'buses') + '.'
+        : j.error === 'cancelled' ? 'This pass was cancelled.' : 'Refused: ' + esc(j.error);
+      render(); setState('bad', 'No', why); return;
+    }
+    render();
+    setState('good', j.repeat ? 'Already marked' : 'Ride ' + j.ride.n,
+      (mode === 'metro' ? 'Metro' : 'BMTC') + (j.ride.where ? ' &middot; ' + esc(j.ride.where) : '') + ' &middot; ' + clock(j.ride.at));
+  } catch (e) { busy = false; render(); setState('bad', 'No signal', 'Could not reach khaali. Let them ride; try again at the next stop.'); }
+}
+
+async function pull() {
+  try {
+    const r = await fetch('/api/scan/' + encodeURIComponent(ID));
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json();
+    pass = j.pass; today = j.today;
+    if (!busy) render();
+  } catch (e) {
+    document.getElementById('out').innerHTML = '';
+    setState('bad', 'No such pass', 'The code is wrong, or the pass was never issued.');
+  }
+}
+pull();
+setInterval(pull, 8000);
+</script>
+</body>
+</html>

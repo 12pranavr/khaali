@@ -239,6 +239,59 @@ function select(no){
   }
 }
 
+// ---------------------------------------------------------------- metro --
+// The Purple Line from Whitefield to Majestic, from BMRCL's own timetable and
+// ridership data. Stations are tinted by how busy they are at THIS hour, from
+// real hourly entries; the walk from Whitefield railway to the metro that is
+// actually nearest (Kadugodi Tree Park, 150 m) is drawn, because the one that
+// shares the railway's name is 1.7 km the other way. There is no live position
+// for a metro train - nobody publishes one - so none is pretended.
+let metroLayer=null, metroStops=[];
+const crowdColor=l=>l>=0.75?'#e0403b':l>=0.4?'#e0a419':'#2fa866';
+const crowdWord=l=>l>=0.75?'crush':l>=0.4?'busy':'quiet';
+function hourNow(){try{return simNowHour();}catch(e){return new Date().getHours();}}
+function simNowHour(){const d=lastNow?new Date(lastNow):new Date();return d.getHours();}
+let lastNow=null;
+async function drawMetro(){
+  let m;
+  try{m=await fetch('/api/metro').then(r=>{if(!r.ok)throw 0;return r.json();});}catch(e){return;}
+  if(metroLayer)map.removeLayer(metroLayer);
+  metroLayer=L.layerGroup().addTo(map);
+  const line=L.polyline(m.shape,{color:m.line.color,weight:4,opacity:.95}).addTo(metroLayer);
+  line.bindTooltip(`<b>${m.line.name}</b><br>${m.line.from} → ${m.line.to} · BMRCL timetable`,{className:'st-tip',sticky:true});
+  const h=hourNow();
+  metroStops=[];
+  m.stops.forEach((st,i)=>{
+    const peak=Math.max.apply(null,st.crowd.concat([1]));
+    const lvl=(st.crowd[h]||0)/peak;
+    const ends=i===0||i===m.stops.length-1;
+    const isBoard=st.id===m.board.stop.id;
+    const dot=L.circleMarker([st.lat,st.lng],{radius:ends||isBoard?7:4.5,color:m.line.color,weight:2,
+      fillColor:crowdColor(lvl),fillOpacity:1}).addTo(metroLayer);
+    dot._crowd=st.crowd;dot._peak=peak;
+    dot.bindTooltip(`<b>${st.n}</b><br>${st.kn||''}<br>${crowdWord(lvl)} now · ${st.crowd[h]||0} entries this hour · busiest ${String(st.crowd.indexOf(peak)).padStart(2,'0')}:00`,{className:'st-tip'});
+    metroStops.push(dot);
+    if(ends||isBoard){
+      const label=isBoard?`${st.n.replace(/ metro$/,'')} · ${Math.round(m.board.km*1000)} m from the railway`:st.n.replace(/^.*, /,'');
+      L.marker([st.lat,st.lng],{interactive:false,icon:L.divIcon({className:'',
+        html:`<div class="stlabel" style="transform:translate(10px,-7px);border-left:3px solid ${m.line.color}">${label}</div>`,iconSize:[0,0]})}).addTo(metroLayer);
+    }
+  });
+  // the walk that nobody tells you about
+  const rail=ST.find(x=>x.c==='WFD');
+  if(rail){
+    L.polyline([[rail.lat,rail.lng],[m.board.stop.lat,m.board.stop.lng]],{color:'#7c828f',weight:3,dashArray:'2 7',opacity:.9}).addTo(metroLayer)
+      .bindTooltip(`Walk · ${Math.round(m.board.km*1000)} m · about ${m.board.walkMin} min`,{className:'st-tip',sticky:true});
+  }
+  // widen the view to take the city in
+  try{map.fitBounds(L.latLngBounds(ST.map(s=>[s.lat,s.lng]).concat(m.shape)).pad(0.08));}catch(e){}
+}
+/** Re-tint the metro as the hour moves, so a map left open stays true. */
+function retintMetro(){
+  const h=hourNow();
+  metroStops.forEach(d=>{const lvl=(d._crowd[h]||0)/d._peak;d.setStyle({fillColor:crowdColor(lvl)});});
+}
+
 let corridorDrawn=false;
 async function boot(){
   let geo;
@@ -271,6 +324,7 @@ async function boot(){
   });
   map.fitBounds(L.latLngBounds(pts).pad(0.12));
   mapEl.classList.toggle('z-out',map.getZoom()<9);
+  drawMetro();                                  // the city after the train
   await tick();
   schedule(4000);
   // the clock is shared by everyone, so moving it needs the signed-in token
@@ -302,6 +356,7 @@ async function tick(){
   try{
     const c2=new AbortController();const k2=setTimeout(()=>c2.abort(),6000);
     d=await fetch('/api/live',{signal:c2.signal}).then(r=>{if(!r.ok)throw 0;return r.json();}).finally(()=>clearTimeout(k2));
+    if(d&&d.now){lastNow=d.now;retintMetro();}
   }catch(e){
     $('#runCount').textContent='reconnecting…';
     return;                      // keep the last good picture, try again next poll
