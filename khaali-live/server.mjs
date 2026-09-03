@@ -1023,40 +1023,25 @@ async function api(req, res, url) {
   // What the RPF would be looking at. In the real thing this is their console;
   // here it is a page anyone holding the reference can open, which is exactly
   // what makes it demonstrable. Nothing here is a live police system.
-  // The console list. A page of women's names, numbers and live positions is
-  // not something to leave open on the internet, so this is shut unless a key
-  // is configured and given. Without one it shows the caller their own reports
-  // and nobody else's, and says so.
+  // The console list: every report anyone sent to the RPF, newest first. Open,
+  // the way the real thing would be to an officer on duty - no key, no sign-in.
+  // A moment she kept, or sent only to someone she trusts, is not here; neither
+  // is one she deleted. Only what she handed to the RPF herself.
   if (p === '/api/rpf') {
-    const want = process.env.ADMIN_TOKEN || '';
-    const key = String(q.get('key') || '');
-    // A wrong key is a guess at a page of real live positions. Ten a minute per
-    // caller turns a short token from something you brute-force in seconds into
-    // something you cannot, whatever the operator chose to set.
-    if (key && key !== want) {
-      const g = limits.hit('rpfkey|' + limits.callerOf(req), 10, 60000);
-      if (!g.ok) return send(res, 429, { needsAuth: true, keyed: !!want,
-        retryAfter: g.retryAfter,
-        error: 'Too many console keys tried. Wait a minute and try again.' });
-    }
-    const all = want && key && key === want;
-    const who = all ? null : await whoIs(req);
-    if (!all && !who) return send(res, 401, { needsAuth: true, keyed: !!want,
-      error: 'Sign in to see your own reports, or open the console with its key.' });
     const rows = [...ALERTS.values()]
       .filter(a => a.channel === 'rpf' && a.status !== 'deleted' && a.stamp)
-      .filter(a => all || a.who === who)
       .sort((x, y) => (y.sentAt || y.createdAt) - (x.sentAt || x.createdAt))
       .slice(0, 60)
       .map(a => sos.forRpf(a));
-    return send(res, 200, { reports: rows, scope: all ? 'all' : 'mine', keyed: !!want });
+    return send(res, 200, { reports: rows });
   }
 
   const mRpf = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})$/);
   if (mRpf) {
     const a = [...ALERTS.values()].find(x => x.ref === mRpf[1] && x.channel === 'rpf');
-    if (!a) return send(res, 404, { error: 'no such report' });
-    return send(res, 200, { report: sos.forRpf(a) });
+    const report = a ? sos.forRpf(a) : null;
+    if (!report) return send(res, 404, { error: 'no such report' });
+    return send(res, 200, { report });
   }
 
   // ------------------------------------------------------------- sos --

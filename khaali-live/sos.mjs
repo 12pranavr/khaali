@@ -250,10 +250,12 @@ export function forRpf(a, now = Date.now()) {
     line: lineOf(a),
     train: s.train, trainName: s.trainName, coach: s.coach, berth: s.berth,
     pnr: s.pnr, date: s.date, verified: !!s.verified,
+    // Where she is, in stations rather than in numbers. The console needs
+    // "between Ramanagara and Channapatna" to put someone on a platform; it has
+    // never needed her coordinates, so they are not handed out.
     place: s.place || null,
-    fix: last,
-    // how old the last fix is, so nobody stands on a platform trusting a
-    // position that stopped moving twenty minutes ago
+    // how old that is, so nobody stands on a platform trusting a position that
+    // stopped moving twenty minutes ago
     fixAgeSec: last ? Math.max(0, Math.round((now - last.at) / 1000)) : null,
     heading: dir,
     next,

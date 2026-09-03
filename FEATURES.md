@@ -997,27 +997,18 @@ old the position is - green *Live*, amber *Last seen*, red when cold - because
 a stale position presented as current is what puts an officer on the wrong
 platform.
 
-`/rpf` is the list: every report sent to the RPF, newest first, each showing
-who, where, and the next station. A page of women's names, numbers and live
-positions is not something to leave open on the internet, so it is **shut by
-default**, and there are exactly two ways through:
+`/rpf` is the list: every report anyone has sent to the RPF, newest first, each
+showing who, where, and the next station. It is open - no key, no sign-in - the
+way the real thing would be to an officer on duty.
 
-- **Signed in to khaali** - the console shares an origin with the app, reads the
-  session from `localStorage` and sends it as a bearer token, so it shows you
-  the reports *you* raised. This is the demo path.
-- **The console key** - a field on the gate, checked against `ADMIN_TOKEN`,
-  which opens the full list.
+What is *not* on it matters as much as what is. A moment she kept to herself,
+or sent only to someone she trusts, never reaches this page; nor does one she
+deleted. Only what she handed to the RPF herself.
 
-If no `ADMIN_TOKEN` is configured, nobody can open the full list at all, and the
-page says so.
-
-Wrong keys are rate limited to ten a minute per caller, which is what makes a
-short operator-chosen token survive contact with the internet - a six-digit key
-is otherwise brute-forced in seconds. A *correct* key is never counted, so an
-operator cannot be locked out by somebody else guessing at the door. The failure is closed, not open. There is deliberately no key
-committed to this repository: the positions on that page are real ones, taken
-from the phone of whoever raised the report, and a key in a public repo would
-make a stranger's live location public with it.
+The console is given her position in stations - *between Ramanagara and
+Channapatna* - and never her coordinates. That is all it needs to put someone
+on a platform, and it means an open page cannot be used to plot anybody on a
+map.
 
 Reports are journalled in full - the alert on creation, each fix, the handover
 with its contact, and the deletion - and replayed into memory at boot. Before

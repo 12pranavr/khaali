@@ -41,14 +41,6 @@
     background:none;border:none;padding:0;border-radius:0;box-shadow:none}
   .warn{background:#2a1620;border:1px solid #45202f;color:#f2a6b6;
     font:600 12.5px/1.6 Manrope,sans-serif;padding:13px 15px;border-radius:9px;margin-top:14px}
-  input.key{width:100%;box-sizing:border-box;background:#0d1015;border:1px solid #2a3040;
-    border-radius:9px;padding:14px;color:#e8e9ee;font:600 14px/1 Manrope,sans-serif;
-    margin-top:12px;outline:none}
-  input.key:focus{border-color:#3d566f}
-  button.go,a.go{display:block;width:100%;box-sizing:border-box;text-align:center;
-    background:#d8385a;color:#fff;border:none;text-decoration:none;
-    font:700 14.5px/1 Manrope,sans-serif;padding:15px;border-radius:9px;
-    margin-top:10px;cursor:pointer}
   a.alt{display:block;text-align:center;text-decoration:none;border:1px solid #2a3040;
     color:#c3c9d4;font:700 13.5px/1 Manrope,sans-serif;padding:14px;border-radius:9px;
     margin-top:10px}
@@ -68,26 +60,6 @@
 
 <script>
 const REF = location.pathname.split('/').filter(Boolean)[1] || '';
-let KEY = new URLSearchParams(location.search).get('key') ||
-  sessionStorage.getItem('khaali-rpfkey') || '';
-
-/**
- * The console shares an origin with khaali, so a person already signed in there
- * is already signed in here - it simply has to say so. Without this the page
- * asked people to sign in and then never looked at whether they had.
- */
-function authHdr() {
-  try {
-    const a = JSON.parse(localStorage.getItem('khaali-auth') || 'null');
-    return a && a.token ? { authorization: 'Bearer ' + a.token } : {};
-  } catch (e) { return {}; }
-}
-function signedInAs() {
-  try {
-    const a = JSON.parse(localStorage.getItem('khaali-auth') || 'null');
-    return a && a.email ? a.email : null;
-  } catch (e) { return null; }
-}
 const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d; };
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -177,6 +149,7 @@ function render(r) {
       'You have the report and the position, and nothing else.</div></div>'));
   }
 
+  out.appendChild($('<a class="alt" href="/rpf">All reports</a>'));
   out.appendChild($('<div class="note">This page is a stand-in for the console the ' +
     'Railway Protection Force would use. No report has been filed with any real force, ' +
     'and khaali has never held the photograph or the video &mdash; only the line above. ' +
@@ -191,7 +164,7 @@ function renderList(j) {
   if (!j.reports.length) {
     out.appendChild($('<div class="card"><div class="big">Nothing waiting</div>' +
       '<div class="v" style="margin-top:8px;color:#7c828f">No reports have been sent to ' +
-      'the RPF' + (j.scope === 'mine' ? ' by you' : '') + '.</div></div>'));
+      'the RPF yet. Raise one from khaali and it appears here.</div></div>'));
   }
   j.reports.forEach(r => {
     const age = r.fixAgeSec;
@@ -211,91 +184,20 @@ function renderList(j) {
         esc(r.ref) + ' &middot; ' + new Date(r.at).toLocaleString('en-GB') + '</div>' +
       '</div></a>'));
   });
-  if (j.scope === 'mine') {
-    const open = document.createElement('a');
-    open.className = 'alt'; open.href = '#';
-    open.textContent = 'Open the full console';
-    open.onclick = e => { e.preventDefault(); gateUp = false; renderGate(!!j.keyed); };
-    out.appendChild(open);
-    out.appendChild($('<div class="note">You are seeing only the reports you raised. ' +
-      'The full console needs its key, and khaali will not list other people&rsquo;s names, ' +
-      'numbers and positions on an open page without one' +
-      (j.keyed ? '.' : ' &mdash; and no key is configured on this server, so nobody can.') +
-      '</div>'));
-  }
-}
-
-/** The way in. Shown once, then left alone so a half-typed key survives the poll. */
-let gateUp = false;
-function renderGate(keyed, waitMsg) {
-  if (gateUp) return;
-  gateUp = true;
-  const who = signedInAs();
-  const out = document.getElementById('out');
-  out.innerHTML = '';
-  out.appendChild($('<div class="card none">' +
-    '<div class="big">Not open</div>' +
-    '<div class="v" style="margin-top:8px">' +
-    (who
-      ? 'You are signed in to khaali as ' + esc(who) + ', but no report you raised is ' +
-        'here yet. Raise one from the app and it will appear.'
-      : 'Sign in to khaali and this console will show the reports you raised. ' +
-        'The full list &mdash; everybody&rsquo;s &mdash; needs the console key.') +
-    '</div></div>'));
-
-  const box = $('<div class="card">' +
-    '<div class="lbl">Open the full console</div>' +
-    '<div class="v" style="color:#9aa1ae">' +
-    (waitMsg ? esc(waitMsg)
-      : keyed
-      ? 'Enter the console key set on this server.'
-      : 'No console key is set on this server, so the full list cannot be opened by ' +
-        'anyone. Set ADMIN_TOKEN to enable it.') +
-    '</div></div>');
-  const card = box.firstChild;
-  const input = document.createElement('input');
-  input.className = 'key'; input.type = 'password'; input.placeholder = 'Console key';
-  input.autocomplete = 'off';
-  const go = document.createElement('button');
-  go.className = 'go'; go.textContent = 'Open the console';
-  const submit = () => {
-    KEY = input.value.trim();
-    try { sessionStorage.setItem('khaali-rpfkey', KEY); } catch (e) {}
-    gateUp = false; pull();
-  };
-  go.onclick = submit;
-  input.onkeydown = e => { if (e.key === 'Enter') submit(); };
-  card.appendChild(input); card.appendChild(go);
-  out.appendChild(box);
-
-  const alt = document.createElement('a');
-  alt.className = 'alt'; alt.href = '/';
-  alt.textContent = who ? 'Back to khaali' : 'Sign in on khaali';
-  out.appendChild(alt);
-
-  out.appendChild($('<div class="note">This console is shut unless you are signed in ' +
-    'or hold its key, and that is deliberate. A list of women&rsquo;s names, phone numbers ' +
-    'and live positions is not something to leave open on the internet &mdash; the ' +
-    'positions on it are real ones, from the phones of whoever raised the report.</div>'));
+  out.appendChild($('<div class="note">Every report anyone has sent to the RPF, ' +
+    'newest first. A moment she kept to herself, or sent only to someone she trusts, ' +
+    'is not here &mdash; and neither is one she deleted. This page is a stand-in for ' +
+    'the console the Railway Protection Force would use; no report has been filed with ' +
+    'any real force.</div>'));
 }
 
 async function pull() {
-  const url = REF ? '/api/rpf/' + encodeURIComponent(REF)
-    : '/api/rpf' + (KEY ? '?key=' + encodeURIComponent(KEY) : '');
   try {
-    const r = await fetch(url, { headers: authHdr() });
-    if (!r.ok) { const e = new Error(String(r.status)); e.body = await r.json().catch(() => ({})); throw e; }
+    const r = await fetch(REF ? '/api/rpf/' + encodeURIComponent(REF) : '/api/rpf');
+    if (!r.ok) throw new Error(String(r.status));
     const j = await r.json();
-    gateUp = false;
     if (REF) render(j.report); else renderList(j);
   } catch (e) {
-    const code = String(e.message);
-    // being told to wait is a different thing from being told no, and the
-    // person on the gate needs to know which one happened
-    if (!REF && (code === '401' || code === '429'))
-      return renderGate(!!(e.body && e.body.keyed), code === '429' ? (e.body || {}).error : '');
-    if (gateUp) return;
-    gateUp = true;
     document.getElementById('out').innerHTML =
       '<div class="card none"><div class="big">No such report</div>' +
       '<div class="v" style="margin-top:8px">Either the reference is wrong, or the ' +
