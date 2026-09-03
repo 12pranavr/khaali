@@ -1277,5 +1277,124 @@ t('a request lapses, and a lapsed request reads nothing', () => {
 });
 
 
+console.log('\nthe waitlist fallback: move me only if all of this holds');
+const fbReq = (fb, x = {}) => oReq({ train: '16021', classes: ['SL'], cap: 5000, fallback: fb, ...x });
+const fbOrder = (fb, d, x = {}) => {
+  const v = orders.validate(fbReq(fb, x), d);
+  assert.ok(v.ok, v.error);
+  return { ...v.order, id: 'fb', who: 'me@x', status: 'open', openedAt: 1 };
+};
+const FB = { on: true, classes: ['SL', '3A'], after: 0, before: 1440, arriveBy: null, extra: 200 };
+
+t('a fallback is disbelieved, and only a waitlist may carry one', () => {
+  const d = oDeps();
+  assert.strictEqual(orders.validate(fbReq({ ...FB, classes: [] }), d).ok, false, 'no classes');
+  assert.strictEqual(orders.validate(fbReq({ ...FB, after: 600, before: 600 }), d).ok, false, 'empty window');
+  assert.strictEqual(orders.validate(fbReq({ ...FB, arriveBy: 0 }), d).ok, false, 'arrive-by must be after midnight');
+  assert.strictEqual(orders.validate(fbReq({ ...FB, arriveBy: 2881 }), d).ok, false, 'and inside two days');
+  assert.ok(orders.validate(fbReq({ ...FB, arriveBy: 1800 }), d).ok, 'six the next morning is fine');
+  assert.strictEqual(orders.validate(fbReq({ ...FB, extra: -1 }), d).ok, false, 'negative headroom');
+  // a flexible order is not a waitlist, so it carries no fallback
+  const flex = orders.validate(oReq({ classes: ['SL'], cap: 5000, fallback: FB }), d);
+  assert.ok(flex.ok);
+  assert.strictEqual(flex.order.fallback, undefined, 'only a pinned order gets one');
+  assert.strictEqual(orders.fallbackRules(flex.order), null);
+});
+
+t('the rules keep the journey, the party and the money exactly as they were', () => {
+  const d = oDeps();
+  const o = fbOrder(FB, d);
+  const rules = orders.fallbackRules(o);
+  assert.strictEqual(rules.train, null, 'other trains become visible');
+  assert.deepStrictEqual(rules.classes, ['SL', '3A']);
+  // the three things Vikalp changes and khaali cannot
+  assert.strictEqual(rules.from, undefined, 'from is never overridden');
+  assert.strictEqual(rules.to, undefined, 'to is never overridden');
+  assert.strictEqual(rules.pax, undefined, 'the party is never split');
+  assert.strictEqual(rules.cap, undefined, 'the blocked amount still binds');
+  const view = { ...o, ...rules };
+  assert.strictEqual(view.from, o.from);
+  assert.strictEqual(view.to, o.to);
+  assert.strictEqual(view.cap, o.cap);
+});
+
+t('arrive-by filters candidates, and reads as the first such time after departure', () => {
+  const d = oDeps();
+  const all = orders.candidates({ ...fbOrder(FB, d), ...orders.fallbackRules(fbOrder(FB, d)) }, d);
+  assert.ok(all.length > 1, 'several trains without the rule');
+  const early = orders.candidates({ ...fbOrder({ ...FB, arriveBy: 360 }, d),
+    ...orders.fallbackRules(fbOrder({ ...FB, arriveBy: 360 }, d)), arriveBy: 360 }, d);
+  assert.ok(early.length < all.length, 'the rule removes some: ' + early.length + ' of ' + all.length);
+  // and every survivor really does arrive by six that morning
+  for (const c of early) {
+    const tr = TRAINS.find(x => x.no === c.train);
+    const dur = sMin(tr, 13, 'a') - sMin(tr, 5, 'd');
+    assert.ok(c.dep + dur <= 360, c.train + ' arrives after 06:00');
+  }
+});
+
+t('the fallback runs only once the waitlist has actually failed', () => {
+  S.reset();
+  const d = oDeps();
+  const o = fbOrder(FB, d, { date: '2026-09-12' });
+  // before charting, the pinned train is the only candidate
+  assert.strictEqual(orders.chartedOut(o, d), false);
+  assert.ok(orders.candidates(o, d).every(c => c.train === '16021'), 'pinned until it fails');
+  S.chart('16021', '2026-09-12', 'SL');
+  assert.strictEqual(orders.chartedOut(o, d), true, 'the chart is the moment it failed');
+  // and only then do other trains come into view
+  const alt = orders.candidates({ ...o, ...orders.fallbackRules(o) }, d);
+  assert.ok(alt.some(c => c.train !== '16021'), 'other trains now considered');
+});
+
+t('a move fills the same order, from the same block, and is marked as a move', () => {
+  S.reset();
+  const d = oDeps();
+  const o = fbOrder(FB, d, { date: '2026-09-13' });
+  S.chart('16021', '2026-09-13', 'SL');
+  const r = orders.tryFill(o, d, orders.fallbackRules(o));
+  assert.ok(r.ok, r.reason);
+  assert.strictEqual(r.via, 'fallback');
+  assert.strictEqual(o.via, 'fallback');
+  assert.strictEqual(o.status, 'filled');
+  assert.ok(o.paid <= o.cap, 'never more than was blocked');
+  assert.strictEqual(S.getBooking(o.pnr).who, 'me@x');
+  assert.strictEqual(S.getBooking(o.pnr).from, o.from, 'boarding station unchanged');
+  assert.strictEqual(S.getBooking(o.pnr).to, o.to, 'destination unchanged');
+  assert.strictEqual(S.getBooking(o.pnr).pax, o.pax, 'party kept whole');
+});
+
+t('when a rule blocks the move, khaali names the rule rather than shrugging', () => {
+  S.reset();
+  const d = oDeps();
+  // nothing on this corridor reaches Mysuru by 02:00, so arrive-by binds
+  const o = fbOrder({ ...FB, arriveBy: 120 }, d, { date: '2026-09-14' });
+  const rules = orders.fallbackRules(o);
+  const r = orders.tryFill(o, d, rules);
+  assert.strictEqual(r.ok, false);
+  const why = orders.whyNot(o, d, rules);
+  assert.strictEqual(why.rule, 'arriveBy', JSON.stringify(why));
+  assert.ok(why.n > 0, 'and says how many trains it cost');
+  assert.match(why.why, /arrive later/);
+  // with no fallback at all there is nothing to explain
+  const plain = { ...fbOrder(FB, d, { date: '2026-09-14' }), fallback: null };
+  assert.strictEqual(orders.fallbackRules(plain), null);
+});
+
+t('the price rule and the window rule each bind on their own', () => {
+  S.reset();
+  const d = oDeps();
+  // blocked at the sleeper fare with no headroom, so an AC alternative is out
+  const tight = fbOrder({ ...FB, classes: ['2A'], extra: 0 }, d, { date: '2026-09-15', cap: 200 });
+  const wCap = orders.whyNot(tight, d, orders.fallbackRules(tight));
+  assert.strictEqual(wCap.rule, 'cap', JSON.stringify(wCap));
+  assert.ok(wCap.n > 0, 'and says how many trains the price rule cost');
+  // 23:56 to midnight: nothing on this corridor leaves then
+  const narrow = fbOrder({ ...FB, after: 1436, before: 1440 }, d, { date: '2026-09-15', cap: 5000 });
+  const wWin = orders.whyNot(narrow, d, orders.fallbackRules(narrow));
+  assert.strictEqual(wWin.rule, 'window', JSON.stringify(wWin));
+});
+
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

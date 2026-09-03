@@ -111,7 +111,8 @@ function travellersIn(list, date) {
 const publicOrder = o => ({
   id: o.id, who: o.who, from: o.from, to: o.to, date: o.date, after: o.after, before: o.before,
   classes: o.classes, pax: o.pax, cap: o.cap, cheapest: o.cheapest, method: o.method, payId: o.payId,
-  train: o.train || null, travellers: o.travellers || [],
+  train: o.train || null, travellers: o.travellers || [], fallback: o.fallback || null,
+  via: o.via || null, declined: o.declined || null,
   ...(o.status === 'open' ? orders.queueOf(o, [...ORDERS.values()], orderDeps) : { position: null, flexAhead: 0 }),
   status: o.status, placedAt: o.placedAt, openedAt: o.openedAt, filledAt: o.filledAt || null,
   endedAt: o.endedAt || null, pnr: o.pnr || null, paid: o.paid == null ? null : o.paid, fill: o.fill || null,
@@ -120,9 +121,9 @@ const publicOrder = o => ({
 function orderFilled(o, r) {
   const s = global.__tk.pays.get(o.payId);
   if (s) { tatkal.settle(s, true, Date.now(), o.paid); s.fill = o.fill; s.pnr = o.pnr; }
-  journal.append({ t: 'orderfill', id: o.id, pnr: o.pnr, paid: o.paid, fill: o.fill, filledAt: o.filledAt });
+  journal.append({ t: 'orderfill', id: o.id, pnr: o.pnr, paid: o.paid, fill: o.fill, filledAt: o.filledAt, via: o.via || null });
   const berth = (r.booking.berths || []).join(', ') || null;
-  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'filled', pnr: o.pnr, paid: o.paid, cap: o.cap, train: o.train || null,
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status: 'filled', pnr: o.pnr, paid: o.paid, cap: o.cap, train: o.train || null, via: o.via || null,
     fill: o.fill, berths: r.booking.berths || [], assigned: !!r.booking.assigned });
   if (s) sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'captured', amount: s.amount,
     captured: s.captured, released: s.amount - s.captured, berth, fill: o.fill });
@@ -132,7 +133,7 @@ function orderEnded(o, status) {
   const s = global.__tk.pays.get(o.payId);
   if (s) { if (s.status === 'pending') s.status = 'cancelled'; else tatkal.settle(s, false); }
   journal.append({ t: 'orderend', id: o.id, status });
-  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status, cap: o.cap, train: o.train || null });
+  sseSend({ type: 'order', id: o.id, who: o.who, payId: o.payId, status, cap: o.cap, train: o.train || null, declined: o.declined || null });
   if (s && s.status === 'released')
     sseSend({ type: 'tkpay', id: s.id, who: s.who, status: 'released', amount: s.amount, captured: 0 });
 }
@@ -143,17 +144,29 @@ function matchOrders() {
   try {
     // oldest order first: waiting is what earns the place in the queue
     const open = [...ORDERS.values()].filter(o => o.status === 'open').sort((a, b) => a.openedAt - b.openedAt);
+    // one journey, one seat: the same person's other open orders for the same
+    // journey and date are done, and their blocks go back
+    const closeOthers = o => {
+      for (const x of ORDERS.values())
+        if (x !== o && x.status === 'open' && x.who === o.who && x.date === o.date && x.from === o.from && x.to === o.to)
+          orderEnded(x, 'superseded');
+    };
     for (const o of open) {
-      if (orders.expired(o, orderDeps)) { orderEnded(o, 'expired'); continue; }
       const r = orders.tryFill(o, orderDeps);
-      if (r.ok) {
-        orderFilled(o, r);
-        // one journey, one seat: the same person's other open orders for the
-        // same journey and date are done, and their blocks go back
-        for (const x of ORDERS.values())
-          if (x !== o && x.status === 'open' && x.who === o.who && x.date === o.date && x.from === o.from && x.to === o.to)
-            orderEnded(x, 'superseded');
+      if (r.ok) { orderFilled(o, r); closeOthers(o); continue; }
+
+      // Has this order's own chance ended? For a waitlist that is the moment
+      // its train charts; for any order it is the window closing.
+      if (!(orders.expired(o, orderDeps) || orders.chartedOut(o, orderDeps))) continue;
+
+      // Only now, and only once, are the traveller's fallback rules used.
+      const fb = orders.fallbackRules(o);
+      if (fb) {
+        const r2 = orders.tryFill(o, orderDeps, fb);
+        if (r2.ok) { orderFilled(o, r2); closeOthers(o); continue; }
+        o.declined = orders.whyNot(o, orderDeps, fb);
       }
+      orderEnded(o, 'expired');
     }
   } catch (e) { console.error('orders:', e); }
   finally { matching = false; }
@@ -166,7 +179,7 @@ setInterval(matchOrders, 20000).unref();
 {
   for (const r of JREC) {
     if (r.t === 'order' && r.order) ORDERS.set(r.order.id, { ...r.order });
-    if (r.t === 'orderfill') { const o = ORDERS.get(r.id); if (o) Object.assign(o, { status: 'filled', pnr: r.pnr, paid: r.paid, fill: r.fill, filledAt: r.filledAt }); }
+    if (r.t === 'orderfill') { const o = ORDERS.get(r.id); if (o) Object.assign(o, { status: 'filled', pnr: r.pnr, paid: r.paid, fill: r.fill, filledAt: r.filledAt, via: r.via || null }); }
     if (r.t === 'orderend') { const o = ORDERS.get(r.id); if (o) { o.status = r.status; } }
   }
   for (const o of ORDERS.values()) {

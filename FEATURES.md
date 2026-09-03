@@ -712,6 +712,41 @@ priority, on the seat page's waitlist banner, and on the order rows. The
 rules quoted are the ones actually in force; the data they are applied to
 stays synthetic, as the app says throughout.
 
+### Vikalp, with the citizen holding the rules
+
+The railway's alternate-train scheme moves a waitlisted passenger to another
+train, and almost nobody opts in, because it picks for you: it can change
+your boarding or destination station, split your party across coaches, and
+cannot be undone afterwards. Give up control, and you might still get
+nothing.
+
+khaali's waitlist can carry a **fallback**: what to do if it never confirms.
+The traveller writes every condition. Three are locked and cannot be turned
+off, because they are the three things the real scheme changes: your two
+stations stay exactly as they are, your whole party travels on one train,
+and only whole berths count. The traveller then chooses the classes khaali
+may move them to, an "arrive by" time, and how much more than the fare they
+will allow.
+
+The headroom is blocked with the fare, so a move can never cost more than
+was set aside; if the waitlist confirms instead, only the fare is taken and
+the rest is released.
+
+It runs **once**, at the moment the waitlist has definitively failed: when
+that train's chart is prepared, four hours before it leaves. That is late
+enough to be certain and early enough that alternates still exist. It is a
+filter, not a hunt.
+
+If even one rule fails, nobody is moved, the block is released, ₹0 is taken,
+and khaali names the rule that stopped it: "3 trains had a whole berth, but
+they all arrive later than you asked." `whyNot` finds that by relaxing each
+rule in turn and reporting the first one that would have worked.
+
+Arrive-by is counted in minutes from midnight of the travel day, so 360 is
+six that morning and 1800 six the next; it never quietly slides a day
+forward. `fallbackRules`, `chartedOut` and `whyNot` live in
+`khaali-live/orders.mjs` and are covered by seven tests.
+
 ### Nobody pays for a ticket they never got
 
 A waitlist on khaali is a journey order pinned to one train. When the seat

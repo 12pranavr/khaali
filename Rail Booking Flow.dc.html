@@ -787,6 +787,28 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         </sc-for>
         <div style="font:500 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:9px">{{ ordBlockNote }}</div>
       </div>
+      <div style="{{ ordFbWrap }}">
+        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">If this does not confirm</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+          <sc-for list="{{ ordFbMode }}" as="m" hint-placeholder-count="2"><div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.t }}</div></sc-for>
+        </div>
+        <div style="{{ ordFbRules }}">
+          <div style="font:600 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-14663a);margin:10px 0 8px">{{ ordFbLocked }}</div>
+          <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">Classes khaali may move me to</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px">
+            <sc-for list="{{ ordFbCls }}" as="c" hint-placeholder-count="3"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.t }}</div></sc-for>
+          </div>
+          <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">Must arrive by</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px">
+            <sc-for list="{{ ordFbArrive }}" as="a" hint-placeholder-count="5"><div onClick="{{ a.onClick }}" style="{{ a.style }}">{{ a.t }}</div></sc-for>
+          </div>
+          <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">And at most this much more than the fare</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ ordFbExtra }}" as="x" hint-placeholder-count="4"><div onClick="{{ x.onClick }}" style="{{ x.style }}">{{ x.t }}</div></sc-for>
+          </div>
+          <div style="font:500 11.5px/1.6 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:10px">{{ ordFbNote }}</div>
+        </div>
+      </div>
       <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin:16px 0 8px">Block it with</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <sc-for list="{{ ordMethodChips }}" as="c" hint-placeholder-count="2"><div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.t }}</div></sc-for>
@@ -2086,6 +2108,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div style="font:700 15px/1.3 Manrope,sans-serif">{{ o.route }}</div>
             <div style="font-size:12.5px;color:var(--k-fg-8a8a84);margin-top:3px">{{ o.when }}</div>
             <div style="font:600 12.5px/1.6 Manrope,sans-serif;margin-top:8px;color:var(--k-fg-14161a)">{{ o.line }}</div>
+            <div style="{{ o.when2Style }}">{{ o.when2 }}</div>
           </div>
           <div style="{{ o.badge }}">{{ o.badgeText }}</div>
         </div>
@@ -3266,7 +3289,10 @@ class Component extends DCLogic {
     const hours=[0,4,6,8,10,12,14,16,18,20,22];
     const after=(S.dayIdx||0)===0?hours.filter(h=>h<=now.getHours()).pop()*60:0;
     this.setState({ordOpen:true,ordPay:null,ordErr:null,ordPin:'',ordQuote:null,ordTrain:o.train||null,
-      ordAfter:after,ordBefore:1440,ordCls:[o.cls||S.cls||'SL'],ordCap:'',ordMethod:S.ordMethod||'upi'},()=>this.orderQuote());
+      ordAfter:after,ordBefore:1440,ordCls:[o.cls||S.cls||'SL'],ordCap:'',ordMethod:S.ordMethod||'upi',
+      // the fallback starts off: khaali never moves anyone who did not ask
+      ordFbOn:false,ordFbClasses:[o.cls||S.cls||'SL'],ordFbArriveBy:null,ordFbExtra:0},
+      ()=>this.orderQuote());
   }
   orderQuote(){
     clearTimeout(this._ordQT);
@@ -3279,7 +3305,9 @@ class Component extends DCLogic {
         const up={ordQuote:j};
         // a sensible cap the first time: a fifth over the cheapest, rounded
         // up; a waitlist blocks exactly the fare
-        if(j.ok&&S.ordTrain)up.ordCap=String(j.cheapest);
+        // a waitlist blocks the fare, plus whatever headroom a fallback was
+        // given, so a move can never cost more than was set aside
+        if(j.ok&&S.ordTrain)up.ordCap=String(j.cheapest+(this.state.ordFbOn?(this.state.ordFbExtra||0):0));
         else if(j.ok&&!String(this.state.ordCap||'').trim())up.ordCap=String(Math.ceil(j.cheapest*1.2/10)*10);
         this.setState(up);
       }catch(e){}
@@ -3304,7 +3332,9 @@ class Component extends DCLogic {
     try{
       const body={from:S.from,to:S.to,date:this.dateIsoFor(S.dayIdx||0),after:S.ordAfter||0,before:S.ordBefore!=null?S.ordBefore:1440,
         classes:S.ordCls||[S.cls||'SL'],pax:S.pax||1,cap,method,train:S.ordTrain||undefined,
-        travellers:this.travellersFor(S.pax||1,this.dateIsoFor(S.dayIdx||0))};
+        travellers:this.travellersFor(S.pax||1,this.dateIsoFor(S.dayIdx||0)),
+        fallback:(S.ordTrain&&S.ordFbOn)?{on:true,classes:S.ordFbClasses||[S.cls||'SL'],
+          after:0,before:1440,arriveBy:S.ordFbArriveBy,extra:S.ordFbExtra||0}:undefined};
       const r=await this.authFetch('/api/order',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},8000);
       const j=await r.json().catch(()=>({}));
       if(r.status===401){this.setState({ordBusy:false,ordOpen:false});
@@ -3573,14 +3603,17 @@ class Component extends DCLogic {
       const rest=Math.max(0,(m.cap||0)-(m.paid||0));
       this.walletCapture(ref,'Order filled \u2014 \u20b9'+m.paid+' taken from the block, \u20b9'+rest+' released',m.pnr,m.paid);
       const where=m.fill?(m.fill.train+' '+m.fill.name+' \u00b7 '+this.hhOf(m.fill.dep)+' \u00b7 '+m.fill.cls):'';
-      this.adoptBooking(m.pnr).then(()=>push({t:'Berth booked \u00b7 '+where,
+      this.adoptBooking(m.pnr).then(()=>push({t:(m.via==='fallback'?'Moved to ':'Berth booked \u00b7 ')+where,
         sub:((m.berths&&m.berths.length)?(m.berths.join(', ')+' \u00b7 '):'berth number comes at charting \u00b7 ')
           +'\u20b9'+m.paid+' taken, \u20b9'+rest+' released \u00b7 tap for the ticket',page:'ticket',pnr:m.pnr}));
     }
     if(m.status==='expired'||m.status==='cancelled'){
       this.walletRelease(ref,m.status==='expired'?'Order window closed \u2014 block released, nothing taken':'Order cancelled \u2014 block released, nothing taken');
-      if(m.status==='expired')push({t:'No berth turned up \u2014 \u20b9'+m.cap+' block released',
-        sub:'Your window closed with nothing to book. \u20b90 taken; nothing to refund, nothing to chase.',page:'bookings'});
+      if(m.status==='expired')push(m.declined
+        ?{t:'Nobody moved you \u2014 \u20b9'+m.cap+' block released',
+          sub:m.declined.n+' train'+(m.declined.n===1?'':'s')+' had a whole berth, but '+m.declined.why+'. \u20b90 taken.',page:'bookings'}
+        :{t:'No berth turned up \u2014 \u20b9'+m.cap+' block released',
+          sub:'Your window closed with nothing to book. \u20b90 taken; nothing to refund, nothing to chase.',page:'bookings'});
     }
     this.loadOrders();
   }
@@ -3606,6 +3639,33 @@ class Component extends DCLogic {
       ordPinLine:S.ordTrain?((()=>{const t=this.TRAINS.find(x=>x.no===S.ordTrain);return S.ordTrain+' '+(t?t.name:'')+' \u00b7 '+(this.CLS.find(c=>c.k===(S.ordCls||[S.cls])[0])||{}).label
         +' \u00b7 no whole berth left for your party. Your place in line starts when the block is approved.';})()):'',
       ordCapLabel:S.ordTrain?'Fare \u00b7 blocked, not taken':'The most you would pay, in total',
+      ...(()=>{
+        // The railway's own alternate-train scheme moves you by picking for
+        // you: another boarding station, your party split, no undo. Here the
+        // traveller writes every condition and khaali obeys all of them or
+        // does nothing at all.
+        const on=!!S.ordFbOn, fbc=S.ordFbClasses||['SL'];
+        const chip=sel=>({font:'700 11.5px/1 Manrope,sans-serif',padding:'9px 12px',borderRadius:999,cursor:'pointer',
+          border:'1px solid '+(sel?'var(--k-1f3f8f)':'var(--k-d4d3ce)'),background:sel?'var(--k-1f3f8f)':'var(--k-fff)',
+          color:sel?'#fff':'var(--k-fg-14161a)'});
+        const reprice=()=>this.setState({ordCap:''},()=>this.orderQuote());
+        return {
+          ordFbWrap:{display:S.ordTrain?'block':'none',marginTop:16,padding:'14px 15px',borderRadius:10,
+            background:'var(--k-fafaf8)',border:'1px solid var(--k-e6e5e0)'},
+          ordFbMode:[[false,'Nothing \u00b7 release my money'],[true,'Move me, but only if\u2026']].map(([v,t])=>({t,
+            style:chip(on===v),onClick:()=>this.setState({ordFbOn:v},reprice)})),
+          ordFbRules:{display:on?'block':'none'},
+          ordFbLocked:'Locked, whatever else you choose: '+this.ST[S.from].n+' to '+this.ST[S.to].n+' unchanged, all '
+            +(S.pax||1)+(S.pax>1?' travellers':' traveller')+' on one train, whole berths.',
+          ordFbCls:['SL','3A','2A'].map(k=>({t:this.CLS.find(c=>c.k===k).label,style:chip(fbc.includes(k)),
+            onClick:()=>{const nx=fbc.includes(k)?fbc.filter(x=>x!==k):fbc.concat([k]);
+              if(!nx.length)return;this.setState({ordFbClasses:nx});}})),
+          ordFbArrive:[[null,'No limit'],[360,'06:00'],[720,'noon'],[1080,'18:00'],[1440,'midnight'],[1800,'06:00 next day']]
+            .map(([v,t])=>({t,style:chip(S.ordFbArriveBy===v),onClick:()=>this.setState({ordFbArriveBy:v})})),
+          ordFbExtra:[0,100,300,600].map(v=>({t:v?('+\u20b9'+v):'Nothing more',
+            style:chip((S.ordFbExtra||0)===v),onClick:()=>this.setState({ordFbExtra:v},reprice)})),
+          ordFbNote:'khaali checks these once, when this train\u2019s chart is prepared four hours before it leaves \u2014 the moment your waitlist has definitely failed. If even one rule fails, nobody moves you, the block is released and \u20b90 is taken. khaali will tell you which rule stopped it.',
+        };})(),
       ordBlockNote:S.ordTrain?'The fare is blocked, not paid. It is taken only when a whole berth is booked for you \u2014 when one frees up, or at charting. If the train leaves without one, the block is released and \u20b90 was debited. Cancel any time before that: \u20b90, no clerkage.'
         :'This amount is blocked, not paid. When a berth is booked khaali takes only its fare and releases the rest. No berth by the end of your window, and the whole block is released.',
       ordCapRowStyle:{display:S.ordTrain?'none':'flex',alignItems:'center',gap:10},
@@ -3677,7 +3737,10 @@ class Component extends DCLogic {
       setOrdCap:e=>this.setState({ordCap:String(e.target.value||'').replace(/[^0-9]/g,'').slice(0,5),ordErr:null}),
       ordQuoteText:!Q?'Working out which trains fit\u2026'
         :!Q.ok?(Q.error||'')
-        :S.ordTrain?('You would be WL '+(Q.position||1)+(Q.flexAhead?(' \u00b7 '+Q.flexAhead+' flexible order'+(Q.flexAhead>1?'s':'')+' ahead could take this train too'):'')+' \u00b7 \u20b9'+Q.cheapest+' blocked')
+        :S.ordTrain?('You would be WL '+(Q.position||1)
+          +(Q.flexAhead?(' · '+Q.flexAhead+' flexible order'+(Q.flexAhead>1?'s':'')+' ahead could take this train too'):'')
+          +' · ₹'+(Q.cheapest+(S.ordFbOn?(S.ordFbExtra||0):0))+' blocked'
+          +((S.ordFbOn&&S.ordFbExtra)?(' — ₹'+Q.cheapest+' for this train, ₹'+S.ordFbExtra+' only if khaali has to move you'):''))
         :Q.watching===0?'No train leaves in that window. Widen it.'
         :('khaali will watch '+Q.watching+' train'+(Q.watching>1?'s':'')+' \u00b7 cheapest \u20b9'+Q.cheapest
           +(cap&&cap<Q.cheapest?' \u2014 your cap is below it':cap?(' \u00b7 '+Q.trains.filter(t=>t.price<=cap).length+' fit under \u20b9'+cap):'')),
@@ -3715,14 +3778,20 @@ class Component extends DCLogic {
           card:{background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderLeft:'4px solid '+col,borderRadius:12,padding:'16px 18px',marginBottom:10},
           route:ST[o.from].n+' \u2192 '+ST[o.to].n,
           when:dateLabel(o.date)+' \u00b7 '+(o.train?('waitlist for '+o.train+' \u00b7 '+this.hhOf(o.after)):('leave '+this.hhOf(o.after)+'\u2013'+(o.before>=1440?'midnight':this.hhOf(o.before))))+' \u00b7 '+o.classes.join(' / ')+' \u00b7 '+o.pax+(o.pax>1?' travellers':' traveller')+' \u00b7 '+(o.train?'\u20b9':'up to \u20b9')+o.cap,
-          line:filled?(o.fill.train+' '+o.fill.name+' \u00b7 '+this.hhOf(o.fill.dep)+' \u00b7 '+o.fill.cls+' \u00b7 \u20b9'+o.paid+' taken, \u20b9'+rest+' released \u00b7 PNR '+o.pnr)
+          line:filled?((o.via==='fallback'?'Moved \u00b7 ':'')+o.fill.train+' '+o.fill.name+' \u00b7 '+this.hhOf(o.fill.dep)+' \u00b7 '+o.fill.cls+' \u00b7 \u20b9'+o.paid+' taken, \u20b9'+rest+' released \u00b7 PNR '+o.pnr)
             :open&&o.train?('WL '+(o.position||1)+(o.flexAhead?' \u00b7 '+o.flexAhead+' flexible order'+(o.flexAhead>1?'s':'')+' ahead':'')+' \u00b7 \u20b9'+o.cap+' blocked, not taken \u00b7 confirmed when a whole berth frees or at charting')
             :open?('Watching '+o.watching+' train'+(o.watching===1?'':'s')+' \u00b7 \u20b9'+o.cap+' blocked, not taken \u00b7 the bell rings when a whole berth is booked')
             :pending?('Waiting for your bank to approve the \u20b9'+o.cap+' block')
+            :o.declined?('\u20b90 taken \u00b7 nobody moved you: '+o.declined.n+' train'+(o.declined.n===1?'':'s')+' had a whole berth, but '+o.declined.why+'.')
             :('\u20b90 taken \u00b7 the block was released'),
           badge:{flex:'none',font:"700 10px/1 'IBM Plex Mono',monospace",letterSpacing:'.12em',textTransform:'uppercase',padding:'7px 9px',borderRadius:6,
             color:'#fff',background:col},
-          badgeText:filled?'Booked':open?(o.train?('WL '+(o.position||1)):'Watching'):pending?'Awaiting block':o.status,
+          badgeText:filled?(o.via==='fallback'?'Moved':'Booked'):open?(o.train?('WL '+(o.position||1)):'Watching'):pending?'Awaiting block':o.status,
+          when2:(o.train&&o.fallback)?('If it does not confirm: '+o.fallback.classes.join(' / ')
+            +(o.fallback.arriveBy!=null?(' \u00b7 arrive by '+this.hhOf(o.fallback.arriveBy%1440)+(o.fallback.arriveBy>=1440?' next day':'')):'')
+            +(o.fallback.extra?(' \u00b7 up to \u20b9'+o.fallback.extra+' more'):' \u00b7 no extra cost')
+            +' \u00b7 same stations, party together'):'',
+          when2Style:{display:(o.train&&o.fallback)?'block':'none',font:'500 11.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)',marginTop:4},
           // the rule behind whichever thing this row is saying
           ...this.ruleFlat(o.status==='expired'?'clerkage':(open&&o.train)?'wlboard':null),
           ...(()=>{

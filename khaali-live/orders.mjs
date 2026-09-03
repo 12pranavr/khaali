@@ -13,6 +13,14 @@
 //
 // An order fills with whole berths only. A stitched seat-hop is a different
 // promise, and the traveller did not make it.
+//
+// A waitlist may also carry a FALLBACK: what to do if it never confirms. The
+// railway's own alternate-train scheme does this and almost nobody uses it,
+// because it picks for you - it can change your boarding station, split your
+// party, and cannot be undone. Here the traveller writes the conditions and
+// khaali moves them only if every one holds. It is a filter, not a hunt: it
+// runs once, at the moment the waitlist has definitively failed, and if no
+// train satisfies every rule nobody is moved and nothing is taken.
 
 import { ST, TRAINS } from './data.mjs';
 import { serves, sMin, fare, journeyKm, cancelledOn, trainByNo, journeyMask, isLowerBerth } from './engine.mjs';
@@ -63,6 +71,22 @@ export function validate(b, deps) {
     if (cancelledOn(t.no, date)) return { ok: false, error: 'This train is cancelled on that date.' };
   }
   o.travellers = travellersOf(b.travellers, pax);
+  // what to do if a waitlist never confirms; only a pinned order may carry one
+  if (b.fallback && b.fallback.on && o.train) {
+    const f = b.fallback;
+    const fc = [...new Set((Array.isArray(f.classes) ? f.classes : []).filter(c => CLASSES.includes(c)))];
+    if (!fc.length) return { ok: false, error: 'Pick at least one class khaali may move you to.' };
+    const fa = Number(f.after), fb2 = Number(f.before);
+    if (!(Number.isInteger(fa) && Number.isInteger(fb2) && fa >= 0 && fb2 <= 1440 && fa < fb2))
+      return { ok: false, error: 'bad fallback window' };
+    const ar = f.arriveBy == null || f.arriveBy === '' ? null : Number(f.arriveBy);
+    if (ar != null && !(Number.isInteger(ar) && ar > 0 && ar <= 2880))
+      return { ok: false, error: 'bad arrive-by time' };
+    const ex = Number(f.extra);
+    if (!(Number.isInteger(ex) && ex >= 0 && ex <= 5000))
+      return { ok: false, error: 'bad fallback headroom' };
+    o.fallback = { on: true, classes: fc, after: fa, before: fb2, arriveBy: ar, extra: ex };
+  }
   const cheapest = Math.min(...o.classes.map(c => priceOf(o, c, deps)));
   const cap = Number(b.cap);
   if (!(Number.isInteger(cap) && cap >= cheapest))
@@ -90,6 +114,16 @@ export function candidates(o, deps) {
     if (dep < o.after || dep >= o.before) continue;
     if (today && dep <= nowMin) continue;
     if (cancelledOn(t.no, o.date)) continue;
+    // "arrive by" is the rule people actually mean on a fallback: nobody
+    // cares when the replacement leaves, they care about being there in time.
+    // Counted in minutes from midnight of the day you travel, so 360 is six
+    // that morning and 1800 is six the next - no wrapping, because a rule
+    // that quietly slides a day forward is not a rule.
+    if (o.arriveBy != null) {
+      const am = sMin(t, o.to, 'a');
+      if (am == null) continue;
+      if (dep + (am - sMin(t, o.from, 'd')) > o.arriveBy) continue;
+    }
     for (const cls of o.classes) {
       const price = priceOf(o, cls, deps);
       if (price > o.cap) continue;
@@ -130,6 +164,53 @@ export function queueOf(o, all, deps) {
   return { position, flexAhead };
 }
 
+/**
+ * The rules a fallback would search under, or null if there is none. The cap
+ * is the order's own blocked amount: the headroom was added to the block when
+ * the waitlist was joined, so a move can never cost more than was set aside.
+ */
+export function fallbackRules(o) {
+  const f = o && o.fallback;
+  if (!f || !f.on || !o.train) return null;
+  return { train: null, classes: f.classes, after: f.after, before: f.before,
+    arriveBy: f.arriveBy == null ? null : f.arriveBy };
+}
+
+/**
+ * A waitlist has definitively failed once its train's chart is prepared: after
+ * that no berth on it can come to the pool. That is also four hours before
+ * departure, which is early enough that alternates still exist - waiting until
+ * the train left would leave nothing to move to.
+ */
+export function chartedOut(o, deps) {
+  if (!o || !o.train) return false;
+  try { return !!deps.countsFor(o.train, o.date, o.classes[0], o.from, o.to).charted; }
+  catch { return false; }
+}
+
+/**
+ * Which single rule stopped the move. Each is relaxed in turn and the first
+ * one that would have produced a seatable train is the binding one, so the
+ * traveller is told what actually blocked it rather than "nothing found".
+ */
+export function whyNot(o, deps, rules) {
+  const view = { ...o, ...(rules || {}) };
+  const seatable = v => candidates(v, deps)
+    .filter(c => deps.countsFor(c.train, v.date, c.cls, v.from, v.to).anySeats >= v.pax);
+  if (seatable(view).length) return null;
+  const tries = [
+    ['arriveBy', { arriveBy: null }, 'they all arrive later than you asked'],
+    ['cap', { cap: Number.MAX_SAFE_INTEGER }, 'they all cost more than you allowed'],
+    ['classes', { classes: CLASSES }, 'none had room in the classes you chose'],
+    ['window', { after: 0, before: 1440 }, 'none of them leaves inside your window'],
+  ];
+  for (const [rule, relax, why] of tries) {
+    const got = seatable({ ...view, ...relax });
+    if (got.length) return { rule, why, n: got.length };
+  }
+  return { rule: 'none', why: 'no train on this route had a whole berth for your party', n: 0 };
+}
+
 /** The window has closed: the last train the order could take has left. */
 export function expired(o, deps) {
   return deps.now().getTime() >= dayStart(o.date) + o.before * 60000;
@@ -141,9 +222,12 @@ export function expired(o, deps) {
  * themselves. The hold is placed outside the traveller's own hold cap so an
  * order filling never knocks out a checkout they are in the middle of.
  */
-export function tryFill(o, deps) {
+export function tryFill(o, deps, rules) {
   if (o.status !== 'open') return { ok: false, reason: o.status };
-  for (const c of candidates(o, deps)) {
+  // `rules` searches under a fallback's conditions while the order itself,
+  // its party, its stations and its blocked money stay exactly as they were
+  const o0 = rules ? { ...o, ...rules } : o;
+  for (const c of candidates(o0, deps)) {
     const counts = deps.countsFor(c.train, o.date, c.cls, o.from, o.to);
     if (counts.anySeats < o.pax) continue;
     const base = { train: c.train, date: o.date, cls: c.cls, from: o.from, to: o.to, pax: o.pax, who: o.who, cap: false,
@@ -171,7 +255,8 @@ export function tryFill(o, deps) {
     o.pnr = r.booking.pnr;
     o.paid = r.booking.amount;
     o.fill = { train: c.train, name: c.name, cls: c.cls, dep: c.dep };
-    return { ok: true, booking: r.booking, pick: c };
+    o.via = rules ? 'fallback' : 'direct';
+    return { ok: true, booking: r.booking, pick: c, via: o.via };
   }
   return { ok: false, reason: 'nothing-yet' };
 }
