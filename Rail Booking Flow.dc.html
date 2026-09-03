@@ -2410,10 +2410,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:9px">{{ sosHeldNote }}</div>
       </div>
       <div style="{{ sosRefStyle }}">{{ sosRefText }}</div>
+      <a href="{{ sosWaHref }}" target="_blank" rel="noopener" style="{{ sosWaStyle }}">Open WhatsApp</a>
       <div style="{{ sosChoices }}">
         <div style="font:600 13px/1.65 Manrope,sans-serif;color:#b9b9c2;margin:20px 0 12px">You decide what happens to it - now, or when you are somewhere safe.</div>
-        <div onClick="{{ sosToRpf }}" style="{{ sosBtnRpf }}">Send to the RPF</div>
-        <div onClick="{{ sosToTrusted }}" style="{{ sosBtnTrust }}">Send to someone I trust</div>
+        <div onClick="{{ sosToRpf }}" style="{{ sosBtnRpf }}">Send to the RPF<div style="{{ sosSubLine }}">khaali prepares the report. The recording stays on this phone.</div></div>
+        <div onClick="{{ sosToTrusted }}" style="{{ sosBtnTrust }}">Send to someone I trust<div style="{{ sosSubLine }}">{{ sosSubTrust }}</div></div>
         <div onClick="{{ closeSos }}" style="{{ sosBtnKeep }}">Keep it, tell nobody</div>
         <div onClick="{{ sosForgetBtn }}" style="{{ sosBtnDrop }}">Delete it</div>
       </div>
@@ -3725,7 +3726,7 @@ class Component extends DCLogic {
      under her thumb while she is reaching for Stop is exactly the failure
      this screen cannot afford. */
   sosLock(on){try{document.body.style.overflow=on?'hidden':'';}catch(e){}}
-  openSos(){this.sosLock(true);
+  openSos(){this.sosLock(true);this._sosBlob=null;
     this.setState({sosOpen:true,sosPhase:'choose',sosErr:'',
       sosAlert:null,sosLine:'',sosSecs:0});this.loadSos();}
   closeSos(){this.sosTearDown();this.sosLock(false);
@@ -3815,6 +3816,7 @@ class Component extends DCLogic {
     try{
       const j=await this.sosStamp(kind);
       const kept=blob?await this.sosPut(j.alert.id,{blob,kind,at:Date.now()}):false;
+      this._sosBlob=blob||null;   // held in hand: iOS opens no share sheet after an await
       this.sosTearDown();
       this.setState({sosPhase:'done',sosAlert:j.alert,sosLine:j.line,
         sosErr:kept?'':'This phone would not keep the recording. The stamp survived, so the time and the place are still on record.'});
@@ -3824,6 +3826,57 @@ class Component extends DCLogic {
   }
 
   sosStopRec(){try{this._sosRec&&this._sosRec.stop();}catch(e){this.sosFinish(null,'video');}}
+
+  /** What a person on the other end of WhatsApp needs to read in one glance. */
+  sosMessage(){
+    const a=this.state.sosAlert;
+    return ['I need you to know where I am.',
+      this.state.sosLine||'',
+      (a&&a.hasMedia)?'The recording is on my phone.':'',
+      'Marked on khaali.'].filter(Boolean).join('\n');
+  }
+
+  /**
+   * Sending it to someone she trusts is not khaali forwarding anything. It is
+   * her phone handing the message - and the recording itself, where the
+   * browser allows it - straight to WhatsApp or whatever else is on the share
+   * sheet. It does not pass through khaali, which is exactly the point: khaali
+   * cannot leak what it never had.
+   */
+  async sosShare(){
+    const a=this.state.sosAlert;if(!a||this._sosBusy)return;
+    const text=this.sosMessage();
+    const blob=this._sosBlob;
+    const file=blob?(()=>{try{
+      const ext=a.kind==='photo'?'jpg':'webm';
+      return new File([blob],'khaali-'+a.id+'.'+ext,
+        {type:blob.type||(a.kind==='photo'?'image/jpeg':'video/webm')});
+    }catch(e){return null;}})():null;
+    let how='';
+    try{
+      if(navigator.share){
+        const withFile=!!(file&&navigator.canShare&&navigator.canShare({files:[file]}));
+        await navigator.share(withFile?{text,files:[file]}:{text});
+        how=withFile?'with the recording attached'
+          :(a.hasMedia?'as a message. The recording stayed on this phone'
+                      :'as a message');
+      }
+    }catch(e){
+      // she changed her mind at the sheet: nothing is sent, and nothing is said
+      if(e&&(e.name==='AbortError'||e.name==='NotAllowedError'))return;
+    }
+    if(!how){
+      const url='https://wa.me/?text='+encodeURIComponent(text);
+      try{await navigator.clipboard.writeText(text);}catch(e){}
+      let w=null;try{w=window.open(url,'_blank','noopener');}catch(e){}
+      how=a.hasMedia
+        ?'through WhatsApp. The recording stayed on this phone - send it yourself if you want them to have it'
+        :'through WhatsApp';
+      if(!w)this.setState({sosWa:url});
+    }
+    this.setState({sosHow:how});
+    this.sosSend('trusted');
+  }
 
   async sosSend(channel){
     const a=this.state.sosAlert;if(!a||this._sosBusy)return;this._sosBusy=true;
@@ -3839,6 +3892,7 @@ class Component extends DCLogic {
   /** Deleted means deleted: the footage here and the stamp there. */
   async sosForget(){
     const a=this.state.sosAlert;if(!a)return;
+    this._sosBlob=null;
     await this.sosDrop(a.id);
     try{await this.authFetch('/api/sos/'+a.id,{method:'DELETE'},9000);}catch(e){}
     this.sosLock(false);
@@ -3870,6 +3924,10 @@ class Component extends DCLogic {
         :'khaali holds only the line above. ')+'Nothing has been sent to anybody.';
       if(a.stamp&&a.stamp.pnr&&!a.stamp.verified)
         held+=' The journey is as your phone reported it; khaali could not check it against a live booking.';
+    }else if(a&&sent&&a.channel==='trusted'){
+      held=(a.hasMedia
+        ?'The recording is still on this phone. khaali holds only the line above.'
+        :'khaali holds only the line above.');
     }else if(a&&sent){
       held=(a.hasMedia
         ?'The footage is still only on your phone. khaali handed on the line above, and nothing else.'
@@ -3925,12 +3983,18 @@ class Component extends DCLogic {
       sosRefStyle:{display:sent?'block':'none',marginTop:14,padding:'13px 15px',
         borderRadius:9,background:'#12211a',border:'1px solid #23402f',
         font:'600 12.5px/1.65 Manrope,sans-serif',color:'#8fd6ab'},
-      sosRefText:sent?('Reference '+a.ref+' \u00b7 '
-        +(a.channel==='rpf'?'the Railway Protection Force':'the person you trust')
-        +'. khaali has prepared the report and handed it over. It has not sent anybody to your coach, and in this prototype the handover is simulated.'):'',
+      sosRefText:!sent?'':a.channel==='rpf'
+        ?('Reference '+a.ref+' \u00b7 the Railway Protection Force. khaali has prepared the report and handed it over. It has not sent anybody to your coach, and in this prototype the handover is simulated.')
+        :('Sent from this phone '+(S.sosHow||'')+'. It went straight to them - it did not pass through khaali, and khaali kept no copy. Reference '+a.ref+' if you ever need to point at this moment again.'),
+      sosWaStyle:{display:(sent&&S.sosWa)?'block':'none',marginTop:10,textAlign:'center',
+        background:'#1b1b23',border:'1px solid #2b2b36',borderRadius:11,padding:18,
+        font:'700 15px/1 Manrope,sans-serif',color:'#f2f2f4',textDecoration:'none'},
+      sosWaHref:S.sosWa||'#',
       sosChoices:(ph==='done'&&a&&!sent)?dark:gone,
+      sosSubTrust:'Opens WhatsApp, or whatever else is on your share sheet'
+        +((a&&a.hasMedia)?', with the recording attached.':'.'),
       sosToRpf:()=>this.sosSend('rpf'),
-      sosToTrusted:()=>this.sosSend('trusted'),
+      sosToTrusted:()=>this.sosShare(),
       sosForgetBtn:()=>this.sosForget(),
       sosBtnRpf:big('#d8385a','#fff'),
       sosBtnTrust:big('#1b1b23','#f2f2f4','1px solid #2b2b36'),

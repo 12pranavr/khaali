@@ -935,8 +935,25 @@ Two consequences follow, and both are the point:
 When she is safe she gets four choices: delete it, keep it and tell nobody,
 send it to the RPF, or send it to someone she trusts. `handOver` marks it
 `sent`, records the channel and returns a reference `KH-<train>-<6 digits>`.
-The footage still never leaves the phone. khaali prepares a report and hands
-it over; it does not send anybody to her coach, and it never says it has.
+
+The two channels are not the same kind of thing, and the screen says which is
+which:
+
+- **The RPF** is the simulated one. khaali prepares the report and hands it
+  over. The recording stays on the phone. khaali does not send anybody to her
+  coach and never says it has.
+- **Someone I trust** is real, and it is not khaali forwarding anything. The
+  page hands the message - and where the browser allows it, the recording
+  itself as a `File` - to `navigator.share`, so WhatsApp, Signal, Messages and
+  the rest appear on her own share sheet. It goes phone to phone. It does not
+  pass through khaali, which is exactly the point: khaali cannot leak what it
+  never had. Where there is no share sheet the page falls back to a `wa.me`
+  link and puts the line on the clipboard; if the popup is blocked an **Open
+  WhatsApp** button appears instead.
+
+  The blob is kept in hand from the moment of capture, because iOS will not
+  open a share sheet after an `await`. If she backs out of the sheet, the alert
+  stays `held` and nothing is recorded as sent.
 
 `remove` deletes the stamp as well as the media reference, and `publicOf`
 returns nothing but the id and the status afterwards. Deleted means deleted.
