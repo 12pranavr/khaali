@@ -1619,6 +1619,34 @@ t('when the ticket and the phone disagree, the RPF is told, and still given a pl
   assert.ok(rep2.next.at, 'with the time the train is due');
 });
 
+t('the footage reaches the RPF only when she files it, and leaves when she deletes', () => {
+  const a = sos.newAlert({ id: 'e1', who: 'her@x', kind: 'video',
+    journey: { train: '16021', fix: { lat: 12.69, lng: 77.25 } } }, at).alert;
+  sos.handOver(a, 'rpf', at);
+  assert.strictEqual(sos.forRpf(a, at).evidence, null,
+    'held, but khaali has not been given it');
+  assert.strictEqual(sos.publicOf(a).filed, false);
+
+  // she files it: only now does khaali hold a picture of anybody
+  a.media = { ...a.media, onServer: true, type: 'video/mp4', bytes: 695822, file: 'e1.mp4' };
+  const rep = sos.forRpf(a, at);
+  assert.deepStrictEqual(rep.evidence, { type: 'video/mp4', bytes: 695822 });
+  assert.strictEqual(sos.publicOf(a).filed, true);
+  assert.ok(!/blob|base64|data:/i.test(JSON.stringify(rep)),
+    'and the report still carries a reference to it, never the bytes');
+
+  sos.remove(a, at + 5);
+  assert.strictEqual(a.media, null, 'deleting takes the filed copy with it');
+  assert.strictEqual(sos.forRpf(a), null);
+});
+
+t('a moment sent to a friend never files anything with anybody', () => {
+  const a = sos.newAlert({ id: 'e2', who: 'her@x', kind: 'photo', journey: {} }, at).alert;
+  sos.handOver(a, 'trusted', at);
+  assert.strictEqual(a.media.onServer, false);
+  assert.strictEqual(sos.publicOf(a).filed, false);
+});
+
 t('a deleted alert is not a report, however the reference is held', () => {
   const a = sos.newAlert({ id: 'g7', who: 'h', kind: 'mark',
     journey: { train: '16021', fix: { lat: 12.69, lng: 77.25 } } }, at).alert;

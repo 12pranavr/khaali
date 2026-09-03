@@ -10,9 +10,15 @@
 // at that minute. She booked the journey, so khaali already knows all of it
 // and she has to type none of it.
 //
+// The one exception is the moment she hands it to the police herself. Then,
+// and only then, the recording is uploaded with the stamp - because a report
+// an officer cannot watch is a much weaker thing than one they can. Sending it
+// to a friend does not do this; keeping it does not do this; and deleting takes
+// it back off the server again.
+//
 // Two consequences follow, and both are the point:
-//   - khaali never holds a picture of anybody's face. There is nothing here
-//     to leak, subpoena, or misuse.
+//   - khaali holds no picture of anybody's face except one that its owner
+//     deliberately filed with the RPF. Nothing else is here to leak.
 //   - She can record nothing at all and still mark the moment. A stamp with
 //     no footage is silent, invisible, and still says she was in S4/31 on the
 //     16021 at 23:14 and something happened.
@@ -181,8 +187,8 @@ export function newAlert({ id, who, kind, journey }, now = Date.now()) {
     // it is what says which way the train is going.
     trail: j.fix ? [{ ...j.fix, at: now, km: (placeOf(j.fix.lat, j.fix.lng) || {}).km }] : [],
     // the footage lives on her device and is named here only so she can find
-    // it again; khaali never receives it
-    media: kind === 'mark' ? null : { onDevice: true, ref: id },
+    // it again. khaali receives it only if she files it with the RPF.
+    media: kind === 'mark' ? null : { onDevice: true, ref: id, onServer: false },
   } };
 }
 
@@ -247,6 +253,9 @@ export function forRpf(a, now = Date.now()) {
     at: a.createdAt,
     kind: a.kind,
     hasMedia: !!a.media,
+    // whether the officer can actually watch it, or only knows it exists
+    evidence: (a.media && a.media.onServer)
+      ? { type: a.media.type || '', bytes: a.media.bytes || 0 } : null,
     line: lineOf(a),
     train: s.train, trainName: s.trainName, coach: s.coach, berth: s.berth,
     pnr: s.pnr, date: s.date, verified: !!s.verified,
@@ -271,6 +280,7 @@ export function publicOf(a) {
   return {
     id: a.id, kind: a.kind, status: a.status, createdAt: a.createdAt,
     stamp: a.stamp, hasMedia: !!a.media,
+    filed: !!(a.media && a.media.onServer),
     fix: a.fix || null, trailN: (a.trail || []).length,
     contact: a.contact || null,
     channel: a.channel || null, ref: a.ref || null, sentAt: a.sentAt || null,

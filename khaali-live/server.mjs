@@ -220,6 +220,7 @@ setInterval(matchOrders, 20000).unref();
       if (a) Object.assign(a, { status: 'sent', channel: r.channel, ref: r.ref,
         sentAt: r.sentAt || a.createdAt, contact: r.contact || null });
     }
+    if (r.t === 'sosmedia') { const a = ALERTS.get(r.id); if (a) a.media = r.media; }
     if (r.t === 'sosgone') { const a = ALERTS.get(r.id); if (a) sos.remove(a); }
   }
   for (const o of ORDERS.values()) {
@@ -246,6 +247,29 @@ const send = (res, code, body, type = 'application/json') => {
   res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' });
   res.end(b);
 };
+
+// Evidence a person has filed with the RPF. Nothing else on this server holds
+// a photograph or a video, and nothing reaches here unless she chose to send it
+// to the police herself.
+const SOS_MEDIA = path.join(process.env.DATA_DIR || path.join(DIR, 'data'), 'sos-media');
+const MEDIA_MAX = 40 * 1024 * 1024;
+const MEDIA_KIND = { 'image/jpeg': 'jpg', 'image/png': 'png',
+  'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' };
+
+/** The raw upload, capped. Over the cap it stops keeping bytes and resolves
+    null, so the caller is told it was too large instead of having the socket
+    pulled from under it with no reply. */
+const readBlob = (req, max = MEDIA_MAX) => new Promise((resolve, reject) => {
+  let parts = [], n = 0, over = false;
+  req.on('data', c => {
+    if (over) return;
+    n += c.length;
+    if (n > max) { over = true; parts = []; return; }
+    parts.push(c);
+  });
+  req.on('end', () => resolve(over ? null : Buffer.concat(parts)));
+  req.on('error', reject);
+});
 
 const readBody = req => new Promise((resolve, reject) => {
   let s = '';
@@ -1036,6 +1060,22 @@ async function api(req, res, url) {
     return send(res, 200, { reports: rows });
   }
 
+  // The evidence itself, for a report that was filed with the RPF. Reachable
+  // only through the reference on that report, and only while it stands.
+  const mRpfM = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})\/media$/);
+  if (mRpfM) {
+    const a = [...ALERTS.values()].find(x => x.ref === mRpfM[1] && x.channel === 'rpf');
+    if (!a || a.status === 'deleted' || !a.media || !a.media.onServer)
+      return send(res, 404, { error: 'no evidence on this report' });
+    const f = path.join(SOS_MEDIA, a.media.file);
+    if (!f.startsWith(SOS_MEDIA) || !fs.existsSync(f))
+      return send(res, 404, { error: 'no evidence on this report' });
+    const buf = fs.readFileSync(f);
+    res.writeHead(200, { 'content-type': a.media.type, 'content-length': buf.length,
+      'cache-control': 'private, max-age=60' });
+    return res.end(buf);
+  }
+
   const mRpf = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})$/);
   if (mRpf) {
     const a = [...ALERTS.values()].find(x => x.ref === mRpf[1] && x.channel === 'rpf');
@@ -1078,12 +1118,33 @@ async function api(req, res, url) {
       .sort((x, y) => y.createdAt - x.createdAt)
       .map(a => ({ ...sos.publicOf(a), line: sos.lineOf(a) })) });
   }
-  const mSos = p.match(/^\/api\/sos\/([a-f0-9]+)(\/send|\/where)?$/);
+  const mSos = p.match(/^\/api\/sos\/([a-f0-9]+)(\/send|\/where|\/media)?$/);
   if (mSos) {
     const who = await whoIs(req);
     if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in first.' });
     const a = ALERTS.get(mSos[1]);
     if (!a || a.who !== who) return send(res, 404, { error: 'unknown alert' });
+    // She is filing it. This is the only path on which khaali is given a
+    // photograph or a video at all.
+    if (req.method === 'POST' && mSos[2] === '/media') {
+      if (a.status === 'deleted') return send(res, 409, { ok: false, error: 'deleted' });
+      const type = String(req.headers['content-type'] || '').split(';')[0].trim();
+      const ext = MEDIA_KIND[type];
+      if (!ext) return send(res, 415, { ok: false, error: 'not a photograph or a video' });
+      let buf; try { buf = await readBlob(req); }
+      catch { return send(res, 400, { ok: false, error: 'that upload did not arrive' }); }
+      if (buf === null) return send(res, 413, { ok: false,
+        error: 'That recording is too large to file. It is still on your phone.' });
+      if (!buf.length) return send(res, 400, { ok: false, error: 'empty' });
+      try {
+        fs.mkdirSync(SOS_MEDIA, { recursive: true });
+        fs.writeFileSync(path.join(SOS_MEDIA, a.id + '.' + ext), buf);
+      } catch (e) { return send(res, 500, { ok: false, error: 'could not keep it' }); }
+      a.media = { ...(a.media || {}), onDevice: true, ref: a.id,
+        onServer: true, type, bytes: buf.length, file: a.id + '.' + ext };
+      journal.append({ t: 'sosmedia', id: a.id, media: a.media });
+      return send(res, 200, { ok: true, bytes: buf.length });
+    }
     if (req.method === 'POST' && mSos[2] === '/where') {
       let b; try { b = await readBody(req); } catch { b = {}; }
       const r = sos.moved(a, { lat: +b.lat, lng: +b.lng, acc: b.acc == null ? null : +b.acc });
@@ -1103,6 +1164,10 @@ async function api(req, res, url) {
       return send(res, 200, { ok: true, alert: sos.publicOf(a), line: sos.lineOf(a) });
     }
     if (req.method === 'DELETE') {
+      // the filed copy goes with everything else. Deleted means deleted.
+      try {
+        if (a.media && a.media.file) fs.unlinkSync(path.join(SOS_MEDIA, a.media.file));
+      } catch (e) { /* already gone */ }
       sos.remove(a);
       journal.append({ t: 'sosgone', id: a.id });
       return send(res, 200, { ok: true, alert: sos.publicOf(a) });

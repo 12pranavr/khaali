@@ -931,6 +931,32 @@ Two consequences follow, and both are the point:
   invisible, needs no camera permission, and is what the screen falls back to
   when the camera is refused.
 
+### Filing it with the police
+
+khaali is handed the recording on exactly one path: she chooses **Send to the
+RPF**. Then the photograph or the video is uploaded alongside the stamp, and the
+officer can watch what happened rather than reading a line saying a video exists
+on somebody else's phone. That difference is the difference between evidence and
+a note.
+
+Everything else is unchanged. Keeping it sends khaali nothing. Sending it to a
+friend sends khaali nothing - that goes phone to phone through the share sheet.
+And deleting the report unlinks the filed copy from disk as well, so *deleted
+means deleted* still holds end to end.
+
+The button says so before she taps it, not after.
+
+Uploads are capped at 40 MB and must be an image or a video by content type;
+anything else is refused. Over the cap the request is drained and answered
+`413` rather than having its socket destroyed, because a phone left waiting on
+a reply that never comes is the worst outcome on this screen.
+
+*(Worth noting as a real-world design question rather than a settled one:
+evidence filed with a police force cannot normally be withdrawn by the person
+who filed it. This prototype lets her delete it, because "deleted means deleted"
+is the promise the rest of the feature makes. A real deployment would have to
+choose.)*
+
 **Capturing is not reporting.** An alert is `held` until she says otherwise.
 When she is safe she gets four choices: delete it, keep it and tell nobody,
 send it to the RPF, or send it to someone she trusts. `handOver` marks it

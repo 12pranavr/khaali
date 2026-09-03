@@ -2413,10 +2413,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:9px">{{ sosHeldNote }}</div>
         <img src="{{ sosShotSrc }}" style="{{ sosShotStyle }}"></img>
         <video src="{{ sosShotSrc }}" controls="true" playsinline="true" style="{{ sosClipStyle }}"></video>
-        <div style="{{ sosShotCap }}">This is what your phone kept. khaali has never seen it.</div>
+        <div style="{{ sosShotCap }}">{{ sosShotCapText }}</div>
       </div>
       <a href="{{ sosSaveHref }}" download="{{ sosSaveName }}" style="{{ sosSaveStyle }}">{{ sosSaveLabel }}</a>
       <a href="{{ sosRpfLink }}" target="_blank" rel="noopener" style="{{ sosRpfLinkStyle }}">See what the RPF can see</a>
+      <div style="{{ sosFilingStyle }}">Sending the recording to the RPF...</div>
       <div style="{{ sosRefStyle }}">{{ sosRefText }}</div>
       <a href="{{ sosWaHref }}" target="_blank" rel="noopener" style="{{ sosWaStyle }}">Open WhatsApp</a>
       <div style="{{ sosChoices }}">
@@ -4141,13 +4142,38 @@ class Component extends DCLogic {
     this.sosSend('trusted');
   }
 
+  /**
+   * Filing it with the police is the one moment khaali is given the recording
+   * itself. An officer who can watch what happened is holding evidence; one
+   * reading a line about a video that exists somewhere else is holding a note.
+   * Keeping it, or sending it to a friend, still sends khaali nothing.
+   */
+  async sosFile(a){
+    const blob=this._sosBlob;
+    if(!blob||!a||!a.hasMedia)return true;
+    try{
+      const r=await this.authFetch('/api/sos/'+a.id+'/media',{method:'POST',
+        headers:{'content-type':(blob.type||'').split(';')[0]||'video/mp4'},
+        body:blob},60000);
+      const j=await r.json().catch(()=>({}));
+      return !!(j&&j.ok);
+    }catch(e){return false;}
+  }
+
   async sosSend(channel){
     const a=this.state.sosAlert;if(!a||this._sosBusy)return;this._sosBusy=true;
+    let filed=true;
+    if(channel==='rpf'&&a.hasMedia){
+      this.setState({sosFiling:true});
+      filed=await this.sosFile(a);
+      this.setState({sosFiling:false,sosFiled:filed});
+    }
     try{const r=await this.authFetch('/api/sos/'+a.id+'/send',{method:'POST',
         headers:{'content-type':'application/json'},
         body:JSON.stringify({channel,traveller:channel==='rpf'?this.sosTraveller():null})},9000);
       const j=await r.json().catch(()=>({}));
-      if(j&&j.ok)this.setState({sosAlert:j.alert,sosLine:j.line,sosErr:''});
+      if(j&&j.ok)this.setState({sosAlert:j.alert,sosLine:j.line,
+        sosErr:filed?'':'The recording would not upload, so the RPF has the report without it. It is still on this phone \u2014 save it below and send it yourself.'});
       else this.setState({sosErr:(j&&j.error)||'That did not go through. It is still on your phone.'});
     }catch(e){this.setState({sosErr:'That did not go through. It is still on your phone.'});}
     this._sosBusy=false;this.loadSos();
@@ -4190,6 +4216,9 @@ class Component extends DCLogic {
         :'khaali holds only the line above. ')+'Nothing has been sent to anybody.';
       if(a.stamp&&a.stamp.pnr&&!a.stamp.verified)
         held+=' The journey is as your phone reported it; khaali could not check it against a live booking.';
+    }else if(a&&sent&&a.channel==='rpf'&&a.filed){
+      held='The RPF has the recording, because you filed it with them. Nobody else does, '
+        +'and deleting this takes it back off khaali too.';
     }else if(a&&sent&&a.channel==='trusted'){
       held=(a.hasMedia
         ?'The recording is still on this phone. khaali holds only the line above.'
@@ -4301,6 +4330,9 @@ class Component extends DCLogic {
         background:'#000'},
       sosShotCap:{display:S.sosShot?'block':'none',marginTop:7,textAlign:'center',
         font:'600 11.5px/1.5 Manrope,sans-serif',color:'#7d7d88'},
+      sosShotCapText:(a&&a.filed)
+        ?'Your copy. The RPF has one too, because you filed it with them.'
+        :'This is what your phone kept. khaali has never seen it.',
       sosSaveHref:S.sosShot||'#',
       sosSaveName:S.sosShotName||'khaali.mp4',
       sosSaveStyle:{display:S.sosShot?'block':'none',cursor:'pointer',textAlign:'center',
@@ -4317,6 +4349,7 @@ class Component extends DCLogic {
         font:'600 12.5px/1.65 Manrope,sans-serif',color:'#8fd6ab'},
       sosRefText:!sent?'':a.channel==='rpf'
         ?('Reference '+a.ref+' \u00b7 the Railway Protection Force. They can see '
+          +(a.filed?'the recording, ':'')
           +((a.contact&&a.contact.name)?('your name and number, ') : 'the report, ')
           +(S.sosGeo==='on'?'and where you are as you move, so they can be at the next station.'
                            :'but not where you are, because location is off on this phone.')
@@ -4326,8 +4359,15 @@ class Component extends DCLogic {
         background:'#1b1b23',border:'1px solid #2b2b36',borderRadius:11,padding:18,
         font:'700 15px/1 Manrope,sans-serif',color:'#f2f2f4',textDecoration:'none'},
       sosWaHref:S.sosWa||'#',
-      sosChoices:(ph==='done'&&a&&!sent)?dark:gone,
-      sosSubRpf:'They get the report'
+      sosChoices:(ph==='done'&&a&&!sent&&!S.sosFiling)?dark:gone,
+      sosFilingStyle:{display:S.sosFiling?'block':'none',marginTop:20,padding:'16px',
+        borderRadius:10,textAlign:'center',background:'#191922',border:'1px solid #24242e',
+        font:'700 14px/1.5 Manrope,sans-serif',color:'#b9b9c2'},
+      // said before she taps it, not after: filing it with the police is the
+      // one thing here that hands khaali the recording
+      sosSubRpf:((a&&a.hasMedia)
+        ?'The recording goes too, so an officer can watch what happened — the only thing here that sends it off your phone. They also get the report'
+        :'They get the report')
         +(S.sosGeo==='on'?', and where you are as you move.':'. Location is off, so not where you are.'),
       sosSubTrust:'Opens WhatsApp, or whatever else is on your share sheet'
         +((a&&a.hasMedia)?', with the recording attached.':'.'),
