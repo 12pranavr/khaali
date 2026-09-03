@@ -972,9 +972,38 @@ stamped as unverified rather than refused, because the demo bookings are local.
 
 ### What the screen does
 
-One press on **SOS** in the header opens a near-black page: no preview, no
-shutter sound, no flash, no confirm dialog, and the page behind it pinned so
-nothing slides under her thumb. Closing mid-recording stops and keeps nothing.
+One press on **SOS** in the header opens a dark page with the page behind it
+pinned, so nothing slides under her thumb. No shutter sound, no flash, no
+confirm dialog. Closing mid-recording stops and keeps nothing.
+
+The screen is never blank while the camera is open, because a still dark
+rectangle reads as broken at the exact moment she cannot afford to wonder:
+
+- **The live picture**, sharp, filling the frame. A `<video>` the framework
+  never touches, parked over a slot in the layout and repositioned on every
+  tick, so re-rendering four times a second cannot blink it out.
+- **A sound meter** that answers to the room - the half of the recording she
+  cannot see.
+- **A running clock**, and a note saying nothing has been sent yet.
+- If frames stop arriving for 3.5 seconds it says so, rather than sitting there
+  looking dead. If a photo comes back a few pixels wide it is refused outright,
+  because "saved on your phone" over a blank frame would be khaali lying about
+  evidence.
+
+Afterwards she can **watch the clip back or look at the photo** right on the
+result screen, before deciding anything.
+
+### Formats
+
+`video/mp4` is chosen first and deliberately: a `.webm` is refused by WhatsApp
+and by most phone galleries, so a recording in webm is a recording she cannot
+send, which is the same as no recording at all. Every candidate names its audio
+codec. The file is named from the type the recorder actually produced, never a
+hardcoded extension - naming an mp4 `.webm` was enough on its own to make every
+video share silently fail while photos worked.
+
+If the share sheet still refuses the file, the page says so plainly and offers
+**Save the recording to this phone** so she can attach it herself.
 
 ### What is honest about it
 
