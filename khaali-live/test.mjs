@@ -1396,5 +1396,83 @@ t('the price rule and the window rule each bind on their own', () => {
 });
 
 
+// The exact sequence server.mjs runs on every match tick, mirrored here so the
+// path that actually moves a traveller is covered rather than merely reasoned
+// about. If the server's loop changes, this has to change with it.
+function runMatcher(list, deps) {
+  const out = { filled: [], ended: [] };
+  for (const o of list.filter(x => x.status === 'open')) {
+    if (orders.tryFill(o, deps).ok) { out.filled.push(o); continue; }
+    if (!(orders.expired(o, deps) || orders.chartedOut(o, deps))) continue;
+    const fb = orders.fallbackRules(o);
+    if (fb) {
+      if (orders.tryFill(o, deps, fb).ok) { out.filled.push(o); continue; }
+      o.declined = orders.whyNot(o, deps, fb);
+    }
+    o.status = 'expired'; out.ended.push(o);
+  }
+  return out;
+}
+const fillTrain = (no, date, cls) => {
+  for (let i = 0; i < 500; i++) {
+    const h = S.hold({ train: no, date, cls, from: 5, to: 13, pax: 1, who: 'crowd-' + no + i, mode: 'any' });
+    if (!h.ok) break;
+    S.confirm(h.hold.id);
+  }
+  return S.countsFor(no, date, cls, 5, 13).anySeats;
+};
+
+t('the matcher moves a waitlist only after charting, and keeps every promise', () => {
+  S.reset();
+  const d = oDeps();
+  const date = '2026-09-16';
+  assert.strictEqual(fillTrain('16021', date, 'SL'), 0, 'the waitlisted train is full');
+  const o = fbOrder(FB, d, { date, cap: 5000 });
+
+  let r = runMatcher([o], d);
+  assert.deepStrictEqual([r.filled.length, r.ended.length], [0, 0], 'no move before the chart');
+  assert.strictEqual(o.status, 'open');
+
+  S.chart('16021', date, 'SL');
+  r = runMatcher([o], d);
+  assert.strictEqual(r.filled.length, 1, 'moved once the waitlist definitively failed');
+  assert.strictEqual(o.via, 'fallback');
+  assert.notStrictEqual(o.fill.train, '16021', 'onto a different train');
+  const bk = S.getBooking(o.pnr);
+  assert.strictEqual(bk.from, o.from, 'boarding station unchanged');
+  assert.strictEqual(bk.to, o.to, 'destination unchanged');
+  assert.strictEqual(bk.pax, o.pax, 'party kept together');
+  assert.ok(o.paid <= o.cap, 'never more than was blocked');
+});
+
+t('the matcher declines rather than bending a rule, and records which one', () => {
+  S.reset();
+  const d = oDeps();
+  const date = '2026-09-17';
+  fillTrain('16021', date, 'SL');
+  const o = fbOrder({ ...FB, arriveBy: 120 }, d, { date, cap: 5000 });
+  S.chart('16021', date, 'SL');
+  const r = runMatcher([o], d);
+  assert.strictEqual(r.filled.length, 0, 'no rule was bent to make it fit');
+  assert.strictEqual(o.status, 'expired');
+  assert.strictEqual(o.declined.rule, 'arriveBy', JSON.stringify(o.declined));
+  assert.ok(o.declined.n > 0);
+  assert.strictEqual(o.pnr, undefined, 'and nothing was booked');
+});
+
+t('a waitlist with no fallback is left where it was, and nothing is taken', () => {
+  S.reset();
+  const d = oDeps();
+  const date = '2026-09-18';
+  fillTrain('16021', date, 'SL');
+  const v = orders.validate(oReq({ train: '16021', classes: ['SL'], cap: 5000, date }), d);
+  const o = { ...v.order, id: 'plain', who: 'me@x', status: 'open', openedAt: 1 };
+  S.chart('16021', date, 'SL');
+  runMatcher([o], d);
+  assert.strictEqual(o.status, 'expired');
+  assert.strictEqual(o.declined, undefined, 'no rules were written, so none are explained');
+  assert.strictEqual(o.pnr, undefined);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
