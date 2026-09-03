@@ -946,6 +946,13 @@ means deleted* still holds end to end.
 
 The button says so before she taps it, not after.
 
+If the recording does not go with the report - no signal on the train, a
+reload between recording and sending, a browser that never ran the upload -
+the app says so rather than reporting success, and offers **Send the recording
+to the RPF** on the result screen and against the report in *Earlier*. It pulls
+the recording back out of the phone's own storage and files it, without making
+her record anything again. The officer's page updates on its next poll.
+
 Uploads are capped at 40 MB and must be an image or a video by content type;
 anything else is refused. Over the cap the request is drained and answered
 `413` rather than having its socket destroyed, because a phone left waiting on

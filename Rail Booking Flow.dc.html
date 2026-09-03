@@ -2385,6 +2385,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <div style="border-top:1px solid #1d1d25;padding:11px 0">
             <div style="font:600 12.5px/1.55 Manrope,sans-serif;color:#d6d6dc">{{ m.line }}</div>
             <div style="font:500 11.5px/1.55 Manrope,sans-serif;color:#7d7d88;margin-top:3px">{{ m.sub }}</div>
+            <div onClick="{{ m.onRefile }}" style="{{ m.refileStyle }}">Send the recording to the RPF</div>
           </div>
         </sc-for>
       </div>
@@ -2418,6 +2419,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <a href="{{ sosSaveHref }}" download="{{ sosSaveName }}" style="{{ sosSaveStyle }}">{{ sosSaveLabel }}</a>
       <a href="{{ sosRpfLink }}" target="_blank" rel="noopener" style="{{ sosRpfLinkStyle }}">See what the RPF can see</a>
       <div style="{{ sosFilingStyle }}">Sending the recording to the RPF...</div>
+      <div onClick="{{ sosRefileNow }}" style="{{ sosRefileStyle }}">Send the recording to the RPF</div>
       <div style="{{ sosRefStyle }}">{{ sosRefText }}</div>
       <a href="{{ sosWaHref }}" target="_blank" rel="noopener" style="{{ sosWaStyle }}">Open WhatsApp</a>
       <div style="{{ sosChoices }}">
@@ -3810,6 +3812,10 @@ class Component extends DCLogic {
     await new Promise((res,rej)=>{const tx=db.transaction('media','readwrite');
       tx.objectStore('media').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});
     return true;}catch(e){return false;}}
+  async sosTake(k){try{const db=await this.sosDb();
+    return await new Promise((res,rej)=>{const tx=db.transaction('media','readonly');
+      const q=tx.objectStore('media').get(k);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);});
+    }catch(e){return null;}}
   async sosDrop(k){try{const db=await this.sosDb();
     await new Promise(res=>{const tx=db.transaction('media','readwrite');
       tx.objectStore('media').delete(k);tx.oncomplete=()=>res();tx.onerror=()=>res();});}catch(e){}}
@@ -4149,23 +4155,49 @@ class Component extends DCLogic {
    * Keeping it, or sending it to a friend, still sends khaali nothing.
    */
   async sosFile(a){
-    const blob=this._sosBlob;
-    if(!blob||!a||!a.hasMedia)return true;
+    if(!a||!a.hasMedia)return true;
+    // in hand from the capture, else back off this phone's own storage - so
+    // a recording made before a reload, or before a failed upload, can still go
+    let blob=this._sosBlob;
+    if(!blob){const kept=await this.sosTake(a.id);blob=kept&&kept.blob||null;}
+    if(!blob)return 'missing';
     try{
       const r=await this.authFetch('/api/sos/'+a.id+'/media',{method:'POST',
         headers:{'content-type':(blob.type||'').split(';')[0]||'video/mp4'},
-        body:blob},60000);
+        body:blob},90000);
       const j=await r.json().catch(()=>({}));
-      return !!(j&&j.ok);
+      return j&&j.ok?true:((j&&j.error)||false);
     }catch(e){return false;}
+  }
+
+  /** She sent the report and the recording did not go with it. Send it now,
+      from this phone, without making her record it again. */
+  async sosRefile(id){
+    if(this._sosBusy)return;this._sosBusy=true;
+    const a=(this.state.sosAlert&&this.state.sosAlert.id===id)?this.state.sosAlert
+      :(this.state.sosList||[]).find(x=>x.id===id);
+    this.setState({sosFiling:true,sosErr:''});
+    const r=a?await this.sosFile(a):'missing';
+    let err='';
+    if(r==='missing')err='The recording is not on this phone. It was made on another device, or this browser has cleared it.';
+    else if(r!==true)err=(typeof r==='string'?r:'The recording would not upload.')+' It is still on this phone - try again when the signal is better.';
+    // pull the alert fresh so `filed` is the server's word, not ours
+    try{const g=await this.authFetch('/api/sos/'+id,{},9000);const j=await g.json();
+      if(j&&j.alert&&this.state.sosAlert&&this.state.sosAlert.id===id)
+        this.setState({sosAlert:j.alert,sosLine:j.line||this.state.sosLine});}catch(e){}
+    this.setState({sosFiling:false,sosErr:err});
+    this._sosBusy=false;this.loadSos();
   }
 
   async sosSend(channel){
     const a=this.state.sosAlert;if(!a||this._sosBusy)return;this._sosBusy=true;
-    let filed=true;
+    let filed=true,why='';
     if(channel==='rpf'&&a.hasMedia){
       this.setState({sosFiling:true});
-      filed=await this.sosFile(a);
+      const r=await this.sosFile(a);
+      filed=r===true;
+      why=r==='missing'?'The recording was not to hand on this phone, so the RPF has the report without it.'
+        :filed?'':((typeof r==='string'?r:'The recording would not upload, so the RPF has the report without it.'));
       this.setState({sosFiling:false,sosFiled:filed});
     }
     try{const r=await this.authFetch('/api/sos/'+a.id+'/send',{method:'POST',
@@ -4173,7 +4205,7 @@ class Component extends DCLogic {
         body:JSON.stringify({channel,traveller:channel==='rpf'?this.sosTraveller():null})},9000);
       const j=await r.json().catch(()=>({}));
       if(j&&j.ok)this.setState({sosAlert:j.alert,sosLine:j.line,
-        sosErr:filed?'':'The recording would not upload, so the RPF has the report without it. It is still on this phone \u2014 save it below and send it yourself.'});
+        sosErr:filed?'':(why+' It is still on this phone \u2014 tap "Send the recording to the RPF" below.')});
       else this.setState({sosErr:(j&&j.error)||'That did not go through. It is still on your phone.'});
     }catch(e){this.setState({sosErr:'That did not go through. It is still on your phone.'});}
     this._sosBusy=false;this.loadSos();
@@ -4272,11 +4304,19 @@ class Component extends DCLogic {
       sosErrText:S.sosErr||'',
 
       sosPastStyle:{display:(S.sosList||[]).length?'block':'none'},
-      sosPast:(S.sosList||[]).filter(x=>!a||x.id!==a.id).slice(0,6).map(m=>({
+      sosPast:(S.sosList||[]).filter(x=>!a||x.id!==a.id).slice(0,6).map(m=>{
+        const unfiled=m.status==='sent'&&m.channel==='rpf'&&m.hasMedia&&!m.filed;
+        return {
         line:m.status==='deleted'?'Deleted':(m.line||'A moment with no train attached'),
         sub:m.status==='deleted'?'Nothing is left of it - not the footage, not the stamp.'
-          :m.status==='sent'?('Handed on \u00b7 '+m.ref)
-          :'Held. Nothing has been sent.'})),
+          :unfiled?('Handed on \u00b7 '+m.ref+' \u00b7 the recording did not go with it')
+          :m.status==='sent'?('Handed on \u00b7 '+m.ref+(m.filed?' \u00b7 recording filed':''))
+          :'Held. Nothing has been sent.',
+        onRefile:()=>this.sosRefile(m.id),
+        refileStyle:{display:unfiled?'block':'none',cursor:'pointer',marginTop:9,
+          padding:'12px',borderRadius:9,background:'#d8385a',color:'#fff',
+          textAlign:'center',font:'700 13px/1 Manrope,sans-serif'},
+      };}),
 
       sosWait:ph==='working'?dark:gone,
       sosWaitText:'Stamping the moment...',
@@ -4372,6 +4412,11 @@ class Component extends DCLogic {
       sosSubTrust:'Opens WhatsApp, or whatever else is on your share sheet'
         +((a&&a.hasMedia)?', with the recording attached.':'.'),
       sosToRpf:()=>this.sosSend('rpf'),
+      // the recording did not go with the report: one tap sends it now
+      sosRefileNow:()=>a&&this.sosRefile(a.id),
+      sosRefileStyle:Object.assign(big('#d8385a','#fff'),
+        {display:(sent&&a.channel==='rpf'&&a.hasMedia&&!a.filed&&!S.sosFiling)?'block':'none',
+         marginTop:12,textAlign:'center'}),
       sosRpfLink:(sent&&a.channel==='rpf'&&a.ref)?('/rpf/'+a.ref):'#',
       sosRpfLinkStyle:{display:(sent&&a.channel==='rpf'&&a.ref)?'block':'none',
         textAlign:'center',padding:14,borderRadius:10,marginTop:10,textDecoration:'none',
