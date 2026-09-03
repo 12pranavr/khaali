@@ -118,17 +118,28 @@ function render(r) {
   // happened is holding evidence; one reading a line about a video that lives
   // on somebody else's phone is holding a note.
   if (r.evidence) {
-    const src = '/api/rpf/' + encodeURIComponent(r.ref) + '/media';
+    const base = '/api/rpf/' + encodeURIComponent(r.ref) + '/media';
+    const files = r.evidence.files || [r.evidence];
     const mb = (r.evidence.bytes / 1048576).toFixed(1);
-    out.appendChild($('<div class="card"><div class="lbl">What she recorded</div>' +
-      (/^video/.test(r.evidence.type)
-        ? '<video src="' + src + '" controls playsinline style="width:100%;max-height:340px;' +
-          'border-radius:10px;background:#000"></video>'
-        : '<img src="' + src + '" alt="" style="width:100%;max-height:340px;object-fit:contain;' +
-          'border-radius:10px;background:#000">') +
+    let body;
+    if (/^video/.test(r.evidence.type)) {
+      body = '<video src="' + base + '" controls playsinline style="width:100%;max-height:340px;' +
+        'border-radius:10px;background:#000"></video>';
+    } else if (files.length === 1) {
+      body = '<img src="' + base + '" alt="" style="width:100%;max-height:340px;object-fit:contain;' +
+        'border-radius:10px;background:#000">';
+    } else {
+      // several photographs: every one of them, each opening full size
+      body = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + files.map((f, i) =>
+        '<a href="' + base + '/' + i + '" target="_blank" rel="noopener" style="display:block;width:calc(50% - 4px)">' +
+        '<img src="' + base + '/' + i + '" alt="" style="width:100%;aspect-ratio:3/4;object-fit:cover;' +
+        'border-radius:8px;background:#000;display:block"></a>').join('') + '</div>';
+    }
+    out.appendChild($('<div class="card"><div class="lbl">What she recorded</div>' + body +
       '<div class="v" style="color:#7c828f;margin-top:9px;font-size:11.5px">' +
-      esc(r.evidence.type) + ' &middot; ' + mb + ' MB &middot; filed with this report by the ' +
-      'person who recorded it. If she deletes the report, this goes with it.</div></div>'));
+      (files.length > 1 ? files.length + ' photographs &middot; ' : esc(r.evidence.type) + ' &middot; ') +
+      mb + ' MB &middot; filed with this report by the person who recorded it. ' +
+      'If she deletes the report, this goes with it.</div></div>'));
   }
 
   const rows = [];
@@ -142,7 +153,10 @@ function render(r) {
   add('Evidence', !r.hasMedia
     ? 'None recorded. The moment was marked.'
     : r.evidence
-      ? esc(r.kind === 'video' ? 'A video' : 'A photograph') + ', filed with this report &mdash; above'
+      ? esc(r.kind === 'video' ? 'A video'
+          : (r.evidence.files && r.evidence.files.length > 1)
+            ? r.evidence.files.length + ' photographs' : 'A photograph') +
+        ', filed with this report &mdash; above'
       : esc(r.kind === 'video' ? 'A video' : 'A photograph') +
         ' &mdash; still on her phone. It did not reach khaali.');
   add('Journey', r.verified

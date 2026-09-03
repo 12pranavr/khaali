@@ -2374,7 +2374,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="{{ sosChoose }}">
       <div style="font:600 13.5px/1.7 Manrope,sans-serif;color:#b9b9c2;margin:15px 0 20px">{{ sosWhere }}</div>
       <div onClick="{{ sosVideo }}" style="{{ sosBtnVideo }}">Record what is happening<div style="{{ sosSubLine }}">Video and sound. It stays on this phone.</div></div>
-      <div onClick="{{ sosPhoto }}" style="{{ sosBtnPhoto }}">Take one photo<div style="{{ sosSubLine }}">One frame. khaali makes no sound and shows no flash.</div></div>
+      <div onClick="{{ sosPhoto }}" style="{{ sosBtnPhoto }}">Take photos<div style="{{ sosSubLine }}">Up to six, one tap each, all in one report. No sound, no flash.</div></div>
       <div onClick="{{ sosMark }}" style="{{ sosBtnMark }}">Mark this moment<div style="{{ sosSubLine }}">No camera at all. Nothing to see, nothing to explain - and khaali still records the train, the berth and the minute.</div></div>
       <div style="{{ sosGeoStyle }}">{{ sosGeoNote }}</div>
       <div style="{{ sosErrStyle }}">{{ sosErrText }}</div>
@@ -2403,6 +2403,13 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div style="{{ sosMeterWrap }}"><div style="{{ sosMeterBar }}"></div></div>
       <div style="{{ sosLiveNoteStyle }}">{{ sosLiveNote }}</div>
       <div class="k-soslens" style="{{ sosLensSlot }}"></div>
+      <div style="{{ sosStripStyle }}">
+        <sc-for list="{{ sosStrip }}" as="p" hint-placeholder-count="6">
+          <img src="{{ p.src }}" style="{{ p.style }}"></img>
+        </sc-for>
+      </div>
+      <div onClick="{{ sosShutterBtn }}" style="{{ sosShutterStyle }}">Take photo</div>
+      <div onClick="{{ sosShootDoneBtn }}" style="{{ sosShootDoneStyle }}">{{ sosShootDoneLabel }}</div>
       <div onClick="{{ sosStopBtn }}" style="{{ sosStopStyle }}">Stop</div>
     </div>
 
@@ -2413,6 +2420,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="font:600 13.5px/1.7 Manrope,sans-serif;color:#eaeaef">{{ sosStampLine }}</div>
         <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:9px">{{ sosHeldNote }}</div>
         <img src="{{ sosShotSrc }}" style="{{ sosShotStyle }}"></img>
+        <div style="{{ sosShotGrid }}">
+          <sc-for list="{{ sosShotList }}" as="p" hint-placeholder-count="6">
+            <a href="{{ p.src }}" download="{{ p.name }}" style="{{ p.aStyle }}"><img src="{{ p.src }}" style="{{ p.style }}"></img></a>
+          </sc-for>
+        </div>
         <video src="{{ sosShotSrc }}" controls="true" playsinline="true" style="{{ sosClipStyle }}"></video>
         <div style="{{ sosShotCap }}">{{ sosShotCapText }}</div>
       </div>
@@ -3833,7 +3845,7 @@ class Component extends DCLogic {
    */
   sosLens(){
     const v=this._sosVid;if(!v)return;
-    const S=this.state,live=S.sosOpen&&(S.sosPhase==='rec'||S.sosPhase==='snap'||S.sosPhase==='arming');
+    const S=this.state,live=S.sosOpen&&(S.sosPhase==='rec'||S.sosPhase==='shoot'||S.sosPhase==='arming');
     const slot=live?document.querySelector('.k-soslens'):null;
     const r=slot?slot.getBoundingClientRect():null;
     if(!r||r.width<8||r.height<8){
@@ -3904,7 +3916,9 @@ class Component extends DCLogic {
     this.setState(patch);
     this.sosLens();
   }
-  openSos(){this.sosLock(true);this._sosBlob=null;this.sosWatch();
+  openSos(){this.sosLock(true);this._sosBlob=null;this._sosBlobs=[];
+    this._sosShots=[];(this._sosShotUrls||[]).forEach(u=>{try{URL.revokeObjectURL(u);}catch(e){}});
+    this._sosShotUrls=[];this.sosWatch();
     try{if(this._sosShot)URL.revokeObjectURL(this._sosShot);}catch(e){}
     this._sosShot=null;
     this.setState({sosOpen:true,sosPhase:'choose',sosErr:'',
@@ -4011,7 +4025,12 @@ class Component extends DCLogic {
     // before there is anything to count
     this._sosT=setInterval(()=>this.sosTick(0),250);
     this.sosLens();
-    if(kind==='photo'){this._sosBusy=false;return this.sosSnap();}
+    if(kind==='photo'){
+      // the camera stays open and she takes what she needs: the face, the
+      // coach number, the berth. One tap each, up to six, one report.
+      this._sosShots=[];this._sosShotUrls=[];this._sosBusy=false;
+      return this.setState({sosPhase:'shoot',sosShots:[],sosShotN:0});
+    }
     // exactly the picture and the sound, nothing else the browser may have
     // attached, so there is no question about what is being written
     const aTrack=stream.getAudioTracks()[0]||null;
@@ -4036,50 +4055,58 @@ class Component extends DCLogic {
     this._sosBusy=false;
   }
 
-  async sosSnap(){
-    const v=this._sosVid;if(!v)return;
-    // a beat with the picture on screen, so taking a photo is something she
-    // watches happen rather than something that flashes past her
-    this.setState({sosPhase:'snap'});this.sosLens();
-    for(let i=0;i<40&&!(v.videoWidth>0);i++)await new Promise(r=>setTimeout(r,50));
-    if(this._sosAbort)return;
-    await new Promise(r=>setTimeout(r,650));
-    if(this._sosAbort)return;
+  sosMaxShots(){return 6;}
+  /** One frame, on her tap. Refused rather than faked if the camera has sent
+      nothing yet - "saved" over a blank frame is khaali lying about evidence. */
+  async sosShutter(){
+    const v=this._sosVid;if(!v||this._sosSnapping)return;
+    if((this._sosShots||[]).length>=this.sosMaxShots())return;
+    this._sosSnapping=true;
     const c=document.createElement('canvas');
-    c.width=v.videoWidth||720;c.height=v.videoHeight||1280;
+    c.width=v.videoWidth||0;c.height=v.videoHeight||0;
+    if(c.width<32||c.height<32){this._sosSnapping=false;
+      return this.setState({sosErr:'The camera has not sent a picture yet. Give it a second and tap again.'});}
     try{c.getContext('2d').drawImage(v,0,0,c.width,c.height);}catch(e){}
-    // a camera that opened but sent nothing leaves a frame a few pixels wide.
-    // Saying "saved on your phone" over that would be khaali lying about
-    // evidence, which is the one thing it must never do.
-    if(c.width<32||c.height<32){
-      this.sosTearDown();
-      return this.setState({sosPhase:'denied',
-        sosErr:'The camera opened but sent no picture, so nothing was captured. Mark the moment instead - it needs no camera and still records the train, the berth and the minute.'});
-    }
     const blob=await new Promise(r=>{try{c.toBlob(r,'image/jpeg',.9);}catch(e){r(null);}});
-    this.sosFinish(blob,'photo');
+    if(blob){
+      this._sosShots=(this._sosShots||[]).concat([blob]);
+      this._sosShotUrls=(this._sosShotUrls||[]).concat([URL.createObjectURL(blob)]);
+      this.setState({sosShots:this._sosShotUrls.slice(),sosShotN:this._sosShots.length,sosErr:''});
+    }
+    this._sosSnapping=false;
+  }
+  /** She has what she needs. Nothing taken means nothing stamped. */
+  sosShootDone(){
+    const shots=this._sosShots||[];
+    if(!shots.length){this.sosTearDown();return this.setState({sosPhase:'choose',sosErr:''});}
+    this.sosFinish(shots,'photo');
   }
 
   /** Stamp on the server, footage in her pocket. If the pocket fails, say so
       plainly rather than letting her believe she has a video she has not. */
-  async sosFinish(blob,kind){
+  async sosFinish(media,kind){
     clearInterval(this._sosT);this._sosT=null;
+    const blobs=Array.isArray(media)?media.filter(Boolean):(media?[media]:[]);
+    const blob=blobs[0]||null;
     // she walked away from it mid-recording; no stamp is made for something
     // she decided not to keep
     if(this._sosAbort){this._sosAbort=false;return;}
     this.setState({sosPhase:'working'});
     try{
       const j=await this.sosStamp(kind);
-      const kept=blob?await this.sosPut(j.alert.id,{blob,kind,at:Date.now()}):false;
+      const kept=blobs.length?await this.sosPut(j.alert.id,{blobs,blob,kind,at:Date.now()}):false;
       const mute=(kind==='video'&&blob)?!(await this.sosHasSound(blob)):false;
-      this._sosBlob=blob||null;   // held in hand: iOS opens no share sheet after an await
+      this._sosBlobs=blobs;this._sosBlob=blob;   // held in hand: iOS opens no share sheet after an await
       // she gets to SEE what was captured. Nothing else settles the question
       // of whether it worked.
-      try{if(this._sosShot)URL.revokeObjectURL(this._sosShot);}catch(e){}
-      this._sosShot=blob?URL.createObjectURL(blob):null;
+      (this._sosUrls||[]).forEach(u=>{try{URL.revokeObjectURL(u);}catch(e){}});
+      this._sosUrls=(kind==='photo'&&this._sosShotUrls&&this._sosShotUrls.length===blobs.length)
+        ?this._sosShotUrls.slice():blobs.map(x=>URL.createObjectURL(x));
+      this._sosShotUrls=[];
+      this._sosShot=this._sosUrls[0]||null;
       this._sosType=blob?blob.type:'';
       this.sosTearDown();
-      this.setState({sosPhase:'done',sosShot:this._sosShot||'',sosNoAttach:false,
+      this.setState({sosPhase:'done',sosShot:this._sosShot||'',sosShotUrls:this._sosUrls.slice(),sosNoAttach:false,
         sosShotName:'khaali-'+j.alert.id+'.'+this.sosExt(this._sosType,kind),
         sosAlert:j.alert,sosLine:j.line,sosPushed:Date.now(),
         sosErr:[
@@ -4112,20 +4139,18 @@ class Component extends DCLogic {
   async sosShare(){
     const a=this.state.sosAlert;if(!a||this._sosBusy)return;
     const text=this.sosMessage();
-    const blob=this._sosBlob;
-    // named after what it actually is - a video called .webm when it is mp4,
-    // or the other way round, is a video the share sheet quietly refuses
-    const file=blob?(()=>{try{
-      const full=blob.type||(a.kind==='photo'?'image/jpeg':'video/mp4');
+    const blobs=(this._sosBlobs&&this._sosBlobs.length)?this._sosBlobs:(this._sosBlob?[this._sosBlob]:[]);
+    const files=blobs.map((b,i)=>{try{
+      const full=b.type||(a.kind==='photo'?'image/jpeg':'video/mp4');
       const type=full.split(';')[0].trim()||'video/mp4';
-      return new File([blob],'khaali-'+a.id+'.'+this.sosExt(full,a.kind),{type});
-    }catch(e){return null;}})():null;
+      return new File([b],'khaali-'+a.id+(blobs.length>1?'-'+(i+1):'')+'.'+this.sosExt(full,a.kind),{type});
+    }catch(e){return null;}}).filter(Boolean);
     let how='';
     try{
       if(navigator.share){
-        const withFile=!!(file&&navigator.canShare&&navigator.canShare({files:[file]}));
+        const withFile=!!(files.length&&navigator.canShare&&navigator.canShare({files}));
         if(a.hasMedia&&!withFile)this.setState({sosNoAttach:true});
-        await navigator.share(withFile?{text,files:[file]}:{text});
+        await navigator.share(withFile?{text,files}:{text});
         how=withFile?'with the recording attached'
           :(a.hasMedia?'as a message. This phone would not attach the recording, so save it below and send it yourself'
                       :'as a message');
@@ -4158,15 +4183,22 @@ class Component extends DCLogic {
     if(!a||!a.hasMedia)return true;
     // in hand from the capture, else back off this phone's own storage - so
     // a recording made before a reload, or before a failed upload, can still go
-    let blob=this._sosBlob;
-    if(!blob){const kept=await this.sosTake(a.id);blob=kept&&kept.blob||null;}
-    if(!blob)return 'missing';
+    let blobs=(this._sosBlobs&&this._sosBlobs.length)?this._sosBlobs:(this._sosBlob?[this._sosBlob]:[]);
+    if(!blobs.length){const kept=await this.sosTake(a.id);
+      blobs=kept?(kept.blobs||(kept.blob?[kept.blob]:[])):[];}
+    if(!blobs.length)return 'missing';
     try{
-      const r=await this.authFetch('/api/sos/'+a.id+'/media',{method:'POST',
-        headers:{'content-type':(blob.type||'').split(';')[0]||'video/mp4'},
-        body:blob},90000);
-      const j=await r.json().catch(()=>({}));
-      return j&&j.ok?true:((j&&j.error)||false);
+      // each one carries its place in the set, so a retry replaces rather
+      // than duplicates
+      for(let i=0;i<blobs.length;i++){
+        const b=blobs[i];
+        const r=await this.authFetch('/api/sos/'+a.id+'/media',{method:'POST',
+          headers:{'content-type':(b.type||'').split(';')[0]||'video/mp4','x-khaali-shot':String(i)},
+          body:b},90000);
+        const j=await r.json().catch(()=>({}));
+        if(!(j&&j.ok))return (j&&j.error)||false;
+      }
+      return true;
     }catch(e){return false;}
   }
 
@@ -4324,7 +4356,7 @@ class Component extends DCLogic {
       // arming, holding still and recording all share one screen, and it is
       // never a blank one: there is a lit frame, a moving picture and a bar
       // that answers to the room
-      sosLive:(ph==='arming'||ph==='snap'||ph==='rec')
+      sosLive:(ph==='arming'||ph==='shoot'||ph==='rec')
         ?{display:'flex',flexDirection:'column',flex:1}:gone,
       sosDot:{flex:'none',width:13,height:13,borderRadius:99,
         background:ph==='arming'?'#e0a419':'#e03b58'},
@@ -4333,11 +4365,14 @@ class Component extends DCLogic {
         letterSpacing:ph==='rec'?'.02em':'-.01em'},
       sosLiveHeadText:ph==='rec'
         ?(String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'))
-        :ph==='snap'?'Hold still':'Opening the camera',
+        :ph==='shoot'?((S.sosShotN||0)?(S.sosShotN+' of '+this.sosMaxShots()):'Ready')
+        :'Opening the camera',
       sosLiveNote:S.sosStall?S.sosStall
         :S.sosNoMic?'Your phone gave the camera but not the microphone, so this video will have no sound. Everything else is being recorded.'
         :ph==='rec'?'Recording on this phone. Nothing has been sent, and nothing will be until you say so.'
-        :ph==='snap'?'Keep the phone as it is. khaali takes one frame.'
+        :ph==='shoot'?((S.sosShotN||0)>=this.sosMaxShots()
+            ?'That is six. Tap Done to keep them.'
+            :'Tap the shutter for each photo - the face, the coach number, the berth. Up to six, all in one report. No sound, no flash.')
         :'The camera is starting. Your phone may ask you first.',
       sosLiveNoteStyle:{font:'600 12.5px/1.6 Manrope,sans-serif',marginTop:9,
         color:(S.sosStall||S.sosNoMic)?'#f2a6b6':'#8b8b95'},
@@ -4354,6 +4389,22 @@ class Component extends DCLogic {
         font:'700 18px/1 Manrope,sans-serif',textAlign:'center',padding:30,
         borderRadius:12,cursor:'pointer'},
       sosStopBtn:()=>this.sosStopRec(),
+      // the shutter and the strip of what she has so far
+      sosShutterBtn:()=>this.sosShutter(),
+      sosShutterStyle:{display:ph==='shoot'?'block':'none',
+        background:(S.sosShotN||0)>=this.sosMaxShots()?'#3a1f27':'#d8385a',color:'#fff',
+        font:'700 18px/1 Manrope,sans-serif',textAlign:'center',padding:26,
+        borderRadius:12,cursor:'pointer',opacity:(S.sosShotN||0)>=this.sosMaxShots()?.6:1},
+      sosShootDoneBtn:()=>this.sosShootDone(),
+      sosShootDoneStyle:{display:ph==='shoot'?'block':'none',marginTop:10,
+        background:(S.sosShotN||0)?'#1b1b23':'transparent',color:(S.sosShotN||0)?'#f2f2f4':'#8b8b95',
+        border:'1px solid #2b2b36',font:'700 15px/1 Manrope,sans-serif',textAlign:'center',
+        padding:18,borderRadius:11,cursor:'pointer'},
+      sosShootDoneLabel:(S.sosShotN||0)?('Done \u00b7 keep '+(S.sosShotN===1?'this photo':'these '+S.sosShotN+' photos')):'Back',
+      sosStripStyle:{display:(ph==='shoot'&&(S.sosShots||[]).length)?'flex':'none',gap:6,
+        marginBottom:12,overflowX:'auto'},
+      sosStrip:(ph==='shoot'?(S.sosShots||[]):[]).map(u=>({src:u,
+        style:{flex:'none',width:56,height:74,objectFit:'cover',borderRadius:7,border:'1px solid #2b2b36'}})),
 
       sosDone:(ph==='done'||ph==='denied')?dark:gone,
       sosDoneHead:ph==='denied'?'The camera stayed shut.'
@@ -4362,20 +4413,29 @@ class Component extends DCLogic {
       // she watches back what was captured before deciding anything. It is the
       // only answer to "did that actually work" that cannot be doubted.
       sosShotSrc:S.sosShot||'',
-      sosShotStyle:{display:(S.sosShot&&S.sosKind==='photo')?'block':'none',width:'100%',
+      sosShotStyle:{display:(S.sosShot&&S.sosKind==='photo'&&(S.sosShotUrls||[]).length<=1)?'block':'none',width:'100%',
         maxHeight:230,objectFit:'cover',borderRadius:10,marginTop:14,
         border:'1px solid #24242e'},
+      // several photos: a grid, each one a tap to save
+      sosShotGrid:{display:(S.sosKind==='photo'&&(S.sosShotUrls||[]).length>1)?'flex':'none',
+        flexWrap:'wrap',gap:8,marginTop:14},
+      sosShotList:(S.sosKind==='photo'&&(S.sosShotUrls||[]).length>1?S.sosShotUrls:[]).map((u,i)=>({
+        src:u,name:'khaali-'+(a?a.id:'shot')+'-'+(i+1)+'.jpg',
+        aStyle:{display:'block',width:'calc(50% - 4px)'},
+        style:{display:'block',width:'100%',aspectRatio:'3 / 4',objectFit:'cover',borderRadius:8,
+          border:'1px solid #24242e'}})),
       sosClipStyle:{display:(S.sosShot&&S.sosKind==='video')?'block':'none',width:'100%',
         maxHeight:260,borderRadius:10,marginTop:14,border:'1px solid #24242e',
         background:'#000'},
       sosShotCap:{display:S.sosShot?'block':'none',marginTop:7,textAlign:'center',
         font:'600 11.5px/1.5 Manrope,sans-serif',color:'#7d7d88'},
-      sosShotCapText:(a&&a.filed)
+      sosShotCapText:((a&&a.filed)
         ?'Your copy. The RPF has one too, because you filed it with them.'
-        :'This is what your phone kept. khaali has never seen it.',
+        :'This is what your phone kept. khaali has never seen it.')
+        +((S.sosShotUrls||[]).length>1?' Tap a photo to save it.':''),
       sosSaveHref:S.sosShot||'#',
       sosSaveName:S.sosShotName||'khaali.mp4',
-      sosSaveStyle:{display:S.sosShot?'block':'none',cursor:'pointer',textAlign:'center',
+      sosSaveStyle:{display:(S.sosShot&&(S.sosShotUrls||[]).length<=1)?'block':'none',cursor:'pointer',textAlign:'center',
         padding:14,borderRadius:10,marginTop:12,textDecoration:'none',
         border:'1px solid '+(S.sosNoAttach?'#45202f':'#24242e'),
         background:S.sosNoAttach?'#2a1620':'transparent',
@@ -4406,7 +4466,10 @@ class Component extends DCLogic {
       // said before she taps it, not after: filing it with the police is the
       // one thing here that hands khaali the recording
       sosSubRpf:((a&&a.hasMedia)
-        ?'The recording goes too, so an officer can watch what happened — the only thing here that sends it off your phone. They also get the report'
+        ?((a.kind==='photo'
+            ?(((S.sosShotUrls||[]).length>1)?'The photos go too':'The photo goes too')
+            :'The recording goes too')
+          +', so an officer can see what happened — the only thing here that sends it off your phone. They also get the report')
         :'They get the report')
         +(S.sosGeo==='on'?', and where you are as you move.':'. Location is off, so not where you are.'),
       sosSubTrust:'Opens WhatsApp, or whatever else is on your share sheet'

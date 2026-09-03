@@ -255,7 +255,11 @@ export function forRpf(a, now = Date.now()) {
     hasMedia: !!a.media,
     // whether the officer can actually watch it, or only knows it exists
     evidence: (a.media && a.media.onServer)
-      ? { type: a.media.type || '', bytes: a.media.bytes || 0 } : null,
+      ? { type: a.media.type || '', bytes: a.media.bytes || 0,
+          files: (a.media.files && a.media.files.length)
+            ? a.media.files.map(f => ({ type: f.type, bytes: f.bytes }))
+            : [{ type: a.media.type || '', bytes: a.media.bytes || 0 }] }
+      : null,
     line: lineOf(a),
     train: s.train, trainName: s.trainName, coach: s.coach, berth: s.berth,
     pnr: s.pnr, date: s.date, verified: !!s.verified,

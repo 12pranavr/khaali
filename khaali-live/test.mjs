@@ -1630,7 +1630,18 @@ t('the footage reaches the RPF only when she files it, and leaves when she delet
   // she files it: only now does khaali hold a picture of anybody
   a.media = { ...a.media, onServer: true, type: 'video/mp4', bytes: 695822, file: 'e1.mp4' };
   const rep = sos.forRpf(a, at);
-  assert.deepStrictEqual(rep.evidence, { type: 'video/mp4', bytes: 695822 });
+  assert.deepStrictEqual(rep.evidence,
+    { type: 'video/mp4', bytes: 695822, files: [{ type: 'video/mp4', bytes: 695822 }] });
+
+  // several photographs are one report, not several
+  const p = sos.newAlert({ id: 'e3', who: 'her@x', kind: 'photo', journey: {} }, at).alert;
+  sos.handOver(p, 'rpf', at);
+  p.media = { ...p.media, onServer: true, type: 'image/jpeg', bytes: 3000, file: 'e3-0.jpg',
+    files: [{ file: 'e3-0.jpg', type: 'image/jpeg', bytes: 1000 },
+            { file: 'e3-1.jpg', type: 'image/jpeg', bytes: 2000 }] };
+  const rp = sos.forRpf(p, at);
+  assert.strictEqual(rp.evidence.files.length, 2);
+  assert.ok(!/e3-0\.jpg|"file":/.test(JSON.stringify(rp.evidence)), 'file names stay on the server');
   assert.strictEqual(sos.publicOf(a).filed, true);
   assert.ok(!/blob|base64|data:/i.test(JSON.stringify(rep)),
     'and the report still carries a reference to it, never the bytes');

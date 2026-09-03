@@ -253,6 +253,7 @@ const send = (res, code, body, type = 'application/json') => {
 // to the police herself.
 const SOS_MEDIA = path.join(process.env.DATA_DIR || path.join(DIR, 'data'), 'sos-media');
 const MEDIA_MAX = 40 * 1024 * 1024;
+const MEDIA_SHOTS = 6;
 const MEDIA_KIND = { 'image/jpeg': 'jpg', 'image/png': 'png',
   'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' };
 
@@ -1062,16 +1063,19 @@ async function api(req, res, url) {
 
   // The evidence itself, for a report that was filed with the RPF. Reachable
   // only through the reference on that report, and only while it stands.
-  const mRpfM = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})\/media$/);
+  const mRpfM = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})\/media(?:\/([0-9]+))?$/);
   if (mRpfM) {
     const a = [...ALERTS.values()].find(x => x.ref === mRpfM[1] && x.channel === 'rpf');
     if (!a || a.status === 'deleted' || !a.media || !a.media.onServer)
       return send(res, 404, { error: 'no evidence on this report' });
-    const f = path.join(SOS_MEDIA, a.media.file);
-    if (!f.startsWith(SOS_MEDIA) || !fs.existsSync(f))
+    const set = (a.media.files && a.media.files.length) ? a.media.files
+      : [{ file: a.media.file, type: a.media.type }];
+    const item = set[mRpfM[2] ? parseInt(mRpfM[2], 10) : 0];
+    const f = item && item.file ? path.join(SOS_MEDIA, item.file) : '';
+    if (!f || !f.startsWith(SOS_MEDIA) || !fs.existsSync(f))
       return send(res, 404, { error: 'no evidence on this report' });
     const buf = fs.readFileSync(f);
-    res.writeHead(200, { 'content-type': a.media.type, 'content-length': buf.length,
+    res.writeHead(200, { 'content-type': item.type, 'content-length': buf.length,
       'cache-control': 'private, max-age=60' });
     return res.end(buf);
   }
@@ -1136,12 +1140,24 @@ async function api(req, res, url) {
       if (buf === null) return send(res, 413, { ok: false,
         error: 'That recording is too large to file. It is still on your phone.' });
       if (!buf.length) return send(res, 400, { ok: false, error: 'empty' });
+      // Several photographs make one report. Each arrives with its place in
+      // the set, so a retry replaces its own slot rather than doubling up.
+      const files = (a.media && a.media.files) ? a.media.files.slice() : [];
+      let idx = parseInt(req.headers['x-khaali-shot'], 10);
+      if (!(idx >= 0 && idx < MEDIA_SHOTS)) idx = files.length;
+      if (idx >= MEDIA_SHOTS)
+        return send(res, 409, { ok: false, error: 'No more than ' + MEDIA_SHOTS + ' on one report.' });
+      const name = a.id + '-' + idx + '.' + ext;
       try {
         fs.mkdirSync(SOS_MEDIA, { recursive: true });
-        fs.writeFileSync(path.join(SOS_MEDIA, a.id + '.' + ext), buf);
+        fs.writeFileSync(path.join(SOS_MEDIA, name), buf);
       } catch (e) { return send(res, 500, { ok: false, error: 'could not keep it' }); }
-      a.media = { ...(a.media || {}), onDevice: true, ref: a.id,
-        onServer: true, type, bytes: buf.length, file: a.id + '.' + ext };
+      files[idx] = { file: name, type, bytes: buf.length };
+      const kept = files.filter(Boolean);
+      a.media = { ...(a.media || {}), onDevice: true, ref: a.id, onServer: true,
+        // the first stands in for the set where one is expected
+        type: kept[0].type, bytes: kept.reduce((t, f) => t + f.bytes, 0), file: kept[0].file,
+        files: kept };
       journal.append({ t: 'sosmedia', id: a.id, media: a.media });
       return send(res, 200, { ok: true, bytes: buf.length });
     }
@@ -1165,9 +1181,11 @@ async function api(req, res, url) {
     }
     if (req.method === 'DELETE') {
       // the filed copy goes with everything else. Deleted means deleted.
-      try {
-        if (a.media && a.media.file) fs.unlinkSync(path.join(SOS_MEDIA, a.media.file));
-      } catch (e) { /* already gone */ }
+      const gone = (a.media && a.media.files && a.media.files.length) ? a.media.files
+        : (a.media && a.media.file ? [{ file: a.media.file }] : []);
+      for (const f of gone) {
+        try { fs.unlinkSync(path.join(SOS_MEDIA, f.file)); } catch (e) { /* already gone */ }
+      }
       sos.remove(a);
       journal.append({ t: 'sosgone', id: a.id });
       return send(res, 200, { ok: true, alert: sos.publicOf(a) });

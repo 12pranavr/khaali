@@ -907,7 +907,7 @@ So khaali holds **the stamp and never the footage**.
 | Kind | What the phone does | What khaali stores |
 |---|---|---|
 | `mark` | nothing at all | the stamp |
-| `photo` | one frame, kept in IndexedDB | the stamp, plus a note that media exists |
+| `photo` | up to six frames on a shutter, kept in IndexedDB | the stamp, plus a note that media exists |
 | `video` | `MediaRecorder`, kept in IndexedDB | the stamp, plus a note that media exists |
 
 The stamp is everything she would otherwise have to type while frightened:
@@ -1095,8 +1095,22 @@ rectangle reads as broken at the exact moment she cannot afford to wonder:
   because "saved on your phone" over a blank frame would be khaali lying about
   evidence.
 
-Afterwards she can **watch the clip back or look at the photo** right on the
+Afterwards she can **watch the clip back or look at the photos** right on the
 result screen, before deciding anything.
+
+### Photographs: a shutter, not a snapshot
+
+Evidence is rarely one frame. She wants the man's face *and* the coach number
+*and* the berth. So *Take photos* opens the camera and leaves it open: a
+shutter button, one tap per frame, a strip of what she has so far, and a count
+- *3 of 6*. *Done* keeps them; *Back* with nothing taken stamps nothing.
+
+They are one report, not six. They share the stamp, they go to WhatsApp as one
+share with every file attached, and when she files it with the RPF each is
+uploaded with its place in the set (`x-khaali-shot: n`), so a retry replaces
+its own slot rather than doubling up. The server caps a report at six and
+serves the nth at `/api/rpf/<ref>/media/<n>`; the officer's page shows all of
+them, each opening full size. Deleting the report unlinks every one.
 
 ### Formats
 
