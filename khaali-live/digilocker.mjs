@@ -27,42 +27,42 @@ export const CONSENT_MS = 300000;             // five minutes to answer, like a 
  */
 export const VAULT = {
   'Pranav': {
-    dob: '2003-06-14', aadhaar: 'xxxx xxxx 7412', pan: 'BQRPP4417K',
+    dob: '2003-06-14', phone: '+91 98867 41120', aadhaar: 'xxxx xxxx 7412', pan: 'BQRPP4417K',
     docs: [
       { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-05 2022 xxxx41' },
       { kind: 'education', label: 'Degree certificate', issuer: 'Bengaluru University', no: 'BU/2024/xxxx09' },
     ],
   },
   'Varun': {
-    dob: '2001-11-02', aadhaar: 'xxxx xxxx 2260', pan: 'AKMPV9031C',
+    dob: '2001-11-02', phone: '+91 99024 22607', aadhaar: 'xxxx xxxx 2260', pan: 'AKMPV9031C',
     docs: [
       { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-03 2021 xxxx77' },
       { kind: 'education', label: 'Class XII certificate', issuer: 'CBSE', no: 'CBSE/2019/xxxx14' },
     ],
   },
   'Achina': {
-    dob: '2006-02-19', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L',
+    dob: '2006-02-19', phone: '+91 90350 50831', aadhaar: 'xxxx xxxx 5083', pan: 'CJHPA2288L',
     docs: [
       { kind: 'education', label: 'Class XII certificate', issuer: 'CBSE', no: 'CBSE/2024/xxxx62' },
       { kind: 'education', label: 'College enrolment card', issuer: 'Mount Carmel College', no: 'MCC/2024/xxxx18' },
     ],
   },
   'Martin': {
-    dob: '1988-09-30', aadhaar: 'xxxx xxxx 1974', pan: 'DLTPM6642H',
+    dob: '1988-09-30', phone: '+91 88677 19742', aadhaar: 'xxxx xxxx 1974', pan: 'DLTPM6642H',
     docs: [
       { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-01 2011 xxxx03' },
       { kind: 'vehicle', label: 'Vehicle registration', issuer: 'Transport Dept, Karnataka', no: 'KA-01-MJ-xxxx' },
     ],
   },
   'Sam Altman': {
-    dob: '1958-03-11', aadhaar: 'xxxx xxxx 6690', pan: 'EYVPS1157B',
+    dob: '1958-03-11', phone: '+91 80503 66901', aadhaar: 'xxxx xxxx 6690', pan: 'EYVPS1157B',
     docs: [
       { kind: 'pension', label: 'Pension payment order', issuer: 'Central Pension Accounting Office', no: 'CPAO/xxxx58' },
       { kind: 'licence', label: 'Driving licence', issuer: 'Transport Dept, Karnataka', no: 'KA-02 1984 xxxx26' },
     ],
   },
   'Meowy Mayya': {
-    dob: '1997-07-25', aadhaar: 'xxxx xxxx 3348', pan: 'FRDPM8804J',
+    dob: '1997-07-25', phone: '+91 97417 33482', aadhaar: 'xxxx xxxx 3348', pan: 'FRDPM8804J',
     docs: [
       { kind: 'expecting', label: 'Antenatal care card', issuer: 'Health & Family Welfare', no: 'ANC/2026/xxxx31' },
       { kind: 'education', label: 'Degree certificate', issuer: 'Christ University', no: 'CU/2019/xxxx55' },
@@ -71,6 +71,17 @@ export const VAULT = {
 };
 
 /** Every locker as the locker's own page shows it: documents and all. */
+/**
+ * Who to ring. The RPF being handed a stamp with no name on it can file it;
+ * handed a name and a number they can meet her at the next station. khaali
+ * gives this up only for the one channel that exists to reach a person.
+ */
+export function contactOf(name) {
+  const h = VAULT[String(name || '').trim()];
+  if (!h) return null;
+  return { name: String(name).trim(), phone: h.phone || null, dob: h.dob || null };
+}
+
 export function profiles(iso) {
   return Object.keys(VAULT).map(name => {
     const h = VAULT[name];

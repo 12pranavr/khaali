@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · report to the RPF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+<style>
+  body{background:#0d0f13;color:#e8e9ee;font-family:Manrope,system-ui,sans-serif}
+  .wrap{max-width:660px;margin:0 auto;padding:0 20px}
+  .top{background:#12151b;border-bottom:1px solid #1e222b;padding:14px 0}
+  .brand{font:800 18px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .brand span{color:#d8385a}
+  .brand small{display:block;font:600 9.5px/1.6 'IBM Plex Mono',monospace;
+    letter-spacing:.14em;text-transform:uppercase;color:#7c828f;margin-top:4px}
+  .card{background:#151922;border:1px solid #222836;border-radius:12px;
+    padding:18px;margin-top:14px}
+  .lbl{font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c828f;margin-bottom:9px}
+  .big{font:700 20px/1.35 Manrope,sans-serif}
+  .row{display:flex;gap:12px;align-items:baseline;padding:9px 0;
+    border-top:1px solid #1c202a}
+  .row:first-of-type{border-top:none}
+  .k{flex:none;width:118px;font:600 12px/1.5 Manrope,sans-serif;color:#7c828f}
+  .v{flex:1;font:600 13.5px/1.5 Manrope,sans-serif}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .live{display:inline-flex;align-items:center;gap:7px;font:700 11.5px/1 Manrope,sans-serif;
+    padding:6px 10px;border-radius:99px}
+  .dot{width:8px;height:8px;border-radius:99px;background:currentColor}
+  .fresh{background:#12281c;color:#5bd48b}
+  .stale{background:#2c2413;color:#e0a419}
+  .cold{background:#2a1620;color:#f2a6b6}
+  .meet{background:#12281c;border:1px solid #23492f}
+  .none{background:#231a1e;border:1px solid #3a2630;color:#f2a6b6}
+  a.call{display:block;text-align:center;background:#d8385a;color:#fff;text-decoration:none;
+    font:700 15px/1 Manrope,sans-serif;padding:16px;border-radius:10px;margin-top:12px}
+  .note{font:500 11.5px/1.7 Manrope,sans-serif;color:#7c828f;margin-top:16px}
+  .warn{background:#2a1620;border:1px solid #45202f;color:#f2a6b6;
+    font:600 12.5px/1.6 Manrope,sans-serif;padding:13px 15px;border-radius:9px;margin-top:14px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">khaali<span>.</span><small>report to the RPF &middot; simulated</small></div>
+  </div>
+</header>
+
+<div class="wrap" id="out">
+  <div class="card"><div class="big">Opening the report&hellip;</div></div>
+</div>
+
+<script>
+const REF = location.pathname.split('/').filter(Boolean)[1] || '';
+const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d; };
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function ago(sec) {
+  if (sec == null) return 'never';
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.round(sec / 60) + ' min ago';
+  return Math.round(sec / 3600) + ' h ago';
+}
+
+function render(r) {
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+
+  // How old the position is decides everything the RPF does next, so it is the
+  // first thing on the page and never dressed up as fresher than it is.
+  const age = r.fixAgeSec;
+  const cls = age == null ? 'cold' : age < 45 ? 'fresh' : age < 300 ? 'stale' : 'cold';
+  const word = age == null ? 'No position' : age < 45 ? 'Live' : 'Last seen';
+
+  const head = ['<div class="card">',
+    '<div class="lbl">Report ' + esc(r.ref || '') + '</div>',
+    '<span class="live ' + cls + '"><span class="dot"></span>' + word +
+      (age == null ? '' : ' &middot; ' + ago(age)) + '</span>',
+    '<div class="big" style="margin-top:12px">' + esc(r.place ? r.place.text : 'Position unknown') + '</div>',
+  ];
+  if (r.place && !r.place.onLine)
+    head.push('<div class="warn">This position is not on the line. Treat the train details with care.</div>');
+  else if (r.next && r.next.offRoute)
+    head.push('<div class="warn">Her position does not match the train on the report &mdash; ' +
+      'she may have changed trains, or the ticket may not be for the train she is on. ' +
+      'The next station below is taken from where she actually is.</div>');
+  head.push('</div>');
+  out.appendChild($(head.join('')));
+
+  // Where to be standing. The only reason live location is worth anything.
+  if (r.next) {
+    const eta = r.next.inMin == null ? ''
+      : (r.next.inMin >= 0 ? ' &middot; about ' + r.next.inMin + ' min' : ' &middot; due');
+    out.appendChild($('<div class="card meet">' +
+      '<div class="lbl">Next station</div>' +
+      '<div class="big">' + esc(r.next.station) + ' (' + esc(r.next.code) + ')' + '</div>' +
+      '<div class="v" style="color:#9fdcb6;margin-top:6px">' +
+      (r.next.at ? 'Train due ' + esc(r.next.at)
+        : r.next.offRoute ? 'Time not known &mdash; not from the ticketed train'
+        : 'Time not known') + eta +
+      (r.next.pf ? ' &middot; platform ' + esc(r.next.pf) : '') + '</div></div>'));
+  }
+
+  const rows = [];
+  const add = (k, v) => { if (v) rows.push('<div class="row"><div class="k">' + k +
+    '</div><div class="v">' + v + '</div></div>'); };
+  add('Train', r.train ? esc(r.train) + (r.trainName ? ' ' + esc(r.trainName) : '') : '');
+  add('Coach / berth', r.coach && r.berth ? esc(r.coach) + ' / ' + esc(r.berth) : '');
+  add('PNR', r.pnr ? '<span class="mono">' + esc(r.pnr) + '</span>' : '');
+  add('Date', esc(r.date));
+  add('Raised', new Date(r.at).toLocaleString('en-GB'));
+  add('Evidence', r.hasMedia
+    ? esc(r.kind === 'video' ? 'A video' : 'A photograph') + ' &mdash; held on her phone, not by khaali'
+    : 'None recorded. The moment was marked.');
+  add('Journey', r.verified
+    ? 'Confirmed against her booking'
+    : 'As reported by her phone &mdash; khaali could not check it');
+  out.appendChild($('<div class="card"><div class="lbl">The report</div>' + rows.join('') + '</div>'));
+
+  // Who to ring, or an honest statement that nobody knows.
+  const c = r.contact || {};
+  if (c.name || c.phone) {
+    out.appendChild($('<div class="card meet"><div class="lbl">Who raised it</div>' +
+      '<div class="big">' + esc(c.name || 'Name not held') + '</div>' +
+      (c.phone ? '<div class="v mono" style="margin-top:6px">' + esc(c.phone) + '</div>' : '') +
+      '<div class="v" style="color:#9fdcb6;margin-top:8px;font-size:11.5px">' +
+      (c.source === 'booking'
+        ? 'From the booking khaali sold her. Checked.'
+        : 'As her app reported it. khaali did not sell this ticket, so the name is not checked.') +
+      '</div>' +
+      (c.phone ? '<a class="call" href="tel:' + esc(String(c.phone).replace(/\s/g, '')) + '">Call her</a>' : '') +
+      '</div>'));
+  } else {
+    out.appendChild($('<div class="card none"><div class="lbl">Who raised it</div>' +
+      '<div class="v">khaali does not hold a name or a number for this person. ' +
+      'You have the report and the position, and nothing else.</div></div>'));
+  }
+
+  out.appendChild($('<div class="note">This page is a stand-in for the console the ' +
+    'Railway Protection Force would use. No report has been filed with any real force, ' +
+    'and khaali has never held the photograph or the video &mdash; only the line above. ' +
+    'The position refreshes while her phone is awake and on this journey; when it stops, ' +
+    'this page says so rather than showing a position that is no longer true.</div>'));
+}
+
+async function pull() {
+  try {
+    const r = await fetch('/api/rpf/' + encodeURIComponent(REF));
+    if (!r.ok) throw new Error(r.status === 404 ? 'no report' : 'error');
+    const j = await r.json();
+    render(j.report);
+  } catch (e) {
+    document.getElementById('out').innerHTML =
+      '<div class="card none"><div class="big">No such report</div>' +
+      '<div class="v" style="margin-top:8px">Either the reference is wrong, or the ' +
+      'person who raised it has deleted the moment. Deleted means deleted here.</div></div>';
+  }
+}
+pull();
+setInterval(pull, 5000);
+</script>
+</body>
+</html>

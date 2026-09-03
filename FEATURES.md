@@ -958,14 +958,67 @@ which:
 `remove` deletes the stamp as well as the media reference, and `publicOf`
 returns nothing but the id and the status afterwards. Deleted means deleted.
 
+### For a woman who never booked through khaali
+
+The stamp does not actually need the booking. It needs four facts - which
+train, where on the line, which berth, and when - and a khaali booking is only
+one way to get them. So live location carries the feature for everybody else.
+
+`placeOf(lat, lng)` projects the phone onto the corridor from `geo.mjs` and
+answers in the language of a railway: *between Ramanagara and Channapatna*, *at
+Mandya*, or *10 km off the line, nearest Whitefield* when she is plainly not on
+a train. No ticket, no PNR, nothing typed.
+
+Each new fix is appended to a capped trail. `headingOf` reads the direction out
+of it - and refuses to guess from a phone that is standing still - which gives
+`nextStopOf` **the next station she will reach and when the train is due**.
+That is the whole reason live location is worth anything to the RPF: not a dot
+on a map, but somewhere to be standing before the train arrives.
+
+When the ticket and the phone disagree - she is somewhere her ticketed train
+does not go - khaali says so and falls back to the line itself, so the RPF
+still gets a platform. Both facts can be true at once; she may have moved.
+
+### Who the RPF is handed
+
+`Send to the RPF` attaches a name and a number, and says where they came from:
+
+- `source: 'booking'` - khaali sold the ticket and checked the name.
+- `source: 'phone'` - the app offered it. Passed on, labelled, never dressed up
+  as verified.
+- `source: 'none'` - khaali does not know her. The RPF is told exactly that
+  rather than handed a guess.
+
+`Send to someone I trust` attaches none of it. A friend on WhatsApp already
+knows who is messaging them.
+
+`/rpf/<ref>` is a stand-in for the console they would use. It leads with how
+old the position is - green *Live*, amber *Last seen*, red when cold - because
+a stale position presented as current is what puts an officer on the wrong
+platform.
+
 ### Routes
 
 | Route | Does |
 |---|---|
 | `POST /api/sos` | make the stamp. Carries no media, and never will |
 | `GET /api/sos` | her moments, and only hers |
+| `POST /api/sos/:id/where` | a new fix from her phone |
 | `POST /api/sos/:id/send` | hand it to `rpf` or `trusted` |
-| `DELETE /api/sos/:id` | destroy the stamp and the note of the media |
+| `DELETE /api/sos/:id` | destroy the stamp, the trail and the note of the media |
+| `GET /api/rpf/:ref` | the report as the RPF would see it |
+
+### What live location cannot do
+
+A browser permission cannot be made mandatory. If she refuses, there is no
+location, and the screen says plainly that the RPF will not see where she is -
+it never blocks the SOS over it. Location is asked for the moment the screen
+opens rather than mid-recording, because two permission prompts at once is how
+you get neither.
+
+Mobile browsers stop reporting position when the screen locks or she switches
+apps. A wake lock is taken where supported, and when updates stop the RPF page
+says *last seen* instead of showing a position that is no longer true.
 
 A PNR belonging to someone else is refused. A PNR this server never issued is
 stamped as unverified rather than refused, because the demo bookings are local.

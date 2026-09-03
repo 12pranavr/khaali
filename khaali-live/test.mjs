@@ -1532,6 +1532,102 @@ t('a stamp says whether khaali could confirm the journey, or only repeat it', ()
   assert.strictEqual(checked.stamp.verified, true);
 });
 
+t('a woman who never booked through khaali still gets a place on a railway', () => {
+  // no train, no pnr, no ticket - only a phone that knows where it is
+  const r = sos.newAlert({ id: 'g1', who: 'her@x', kind: 'video',
+    journey: { fix: { lat: 12.69, lng: 77.25, acc: 12 } } }, at);
+  assert.ok(r.ok);
+  const p = r.alert.stamp.place;
+  assert.strictEqual(p.text, 'between Ramanagara and Channapatna');
+  assert.strictEqual(p.onLine, true);
+  assert.match(sos.lineOf(r.alert), /between Ramanagara and Channapatna/);
+  assert.ok(!/No train attached/.test(sos.lineOf(r.alert)), 'and it does not dwell on what it lacks');
+  // a phone nowhere near the line is told so rather than being placed on it
+  const off = sos.placeOf(12.90, 77.90);
+  assert.strictEqual(off.onLine, false);
+  assert.match(off.text, /km off the line/);
+});
+
+t('the trail says which way she is going, which is the point of it', () => {
+  const a = sos.newAlert({ id: 'g2', who: 'her@x', kind: 'mark',
+    journey: { train: '16021', fix: { lat: 12.7262, lng: 77.2884 } } }, at).alert;
+  assert.strictEqual(sos.headingOf(a.trail), 0, 'one fix is not a direction');
+  sos.moved(a, { lat: 12.6576, lng: 77.2082 }, at + 60000);   // on towards Mysuru
+  assert.strictEqual(sos.headingOf(a.trail), 1);
+  assert.strictEqual(a.trail.length, 2);
+  const rep = sos.forRpf(a, at + 60000);
+  assert.strictEqual(rep.next.station, 'Channapatna', JSON.stringify(rep.next));
+  assert.ok(rep.next.at, 'and when the train is due there');
+  assert.strictEqual(rep.fixAgeSec, 0, 'with the age of the fix, so nobody trusts a stale one');
+  // standing still is not a direction either
+  const b = sos.newAlert({ id: 'g3', who: 'h', kind: 'mark', journey: { fix: { lat: 12.5232, lng: 76.8988 } } }, at).alert;
+  sos.moved(b, { lat: 12.5233, lng: 76.8989 }, at + 1000);
+  assert.strictEqual(sos.headingOf(b.trail), 0);
+});
+
+t('a fix that is not a fix is refused rather than plotted', () => {
+  const a = sos.newAlert({ id: 'g4', who: 'h', kind: 'mark', journey: {} }, at).alert;
+  assert.strictEqual(sos.moved(a, { lat: NaN, lng: 77 }).reason, 'bad-fix');
+  assert.strictEqual(sos.moved(a, null).reason, 'bad-fix');
+  sos.remove(a, at);
+  assert.strictEqual(sos.moved(a, { lat: 12.7, lng: 77.2 }).reason, 'gone',
+    'and a deleted moment stops being followed');
+  assert.deepStrictEqual(a.trail, [], 'everywhere she had been goes with it');
+  assert.strictEqual(a.fix, null);
+});
+
+t('the RPF gets a person to meet, or is told plainly that it has not', () => {
+  const a = sos.newAlert({ id: 'g5', who: 'her@x', kind: 'video',
+    journey: { train: '16021', coach: 'S4', berth: 31, pnr: '450077', verified: true,
+      fix: { lat: 12.7262, lng: 77.2884 } } }, at).alert;
+  sos.moved(a, { lat: 12.6576, lng: 77.2082 }, at + 60000);
+  sos.handOver(a, 'rpf', at + 61000);
+  a.contact = { name: 'Achina', phone: '+91 90350 50831', source: 'booking' };
+  const rep = sos.forRpf(a, at + 61000);
+  assert.strictEqual(rep.contact.name, 'Achina');
+  assert.strictEqual(rep.contact.phone, '+91 90350 50831');
+  assert.strictEqual(rep.coach, 'S4');
+  assert.strictEqual(rep.next.station, 'Channapatna');
+  assert.ok(rep.hasMedia, 'they are told footage exists');
+  assert.ok(!/blob|base64|data:/i.test(JSON.stringify(rep)), 'but never handed it');
+
+  const bare = sos.newAlert({ id: 'g6', who: 'x@y', kind: 'mark', journey: {} }, at).alert;
+  sos.handOver(bare, 'rpf', at);
+  bare.contact = { name: null, phone: null, source: 'none' };
+  const rep2 = sos.forRpf(bare, at);
+  assert.strictEqual(rep2.contact.source, 'none', 'no name is invented');
+  assert.strictEqual(rep2.next, null, 'and nowhere is guessed at');
+});
+
+t('when the ticket and the phone disagree, the RPF is told, and still given a platform', () => {
+  // her ticket says 12691, which runs Bengaluru -> Bangarpet. Her phone says she
+  // is at Channapatna heading for Mysuru, which that train never does.
+  const a = sos.newAlert({ id: 'd1', who: 'her@x', kind: 'mark',
+    journey: { train: '12691', fix: { lat: 12.7262, lng: 77.2884 } } }, at).alert;
+  sos.moved(a, { lat: 12.6576, lng: 77.2082 }, at + 60000);
+  const rep = sos.forRpf(a, at + 60000);
+  assert.strictEqual(rep.next.offRoute, true, 'the disagreement is surfaced');
+  assert.ok(rep.next.station, 'and there is still somewhere to stand: ' + rep.next.station);
+  assert.strictEqual(rep.next.at, null, 'but no time is taken from a train she is not on');
+
+  // and a journey that does agree keeps its timetable
+  const b = sos.newAlert({ id: 'd2', who: 'her@x', kind: 'mark',
+    journey: { train: '16021', fix: { lat: 12.7262, lng: 77.2884 } } }, at).alert;
+  sos.moved(b, { lat: 12.6576, lng: 77.2082 }, at + 60000);
+  const rep2 = sos.forRpf(b, at + 60000);
+  assert.strictEqual(rep2.next.offRoute, false);
+  assert.ok(rep2.next.at, 'with the time the train is due');
+});
+
+t('a deleted alert is not a report, however the reference is held', () => {
+  const a = sos.newAlert({ id: 'g7', who: 'h', kind: 'mark',
+    journey: { train: '16021', fix: { lat: 12.69, lng: 77.25 } } }, at).alert;
+  sos.handOver(a, 'rpf', at);
+  sos.remove(a, at + 5);
+  assert.strictEqual(sos.forRpf(a), null);
+  assert.strictEqual(a.contact, null);
+});
+
 t('a moment with no journey still works, and says so', () => {
   const r = sos.newAlert({ id: 'a6', who: 'her@x', kind: 'mark', journey: {} }, at);
   assert.ok(r.ok);

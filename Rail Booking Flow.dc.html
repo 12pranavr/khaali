@@ -2376,6 +2376,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div onClick="{{ sosVideo }}" style="{{ sosBtnVideo }}">Record what is happening<div style="{{ sosSubLine }}">Video and sound. It stays on this phone.</div></div>
       <div onClick="{{ sosPhoto }}" style="{{ sosBtnPhoto }}">Take one photo<div style="{{ sosSubLine }}">One frame. khaali makes no sound and shows no flash.</div></div>
       <div onClick="{{ sosMark }}" style="{{ sosBtnMark }}">Mark this moment<div style="{{ sosSubLine }}">No camera at all. Nothing to see, nothing to explain - and khaali still records the train, the berth and the minute.</div></div>
+      <div style="{{ sosGeoStyle }}">{{ sosGeoNote }}</div>
       <div style="{{ sosErrStyle }}">{{ sosErrText }}</div>
       <div style="font:500 12px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:20px;border-top:1px solid #1d1d25;padding-top:15px">Your browser will show that the camera is on, and khaali cannot hide that from anybody watching your screen. If you cannot be seen holding the phone, mark the moment instead.</div>
       <div style="{{ sosPastStyle }}">
@@ -2415,11 +2416,12 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="{{ sosShotCap }}">This is what your phone kept. khaali has never seen it.</div>
       </div>
       <a href="{{ sosSaveHref }}" download="{{ sosSaveName }}" style="{{ sosSaveStyle }}">{{ sosSaveLabel }}</a>
+      <a href="{{ sosRpfLink }}" target="_blank" rel="noopener" style="{{ sosRpfLinkStyle }}">See what the RPF can see</a>
       <div style="{{ sosRefStyle }}">{{ sosRefText }}</div>
       <a href="{{ sosWaHref }}" target="_blank" rel="noopener" style="{{ sosWaStyle }}">Open WhatsApp</a>
       <div style="{{ sosChoices }}">
         <div style="font:600 13px/1.65 Manrope,sans-serif;color:#b9b9c2;margin:20px 0 12px">You decide what happens to it - now, or when you are somewhere safe.</div>
-        <div onClick="{{ sosToRpf }}" style="{{ sosBtnRpf }}">Send to the RPF<div style="{{ sosSubLine }}">khaali prepares the report. The recording stays on this phone.</div></div>
+        <div onClick="{{ sosToRpf }}" style="{{ sosBtnRpf }}">Send to the RPF<div style="{{ sosSubLine }}">{{ sosSubRpf }}</div></div>
         <div onClick="{{ sosToTrusted }}" style="{{ sosBtnTrust }}">Send to someone I trust<div style="{{ sosSubLine }}">{{ sosSubTrust }}</div></div>
         <div onClick="{{ closeSos }}" style="{{ sosBtnKeep }}">Keep it, tell nobody</div>
         <div onClick="{{ sosForgetBtn }}" style="{{ sosBtnDrop }}">Delete it</div>
@@ -3702,16 +3704,99 @@ class Component extends DCLogic {
 
   /** The journey khaali will stamp: the ticket she is looking at, else the
       next one she is travelling on. */
-  sosJourney(){
+  /**
+   * The journey she is on, not the next one she has booked. At 11pm on a train
+   * the useful answer is the train under her, and a booking for next Tuesday is
+   * worse than nothing because it puts the RPF on the wrong platform.
+   */
+  sosRunningNow(list){
+    const now=this.simNowDate();
+    const mins=now.getHours()*60+now.getMinutes();
+    let best=null;
+    for(const b of list){
+      if(b.status==='refunded')continue;
+      const tr=this.TRAINS.find(x=>x.no===b.train);if(!tr)continue;
+      const dep=((((this.sMin(tr,b.from,'d')||0)%1440)+1440)%1440);
+      const arr=((((this.sMin(tr,b.to,'a')||0)%1440)+1440)%1440);
+      const run=(arr-dep+1440)%1440||60;
+      // minutes since this train left, on her travel day
+      let since=(b.dayIdx||0)*-1440+(mins-dep);
+      if(since<-720)since+=1440;
+      if(since>=-20&&since<=run+30&&(!best||since<best.since))best={b,since};
+    }
+    return best?best.b:null;
+  }
+  sosPickBooking(){
     const S=this.state,list=S.bookings||[];
-    const pick=list.find(b=>b.pnr===S.viewPnr&&b.status!=='refunded')
+    return list.find(b=>b.pnr===S.viewPnr&&b.status!=='refunded')
+      ||this.sosRunningNow(list)
       ||list.filter(b=>b.status!=='refunded'&&(b.dayIdx||0)>=0)
-            .sort((a,b)=>(a.dayIdx||0)-(b.dayIdx||0))[0];
-    if(!pick)return {};
+            .sort((a,b)=>(a.dayIdx||0)-(b.dayIdx||0))[0]
+      ||null;
+  }
+  sosJourney(){
+    const pick=this.sosPickBooking();
+    if(!pick)return this.sosFix()?{fix:this.sosFix()}:{};
     const bits=String((pick.berths||[])[0]||'').split('/');
     return {pnr:pick.pnr,train:pick.train,date:this.dateIsoFor(pick.dayIdx||0),
       cls:pick.cls,from:pick.from,to:pick.to,
-      coach:bits[0]||null,berth:bits[1]?Number(bits[1]):null};
+      coach:bits[0]||null,berth:bits[1]?Number(bits[1]):null,
+      fix:this.sosFix()};
+  }
+  sosFix(){const f=this._sosFix;return f?{lat:f.lat,lng:f.lng,acc:f.acc}:null;}
+  /** The name on the ticket khaali picked. Offered to the RPF, never asserted:
+      the server labels it as the app's word unless it sold the ticket itself. */
+  sosTraveller(){
+    const bk=this.sosPickBooking();
+    if(!bk)return null;
+    const nm=((bk.travellers||[])[0]||{}).name||(bk.names||[])[0]||'';
+    return String(nm).trim()?{name:String(nm).trim()}:null;
+  }
+
+  /**
+   * Where she is, asked for the moment this screen opens rather than in the
+   * middle of a recording. Two permission prompts at once is how you end up
+   * with neither, and the camera is the one she is reaching for.
+   *
+   * It is never blocking. A refused location costs the RPF a platform to stand
+   * on; it does not cost her the recording.
+   */
+  sosWatch(){
+    if(!navigator.geolocation)return this.setState({sosGeo:'none'});
+    this.setState({sosGeo:this._sosFix?'on':'asking'});
+    try{
+      this._sosGeoId=navigator.geolocation.watchPosition(
+        p=>{
+          this._sosFix={lat:p.coords.latitude,lng:p.coords.longitude,
+            acc:Math.round(p.coords.accuracy||0),at:Date.now()};
+          this.setState({sosGeo:'on',sosFixAt:this._sosFix.at});
+          this.sosPush();
+        },
+        e=>{this.setState({sosGeo:e&&e.code===1?'denied':'failed'});},
+        {enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+    }catch(e){this.setState({sosGeo:'failed'});}
+    // the screen must stay awake or the phone stops reporting where she is
+    try{if(navigator.wakeLock&&!this._sosWake)
+      navigator.wakeLock.request('screen').then(w=>{this._sosWake=w;}).catch(()=>{});}catch(e){}
+  }
+  sosUnwatch(){
+    try{if(this._sosGeoId!=null)navigator.geolocation.clearWatch(this._sosGeoId);}catch(e){}
+    this._sosGeoId=null;
+    try{if(this._sosWake)this._sosWake.release();}catch(e){}
+    this._sosWake=null;
+  }
+  /** Each new fix, pushed to the alert it belongs to. Nothing is sent before
+      she has raised one, and nothing at all after she deletes it. */
+  sosPush(){
+    const a=this.state.sosAlert,f=this._sosFix;
+    if(!a||!f||a.status==='deleted')return;
+    if(this._sosPushAt&&Date.now()-this._sosPushAt<4000)return;
+    this._sosPushAt=Date.now();
+    this.authFetch('/api/sos/'+a.id+'/where',{method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({lat:f.lat,lng:f.lng,acc:f.acc})},8000)
+      .then(r=>r.json()).then(j=>{if(j&&j.ok&&j.line)this.setState({sosLine:j.line});})
+      .catch(()=>{});
   }
 
   /* The footage lives here, on her phone, and nowhere else. If the browser
@@ -3812,13 +3897,13 @@ class Component extends DCLogic {
     this.setState(patch);
     this.sosLens();
   }
-  openSos(){this.sosLock(true);this._sosBlob=null;
+  openSos(){this.sosLock(true);this._sosBlob=null;this.sosWatch();
     try{if(this._sosShot)URL.revokeObjectURL(this._sosShot);}catch(e){}
     this._sosShot=null;
     this.setState({sosOpen:true,sosPhase:'choose',sosErr:'',
       sosAlert:null,sosLine:'',sosSecs:0,sosShot:'',sosStall:'',sosNoMic:false});
     this.loadSos();}
-  closeSos(){this.sosTearDown();this.sosLock(false);
+  closeSos(){this.sosTearDown();this.sosUnwatch();this.sosLock(false);
     this.setState({sosOpen:false,sosPhase:'choose'});}
   /** Every camera, recorder and timer let go of at once. A page that keeps
       the light on after she has closed it is a page that gets her caught. */
@@ -3851,7 +3936,7 @@ class Component extends DCLogic {
     this.setState({sosPhase:'working',sosErr:''});
     try{const j=await this.sosStamp('mark');
       this.setState({sosPhase:'done',sosKind:'mark',sosAlert:j.alert,sosLine:j.line});
-      this.loadSos();}
+      this.sosPush();this.loadSos();}
     catch(e){this.setState({sosPhase:'choose',sosErr:String(e.message||e)});}
     this._sosBusy=false;
   }
@@ -3989,7 +4074,7 @@ class Component extends DCLogic {
       this.sosTearDown();
       this.setState({sosPhase:'done',sosShot:this._sosShot||'',sosNoAttach:false,
         sosShotName:'khaali-'+j.alert.id+'.'+this.sosExt(this._sosType,kind),
-        sosAlert:j.alert,sosLine:j.line,
+        sosAlert:j.alert,sosLine:j.line,sosPushed:Date.now(),
         sosErr:[
           kept?'':'This phone would not keep the recording. The stamp survived, so the time and the place are still on record.',
           mute?'This phone recorded the picture but no sound. The picture, the time and the place are all still here.':'',
@@ -4059,7 +4144,8 @@ class Component extends DCLogic {
   async sosSend(channel){
     const a=this.state.sosAlert;if(!a||this._sosBusy)return;this._sosBusy=true;
     try{const r=await this.authFetch('/api/sos/'+a.id+'/send',{method:'POST',
-        headers:{'content-type':'application/json'},body:JSON.stringify({channel})},9000);
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({channel,traveller:channel==='rpf'?this.sosTraveller():null})},9000);
       const j=await r.json().catch(()=>({}));
       if(j&&j.ok)this.setState({sosAlert:j.alert,sosLine:j.line,sosErr:''});
       else this.setState({sosErr:(j&&j.error)||'That did not go through. It is still on your phone.'});
@@ -4124,6 +4210,21 @@ class Component extends DCLogic {
       sosOpen:!!S.sosOpen,
 
       sosChoose:ph==='choose'?dark:gone,
+      // said once, on the way in, so she knows before she needs it
+      sosGeoNote:S.sosGeo==='on'
+        ?('Your location is being shared' + (S.sosGeo==='on'&&this._sosFix&&this._sosFix.acc
+            ? ' (to within ' + this._sosFix.acc + ' m)' : '')
+          + '. If you send this to the RPF they can see where you are and be at the next station.')
+        :S.sosGeo==='denied'
+        ?'Location is switched off, so the RPF would not be able to see where you are. Everything else still works.'
+        :S.sosGeo==='failed'||S.sosGeo==='none'
+        ?'This phone is not giving a location, so the RPF would not see where you are. Everything else still works.'
+        :'Finding where you are, so the RPF can be at the next station.',
+      sosGeoStyle:{marginTop:14,padding:'11px 13px',borderRadius:9,
+        font:'600 12px/1.6 Manrope,sans-serif',
+        background:S.sosGeo==='on'?'#12211a':(S.sosGeo==='denied'||S.sosGeo==='failed'||S.sosGeo==='none')?'#2a1620':'#191922',
+        border:'1px solid '+(S.sosGeo==='on'?'#23402f':(S.sosGeo==='denied'||S.sosGeo==='failed'||S.sosGeo==='none')?'#45202f':'#24242e'),
+        color:S.sosGeo==='on'?'#8fd6ab':(S.sosGeo==='denied'||S.sosGeo==='failed'||S.sosGeo==='none')?'#f2a6b6':'#b9b9c2'},
       sosWhere:jn.train
         ?('khaali already knows you are on '+jn.train
           +(jn.coach?', berth '+jn.coach+'/'+jn.berth:'')
@@ -4215,16 +4316,27 @@ class Component extends DCLogic {
         borderRadius:9,background:'#12211a',border:'1px solid #23402f',
         font:'600 12.5px/1.65 Manrope,sans-serif',color:'#8fd6ab'},
       sosRefText:!sent?'':a.channel==='rpf'
-        ?('Reference '+a.ref+' \u00b7 the Railway Protection Force. khaali has prepared the report and handed it over. It has not sent anybody to your coach, and in this prototype the handover is simulated.')
+        ?('Reference '+a.ref+' \u00b7 the Railway Protection Force. They can see '
+          +((a.contact&&a.contact.name)?('your name and number, ') : 'the report, ')
+          +(S.sosGeo==='on'?'and where you are as you move, so they can be at the next station.'
+                           :'but not where you are, because location is off on this phone.')
+          +' khaali has not sent anybody to your coach, and in this prototype the handover is simulated.')
         :('Sent from this phone '+(S.sosHow||'')+'. It went straight to them - it did not pass through khaali, and khaali kept no copy. Reference '+a.ref+' if you ever need to point at this moment again.'),
       sosWaStyle:{display:(sent&&S.sosWa)?'block':'none',marginTop:10,textAlign:'center',
         background:'#1b1b23',border:'1px solid #2b2b36',borderRadius:11,padding:18,
         font:'700 15px/1 Manrope,sans-serif',color:'#f2f2f4',textDecoration:'none'},
       sosWaHref:S.sosWa||'#',
       sosChoices:(ph==='done'&&a&&!sent)?dark:gone,
+      sosSubRpf:'They get the report'
+        +(S.sosGeo==='on'?', and where you are as you move.':'. Location is off, so not where you are.'),
       sosSubTrust:'Opens WhatsApp, or whatever else is on your share sheet'
         +((a&&a.hasMedia)?', with the recording attached.':'.'),
       sosToRpf:()=>this.sosSend('rpf'),
+      sosRpfLink:(sent&&a.channel==='rpf'&&a.ref)?('/rpf/'+a.ref):'#',
+      sosRpfLinkStyle:{display:(sent&&a.channel==='rpf'&&a.ref)?'block':'none',
+        textAlign:'center',padding:14,borderRadius:10,marginTop:10,textDecoration:'none',
+        border:'1px solid #24242e',background:'transparent',
+        font:'700 13px/1 Manrope,sans-serif',color:'#8b8b95'},
       sosToTrusted:()=>this.sosShare(),
       sosForgetBtn:()=>this.sosForget(),
       sosBtnRpf:big('#d8385a','#fff'),

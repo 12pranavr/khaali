@@ -83,6 +83,31 @@ const CONSENTS = new Map();
 // where the train was - and never the photograph or the video, which stays on
 // the phone that took it. There is nothing here to leak.
 const ALERTS = new Map();
+
+/**
+ * The name and number khaali can honestly put to an alert. The booking is the
+ * best source - she told khaali who was travelling. The locker is next. If
+ * neither knows her, the RPF is told that plainly rather than being handed a
+ * guess.
+ */
+function contactForAlert(who, a, claimed) {
+  const pnr = a.stamp && a.stamp.pnr;
+  const bk = pnr ? store.getBooking(String(pnr)) : null;
+  const nm = bk && (bk.travellers || []).length ? (bk.travellers[0].name || '').trim() : '';
+  if (nm) {
+    const c = digilocker.contactOf(nm);
+    // the booking is the strong case: khaali sold the ticket and knows the name
+    return { ...(c || { name: nm, phone: null, dob: null }), source: 'booking', account: who };
+  }
+  // no booking on this server, so the best khaali has is the name the app
+  // offered. It is worth passing on - but labelled, never dressed up as checked.
+  const said = String((claimed && claimed.name) || '').trim();
+  if (said) {
+    const c = digilocker.contactOf(said);
+    return { ...(c || { name: said, phone: null, dob: null }), source: 'phone', account: who };
+  }
+  return { name: null, phone: null, dob: null, source: 'none', account: who };
+}
 // sign-in sessions for the locker's own page; the code is handed back to be
 // printed on screen, because a demo must never ask for a code sent to a real
 // phone - that is a phishing page whatever the label says
@@ -985,6 +1010,16 @@ async function api(req, res, url) {
     return send(res, 200, { counts });
   }
 
+  // What the RPF would be looking at. In the real thing this is their console;
+  // here it is a page anyone holding the reference can open, which is exactly
+  // what makes it demonstrable. Nothing here is a live police system.
+  const mRpf = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})$/);
+  if (mRpf) {
+    const a = [...ALERTS.values()].find(x => x.ref === mRpf[1] && x.channel === 'rpf');
+    if (!a) return send(res, 404, { error: 'no such report' });
+    return send(res, 200, { report: sos.forRpf(a) });
+  }
+
   // ------------------------------------------------------------- sos --
   if (p === '/api/sos' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
@@ -1001,6 +1036,10 @@ async function api(req, res, url) {
         j.verified = true;
       }
     }
+    // her position, if the phone gave one. No ticket, PNR or typing needed:
+    // this is the answer for somebody who never booked through khaali.
+    if (b.fix && isFinite(+b.fix.lat) && isFinite(+b.fix.lng))
+      j.fix = { lat: +b.fix.lat, lng: +b.fix.lng, acc: b.fix.acc == null ? null : +b.fix.acc };
     const id = crypto.randomBytes(9).toString('hex');
     const r = sos.newAlert({ id, who, kind: b.kind, journey: j });
     if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
@@ -1015,14 +1054,23 @@ async function api(req, res, url) {
       .sort((x, y) => y.createdAt - x.createdAt)
       .map(a => ({ ...sos.publicOf(a), line: sos.lineOf(a) })) });
   }
-  const mSos = p.match(/^\/api\/sos\/([a-f0-9]+)(\/send)?$/);
+  const mSos = p.match(/^\/api\/sos\/([a-f0-9]+)(\/send|\/where)?$/);
   if (mSos) {
     const who = await whoIs(req);
     if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in first.' });
     const a = ALERTS.get(mSos[1]);
     if (!a || a.who !== who) return send(res, 404, { error: 'unknown alert' });
+    if (req.method === 'POST' && mSos[2] === '/where') {
+      let b; try { b = await readBody(req); } catch { b = {}; }
+      const r = sos.moved(a, { lat: +b.lat, lng: +b.lng, acc: b.acc == null ? null : +b.acc });
+      if (!r.ok) return send(res, 409, { ok: false, error: r.reason });
+      return send(res, 200, { ok: true, place: r.place, line: sos.lineOf(a) });
+    }
     if (req.method === 'POST' && mSos[2] === '/send') {
       let b; try { b = await readBody(req); } catch { b = {}; }
+      // Only the RPF gets a name and a number, and only when khaali honestly
+      // knows them. A friend on WhatsApp already knows who is messaging.
+      if (b.channel === 'rpf') a.contact = contactForAlert(who, a, b.traveller);
       const r = sos.handOver(a, b.channel);
       if (!r.ok) return send(res, 409, { ok: false, error: r.reason });
       journal.append({ t: 'sossent', id: a.id, channel: r.channel, ref: r.ref });
@@ -1736,6 +1784,7 @@ function serveStatic(res, urlPath) {
   if (rel.startsWith('/pay/')) rel = '/pay.html';           // /pay/<holdId> from the QR
   if (rel.startsWith('/locker/')) rel = '/locker.html';   // /locker/<id> from the QR
   if (rel === '/digilocker') rel = '/digilocker.html';    // the locker's own page
+  if (rel.startsWith('/rpf/')) rel = '/rpf.html';         // /rpf/<ref>, the report as they see it
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
