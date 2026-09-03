@@ -46,7 +46,7 @@
 
 <header class="top">
   <div class="wrap">
-    <div class="brand">khaali<span>.</span><small>report to the RPF &middot; simulated</small></div>
+    <div class="brand">khaali<span>.</span><small id="sub">report to the RPF &middot; simulated</small></div>
   </div>
 </header>
 
@@ -56,9 +56,14 @@
 
 <script>
 const REF = location.pathname.split('/').filter(Boolean)[1] || '';
+const KEY = new URLSearchParams(location.search).get('key') || '';
 const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d; };
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+document.getElementById('sub').textContent =
+  (location.pathname.split('/').filter(Boolean)[1] ? 'report to the RPF' : 'RPF console')
+  + ' \u00b7 simulated';
 
 function ago(sec) {
   if (sec == null) return 'never';
@@ -148,17 +153,59 @@ function render(r) {
     'this page says so rather than showing a position that is no longer true.</div>'));
 }
 
+/** The list. What an officer on duty would actually be looking at. */
+function renderList(j) {
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+  if (!j.reports.length) {
+    out.appendChild($('<div class="card"><div class="big">Nothing waiting</div>' +
+      '<div class="v" style="margin-top:8px;color:#7c828f">No reports have been sent to ' +
+      'the RPF' + (j.scope === 'mine' ? ' by you' : '') + '.</div></div>'));
+  }
+  j.reports.forEach(r => {
+    const age = r.fixAgeSec;
+    const cls = age == null ? 'cold' : age < 45 ? 'fresh' : age < 300 ? 'stale' : 'cold';
+    const word = age == null ? 'No position' : age < 45 ? 'Live' : 'Last seen';
+    const c = r.contact || {};
+    out.appendChild($('<a href="/rpf/' + esc(r.ref) + '" style="display:block;text-decoration:none;color:inherit">' +
+      '<div class="card">' +
+      '<span class="live ' + cls + '"><span class="dot"></span>' + word +
+        (age == null ? '' : ' &middot; ' + ago(age)) + '</span>' +
+      '<div class="big" style="margin-top:10px">' + esc(c.name || 'Name not held') + '</div>' +
+      '<div class="v" style="color:#9aa1ae;margin-top:5px">' +
+        esc(r.place ? r.place.text : 'Position unknown') + '</div>' +
+      (r.next ? '<div class="v" style="color:#9fdcb6;margin-top:5px">Next: ' +
+        esc(r.next.station) + (r.next.at ? ' &middot; due ' + esc(r.next.at) : '') + '</div>' : '') +
+      '<div class="v mono" style="color:#7c828f;margin-top:7px;font-size:11.5px">' +
+        esc(r.ref) + ' &middot; ' + new Date(r.at).toLocaleString('en-GB') + '</div>' +
+      '</div></a>'));
+  });
+  if (j.scope === 'mine')
+    out.appendChild($('<div class="note">You are seeing only the reports you raised. ' +
+      'The full console needs its key, and khaali will not list other people&rsquo;s names, ' +
+      'numbers and positions on an open page without one' +
+      (j.keyed ? '.' : ' &mdash; and no key is configured on this server, so nobody can.') +
+      '</div>'));
+}
+
 async function pull() {
+  const url = REF ? '/api/rpf/' + encodeURIComponent(REF)
+    : '/api/rpf' + (KEY ? '?key=' + encodeURIComponent(KEY) : '');
   try {
-    const r = await fetch('/api/rpf/' + encodeURIComponent(REF));
-    if (!r.ok) throw new Error(r.status === 404 ? 'no report' : 'error');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(String(r.status));
     const j = await r.json();
-    render(j.report);
+    if (REF) render(j.report); else renderList(j);
   } catch (e) {
+    const notMine = !REF && String(e.message) === '401';
     document.getElementById('out').innerHTML =
-      '<div class="card none"><div class="big">No such report</div>' +
-      '<div class="v" style="margin-top:8px">Either the reference is wrong, or the ' +
-      'person who raised it has deleted the moment. Deleted means deleted here.</div></div>';
+      '<div class="card none"><div class="big">' +
+      (notMine ? 'Not open' : 'No such report') + '</div>' +
+      '<div class="v" style="margin-top:8px">' + (notMine
+        ? 'Sign in to khaali to see the reports you raised, or open this console with its key.'
+        : 'Either the reference is wrong, or the person who raised it has deleted the ' +
+          'moment. Deleted means deleted here.') +
+      '</div></div>';
   }
 }
 pull();

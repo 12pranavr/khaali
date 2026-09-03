@@ -211,6 +211,16 @@ setInterval(matchOrders, 20000).unref();
     if (r.t === 'order' && r.order) ORDERS.set(r.order.id, { ...r.order });
     if (r.t === 'orderfill') { const o = ORDERS.get(r.id); if (o) Object.assign(o, { status: 'filled', pnr: r.pnr, paid: r.paid, fill: r.fill, filledAt: r.filledAt, via: r.via || null }); }
     if (r.t === 'orderend') { const o = ORDERS.get(r.id); if (o) { o.status = r.status; } }
+    // A report has to outlive the process. An officer opening the reference an
+    // hour later, on a server that has restarted since, must still find it.
+    if (r.t === 'sos' && r.alert && r.alert.id) ALERTS.set(r.alert.id, { ...r.alert });
+    if (r.t === 'sosfix') { const a = ALERTS.get(r.id); if (a && r.fix) sos.moved(a, r.fix, r.fix.at); }
+    if (r.t === 'sossent') {
+      const a = ALERTS.get(r.id);
+      if (a) Object.assign(a, { status: 'sent', channel: r.channel, ref: r.ref,
+        sentAt: r.sentAt || a.createdAt, contact: r.contact || null });
+    }
+    if (r.t === 'sosgone') { const a = ALERTS.get(r.id); if (a) sos.remove(a); }
   }
   for (const o of ORDERS.values()) {
     const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
@@ -1013,6 +1023,26 @@ async function api(req, res, url) {
   // What the RPF would be looking at. In the real thing this is their console;
   // here it is a page anyone holding the reference can open, which is exactly
   // what makes it demonstrable. Nothing here is a live police system.
+  // The console list. A page of women's names, numbers and live positions is
+  // not something to leave open on the internet, so this is shut unless a key
+  // is configured and given. Without one it shows the caller their own reports
+  // and nobody else's, and says so.
+  if (p === '/api/rpf') {
+    const want = process.env.ADMIN_TOKEN || '';
+    const key = String(q.get('key') || '');
+    const all = want && key && key === want;
+    const who = all ? null : await whoIs(req);
+    if (!all && !who) return send(res, 401, { needsAuth: true, keyed: !!want,
+      error: 'Sign in to see your own reports, or open the console with its key.' });
+    const rows = [...ALERTS.values()]
+      .filter(a => a.channel === 'rpf' && a.status !== 'deleted' && a.stamp)
+      .filter(a => all || a.who === who)
+      .sort((x, y) => (y.sentAt || y.createdAt) - (x.sentAt || x.createdAt))
+      .slice(0, 60)
+      .map(a => sos.forRpf(a));
+    return send(res, 200, { reports: rows, scope: all ? 'all' : 'mine', keyed: !!want });
+  }
+
   const mRpf = p.match(/^\/api\/rpf\/(KH-[0-9]{3,5}-[0-9]{6})$/);
   if (mRpf) {
     const a = [...ALERTS.values()].find(x => x.ref === mRpf[1] && x.channel === 'rpf');
@@ -1044,7 +1074,7 @@ async function api(req, res, url) {
     const r = sos.newAlert({ id, who, kind: b.kind, journey: j });
     if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
     ALERTS.set(id, r.alert);
-    journal.append({ t: 'sos', id, who, kind: r.alert.kind, at: r.alert.createdAt });
+    journal.append({ t: 'sos', alert: r.alert });
     return send(res, 200, { ok: true, alert: sos.publicOf(r.alert), line: sos.lineOf(r.alert) });
   }
   if (p === '/api/sos') {
@@ -1064,6 +1094,7 @@ async function api(req, res, url) {
       let b; try { b = await readBody(req); } catch { b = {}; }
       const r = sos.moved(a, { lat: +b.lat, lng: +b.lng, acc: b.acc == null ? null : +b.acc });
       if (!r.ok) return send(res, 409, { ok: false, error: r.reason });
+      journal.append({ t: 'sosfix', id: a.id, fix: a.fix });
       return send(res, 200, { ok: true, place: r.place, line: sos.lineOf(a) });
     }
     if (req.method === 'POST' && mSos[2] === '/send') {
@@ -1073,7 +1104,8 @@ async function api(req, res, url) {
       if (b.channel === 'rpf') a.contact = contactForAlert(who, a, b.traveller);
       const r = sos.handOver(a, b.channel);
       if (!r.ok) return send(res, 409, { ok: false, error: r.reason });
-      journal.append({ t: 'sossent', id: a.id, channel: r.channel, ref: r.ref });
+      journal.append({ t: 'sossent', id: a.id, channel: r.channel, ref: r.ref,
+        sentAt: a.sentAt, contact: a.contact || null });
       return send(res, 200, { ok: true, alert: sos.publicOf(a), line: sos.lineOf(a) });
     }
     if (req.method === 'DELETE') {
@@ -1784,7 +1816,7 @@ function serveStatic(res, urlPath) {
   if (rel.startsWith('/pay/')) rel = '/pay.html';           // /pay/<holdId> from the QR
   if (rel.startsWith('/locker/')) rel = '/locker.html';   // /locker/<id> from the QR
   if (rel === '/digilocker') rel = '/digilocker.html';    // the locker's own page
-  if (rel.startsWith('/rpf/')) rel = '/rpf.html';         // /rpf/<ref>, the report as they see it
+  if (rel === '/rpf' || rel.startsWith('/rpf/')) rel = '/rpf.html';  // the console, and one report
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);

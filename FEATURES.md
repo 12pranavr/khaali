@@ -997,6 +997,20 @@ old the position is - green *Live*, amber *Last seen*, red when cold - because
 a stale position presented as current is what puts an officer on the wrong
 platform.
 
+`/rpf` is the list: every report sent to the RPF, newest first, each showing
+who, where, and the next station. A page of women's names, numbers and live
+positions is not something to leave open on the internet, so it is **shut by
+default**. With `?key=` matching `ADMIN_TOKEN` it shows everything; without one
+it shows the signed-in caller only their own reports and says why. If no
+`ADMIN_TOKEN` is configured, nobody can open the full list at all - the failure
+is closed, not open.
+
+Reports are journalled in full - the alert on creation, each fix, the handover
+with its contact, and the deletion - and replayed into memory at boot. Before
+this they lived only in a `Map`, so every restart silently destroyed every
+report; an officer opening a reference an hour later found nothing. A report
+that does not outlive the process is not a report.
+
 ### Routes
 
 | Route | Does |
