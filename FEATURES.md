@@ -1009,7 +1009,12 @@ default**, and there are exactly two ways through:
   which opens the full list.
 
 If no `ADMIN_TOKEN` is configured, nobody can open the full list at all, and the
-page says so. The failure is closed, not open. There is deliberately no key
+page says so.
+
+Wrong keys are rate limited to ten a minute per caller, which is what makes a
+short operator-chosen token survive contact with the internet - a six-digit key
+is otherwise brute-forced in seconds. A *correct* key is never counted, so an
+operator cannot be locked out by somebody else guessing at the door. The failure is closed, not open. There is deliberately no key
 committed to this repository: the positions on that page are real ones, taken
 from the phone of whoever raised the report, and a key in a public repo would
 make a stranger's live location public with it.

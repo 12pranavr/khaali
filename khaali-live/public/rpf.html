@@ -227,7 +227,7 @@ function renderList(j) {
 
 /** The way in. Shown once, then left alone so a half-typed key survives the poll. */
 let gateUp = false;
-function renderGate(keyed) {
+function renderGate(keyed, waitMsg) {
   if (gateUp) return;
   gateUp = true;
   const who = signedInAs();
@@ -246,7 +246,8 @@ function renderGate(keyed) {
   const box = $('<div class="card">' +
     '<div class="lbl">Open the full console</div>' +
     '<div class="v" style="color:#9aa1ae">' +
-    (keyed
+    (waitMsg ? esc(waitMsg)
+      : keyed
       ? 'Enter the console key set on this server.'
       : 'No console key is set on this server, so the full list cannot be opened by ' +
         'anyone. Set ADMIN_TOKEN to enable it.') +
@@ -288,7 +289,11 @@ async function pull() {
     gateUp = false;
     if (REF) render(j.report); else renderList(j);
   } catch (e) {
-    if (!REF && String(e.message) === '401') return renderGate(!!(e.body && e.body.keyed));
+    const code = String(e.message);
+    // being told to wait is a different thing from being told no, and the
+    // person on the gate needs to know which one happened
+    if (!REF && (code === '401' || code === '429'))
+      return renderGate(!!(e.body && e.body.keyed), code === '429' ? (e.body || {}).error : '');
     if (gateUp) return;
     gateUp = true;
     document.getElementById('out').innerHTML =

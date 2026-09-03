@@ -1030,6 +1030,15 @@ async function api(req, res, url) {
   if (p === '/api/rpf') {
     const want = process.env.ADMIN_TOKEN || '';
     const key = String(q.get('key') || '');
+    // A wrong key is a guess at a page of real live positions. Ten a minute per
+    // caller turns a short token from something you brute-force in seconds into
+    // something you cannot, whatever the operator chose to set.
+    if (key && key !== want) {
+      const g = limits.hit('rpfkey|' + limits.callerOf(req), 10, 60000);
+      if (!g.ok) return send(res, 429, { needsAuth: true, keyed: !!want,
+        retryAfter: g.retryAfter,
+        error: 'Too many console keys tried. Wait a minute and try again.' });
+    }
     const all = want && key && key === want;
     const who = all ? null : await whoIs(req);
     if (!all && !who) return send(res, 401, { needsAuth: true, keyed: !!want,
