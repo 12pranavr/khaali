@@ -360,6 +360,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </div>
     </div>
     <div class="k-hdrright" style="margin-left:auto;display:flex;align-items:center;gap:16px;flex:none">
+      <div onClick="{{ openSos }}" title="Get help - mark what is happening" style="{{ sosBtn }}">SOS</div>
       <div onClick="{{ goWallet }}" title="khaali wallet" style="{{ walletChip }}">&#8377;{{ walletBal }}</div>
       <div style="position:relative;flex:none">
         <div onClick="{{ toggleBell }}" style="{{ bellBtn }}">&#128276;<span style="{{ bellBadge }}">{{ bellCount }}</span></div>
@@ -2362,6 +2363,67 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 </div>
 </sc-if>
 
+<sc-if value="{{ sosOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:120;background:#07070a;color:#f2f2f4;overflow-y:auto">
+  <div style="max-width:520px;margin:0 auto;padding:24px 20px 40px;min-height:100vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:12px;flex:none">
+      <div style="font:800 17px/1 Manrope,sans-serif;letter-spacing:-.02em">Get help</div>
+      <div onClick="{{ closeSos }}" style="margin-left:auto;font:600 13px/1 Manrope,sans-serif;color:#8b8b95;cursor:pointer;padding:8px 4px">Close</div>
+    </div>
+
+    <div style="{{ sosChoose }}">
+      <div style="font:600 13.5px/1.7 Manrope,sans-serif;color:#b9b9c2;margin:15px 0 20px">{{ sosWhere }}</div>
+      <div onClick="{{ sosVideo }}" style="{{ sosBtnVideo }}">Record what is happening<div style="{{ sosSubLine }}">Video and sound. It stays on this phone.</div></div>
+      <div onClick="{{ sosPhoto }}" style="{{ sosBtnPhoto }}">Take one photo<div style="{{ sosSubLine }}">One frame. khaali makes no sound and shows no flash.</div></div>
+      <div onClick="{{ sosMark }}" style="{{ sosBtnMark }}">Mark this moment<div style="{{ sosSubLine }}">No camera at all. Nothing to see, nothing to explain - and khaali still records the train, the berth and the minute.</div></div>
+      <div style="{{ sosErrStyle }}">{{ sosErrText }}</div>
+      <div style="font:500 12px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:20px;border-top:1px solid #1d1d25;padding-top:15px">Your browser will show that the camera is on, and khaali cannot hide that from anybody watching your screen. If you cannot be seen holding the phone, mark the moment instead.</div>
+      <div style="{{ sosPastStyle }}">
+        <div style="font:700 10.5px/1 Manrope,sans-serif;letter-spacing:.12em;color:#7d7d88;text-transform:uppercase;margin:22px 0 4px">Earlier</div>
+        <sc-for list="{{ sosPast }}" as="m" hint-placeholder-count="3">
+          <div style="border-top:1px solid #1d1d25;padding:11px 0">
+            <div style="font:600 12.5px/1.55 Manrope,sans-serif;color:#d6d6dc">{{ m.line }}</div>
+            <div style="font:500 11.5px/1.55 Manrope,sans-serif;color:#7d7d88;margin-top:3px">{{ m.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="{{ sosWait }}">
+      <div style="font:700 17px/1.5 Manrope,sans-serif;margin-top:64px;color:#b9b9c2">{{ sosWaitText }}</div>
+    </div>
+
+    <div style="{{ sosRec }}">
+      <div style="margin-top:44px;display:flex;align-items:center;gap:11px">
+        <div style="width:12px;height:12px;border-radius:99px;background:#e03b58"></div>
+        <div style="font:700 34px/1 'IBM Plex Mono',monospace">{{ sosClock }}</div>
+      </div>
+      <div style="font:500 13px/1.7 Manrope,sans-serif;color:#8b8b95;margin-top:12px">Recording on this phone. Nothing has been sent, and nothing will be until you say so.</div>
+      <div onClick="{{ sosStopBtn }}" style="margin-top:auto;background:#d8385a;color:#fff;font:700 18px/1 Manrope,sans-serif;text-align:center;padding:30px;border-radius:12px;cursor:pointer">Stop</div>
+    </div>
+
+    <div style="{{ sosDone }}">
+      <div style="font:700 21px/1.35 Manrope,sans-serif;margin-top:20px">{{ sosDoneHead }}</div>
+      <div style="background:#12121a;border:1px solid #24242e;border-radius:10px;padding:15px;margin-top:14px">
+        <div style="font:700 10px/1 Manrope,sans-serif;letter-spacing:.12em;color:#7d7d88;text-transform:uppercase;margin-bottom:9px">What khaali has recorded</div>
+        <div style="font:600 13.5px/1.7 Manrope,sans-serif;color:#eaeaef">{{ sosStampLine }}</div>
+        <div style="font:500 11.5px/1.7 Manrope,sans-serif;color:#7d7d88;margin-top:9px">{{ sosHeldNote }}</div>
+      </div>
+      <div style="{{ sosRefStyle }}">{{ sosRefText }}</div>
+      <div style="{{ sosChoices }}">
+        <div style="font:600 13px/1.65 Manrope,sans-serif;color:#b9b9c2;margin:20px 0 12px">You decide what happens to it - now, or when you are somewhere safe.</div>
+        <div onClick="{{ sosToRpf }}" style="{{ sosBtnRpf }}">Send to the RPF</div>
+        <div onClick="{{ sosToTrusted }}" style="{{ sosBtnTrust }}">Send to someone I trust</div>
+        <div onClick="{{ closeSos }}" style="{{ sosBtnKeep }}">Keep it, tell nobody</div>
+        <div onClick="{{ sosForgetBtn }}" style="{{ sosBtnDrop }}">Delete it</div>
+      </div>
+      <div onClick="{{ closeSos }}" style="{{ sosBtnDone }}">Done</div>
+      <div style="{{ sosErrStyle }}">{{ sosErrText }}</div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;var(--k-d8385a)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;var(--k-d8385a)&quot;,&quot;var(--k-1f9d55)&quot;,&quot;var(--k-2f5fd0)&quot;,&quot;var(--k-101319)&quot;]}}">
@@ -3617,6 +3679,268 @@ class Component extends DCLogic {
     }
     this.loadOrders();
   }
+  /* ------------------------------------------------------------- SOS --
+     A woman alone at 11pm being stared at does not file a complaint. Filing
+     means being seen doing it, being asked to explain it, and being
+     disbelieved. So this is one press, a near-black screen, no preview and
+     no confirmation.
+
+     khaali stamps the moment with everything she would otherwise have to
+     type while frightened - train, coach, berth, the clock, where the train
+     was at that minute - because she booked the journey and khaali already
+     knows all of it. The photograph or the video never leaves the phone.
+
+     And capturing is not reporting. Nothing goes anywhere until she is safe
+     and says so. */
+
+  /** The journey khaali will stamp: the ticket she is looking at, else the
+      next one she is travelling on. */
+  sosJourney(){
+    const S=this.state,list=S.bookings||[];
+    const pick=list.find(b=>b.pnr===S.viewPnr&&b.status!=='refunded')
+      ||list.filter(b=>b.status!=='refunded'&&(b.dayIdx||0)>=0)
+            .sort((a,b)=>(a.dayIdx||0)-(b.dayIdx||0))[0];
+    if(!pick)return {};
+    const bits=String((pick.berths||[])[0]||'').split('/');
+    return {pnr:pick.pnr,train:pick.train,date:this.dateIsoFor(pick.dayIdx||0),
+      cls:pick.cls,from:pick.from,to:pick.to,
+      coach:bits[0]||null,berth:bits[1]?Number(bits[1]):null};
+  }
+
+  /* The footage lives here, on her phone, and nowhere else. If the browser
+     refuses to keep it the stamp still survives, which is the part that
+     turns a memory into evidence. */
+  sosDb(){return new Promise((res,rej)=>{const r=indexedDB.open('khaali-sos',1);
+    r.onupgradeneeded=()=>{try{r.result.createObjectStore('media');}catch(e){}};
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+  async sosPut(k,v){try{const db=await this.sosDb();
+    await new Promise((res,rej)=>{const tx=db.transaction('media','readwrite');
+      tx.objectStore('media').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);});
+    return true;}catch(e){return false;}}
+  async sosDrop(k){try{const db=await this.sosDb();
+    await new Promise(res=>{const tx=db.transaction('media','readwrite');
+      tx.objectStore('media').delete(k);tx.oncomplete=()=>res();tx.onerror=()=>res();});}catch(e){}}
+
+  /* The page behind is pinned while this is open. Sliding the whole website
+     under her thumb while she is reaching for Stop is exactly the failure
+     this screen cannot afford. */
+  sosLock(on){try{document.body.style.overflow=on?'hidden':'';}catch(e){}}
+  openSos(){this.sosLock(true);
+    this.setState({sosOpen:true,sosPhase:'choose',sosErr:'',
+      sosAlert:null,sosLine:'',sosSecs:0});this.loadSos();}
+  closeSos(){this.sosTearDown();this.sosLock(false);
+    this.setState({sosOpen:false,sosPhase:'choose'});}
+  /** Every camera, recorder and timer let go of at once. A page that keeps
+      the light on after she has closed it is a page that gets her caught. */
+  sosTearDown(){
+    this._sosAbort=true;                  // Close means stop and keep nothing
+    clearInterval(this._sosT);this._sosT=null;
+    try{if(this._sosRec&&this._sosRec.state==='recording')this._sosRec.stop();}catch(e){}
+    this._sosRec=null;
+    try{(this._sosStream?this._sosStream.getTracks():[]).forEach(t=>t.stop());}catch(e){}
+    this._sosStream=null;
+    if(this._sosVid){try{this._sosVid.remove();}catch(e){}this._sosVid=null;}
+  }
+
+  /** Ask khaali for the stamp. This request carries no media and never will. */
+  async sosStamp(kind){
+    const r=await this.authFetch('/api/sos',{method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({kind,journey:this.sosJourney()})},9000);
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok)throw new Error((j&&j.error)||'khaali could not mark the moment.');
+    return j;
+  }
+
+  async markMoment(){
+    if(this._sosBusy)return;this._sosBusy=true;
+    this.setState({sosPhase:'working',sosErr:''});
+    try{const j=await this.sosStamp('mark');
+      this.setState({sosPhase:'done',sosKind:'mark',sosAlert:j.alert,sosLine:j.line});
+      this.loadSos();}
+    catch(e){this.setState({sosPhase:'choose',sosErr:String(e.message||e)});}
+    this._sosBusy=false;
+  }
+
+  async sosCapture(kind){
+    if(this._sosBusy)return;this._sosBusy=true;
+    this._sosAbort=false;
+    this.setState({sosPhase:'arming',sosErr:'',sosKind:kind});
+    let stream;
+    try{stream=await navigator.mediaDevices.getUserMedia(
+      kind==='video'?{video:{facingMode:'environment'},audio:true}
+                    :{video:{facingMode:'environment'}});}
+    catch(e){this._sosBusy=false;
+      return this.setState({sosPhase:'denied',sosErr:'The camera did not open. You can still mark the moment - that needs no camera and no permission, and it still records the train, the berth and the minute.'});}
+    this._sosStream=stream;
+    const v=document.createElement('video');
+    v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;
+    v.style.cssText='position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0';
+    document.body.appendChild(v);this._sosVid=v;
+    try{await v.play();}catch(e){}
+    if(kind==='photo'){this._sosBusy=false;return this.sosSnap();}
+    let rec;
+    try{rec=new MediaRecorder(stream);}
+    catch(e){try{rec=new MediaRecorder(stream,{mimeType:'video/webm'});}
+      catch(e2){this.sosTearDown();this._sosBusy=false;
+        return this.setState({sosPhase:'denied',sosErr:'This browser will not record video. Mark the moment instead - it still says when and where.'});}}
+    const chunks=[];
+    rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+    rec.onstop=()=>this.sosFinish(new Blob(chunks,{type:rec.mimeType||'video/webm'}),'video');
+    this._sosRec=rec;rec.start();
+    const t0=Date.now();
+    this._sosT=setInterval(()=>this.setState({sosSecs:Math.floor((Date.now()-t0)/1000)}),500);
+    this.setState({sosPhase:'rec',sosSecs:0});
+    this._sosBusy=false;
+  }
+
+  async sosSnap(){
+    const v=this._sosVid;if(!v)return;
+    for(let i=0;i<40&&!(v.videoWidth>0);i++)await new Promise(r=>setTimeout(r,50));
+    const c=document.createElement('canvas');
+    c.width=v.videoWidth||720;c.height=v.videoHeight||1280;
+    try{c.getContext('2d').drawImage(v,0,0,c.width,c.height);}catch(e){}
+    const blob=await new Promise(r=>{try{c.toBlob(r,'image/jpeg',.9);}catch(e){r(null);}});
+    this.sosFinish(blob,'photo');
+  }
+
+  /** Stamp on the server, footage in her pocket. If the pocket fails, say so
+      plainly rather than letting her believe she has a video she has not. */
+  async sosFinish(blob,kind){
+    clearInterval(this._sosT);this._sosT=null;
+    // she walked away from it mid-recording; no stamp is made for something
+    // she decided not to keep
+    if(this._sosAbort){this._sosAbort=false;return;}
+    this.setState({sosPhase:'working'});
+    try{
+      const j=await this.sosStamp(kind);
+      const kept=blob?await this.sosPut(j.alert.id,{blob,kind,at:Date.now()}):false;
+      this.sosTearDown();
+      this.setState({sosPhase:'done',sosAlert:j.alert,sosLine:j.line,
+        sosErr:kept?'':'This phone would not keep the recording. The stamp survived, so the time and the place are still on record.'});
+      this.loadSos();
+    }catch(e){this.sosTearDown();
+      this.setState({sosPhase:'choose',sosErr:String(e.message||e)});}
+  }
+
+  sosStopRec(){try{this._sosRec&&this._sosRec.stop();}catch(e){this.sosFinish(null,'video');}}
+
+  async sosSend(channel){
+    const a=this.state.sosAlert;if(!a||this._sosBusy)return;this._sosBusy=true;
+    try{const r=await this.authFetch('/api/sos/'+a.id+'/send',{method:'POST',
+        headers:{'content-type':'application/json'},body:JSON.stringify({channel})},9000);
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok)this.setState({sosAlert:j.alert,sosLine:j.line,sosErr:''});
+      else this.setState({sosErr:(j&&j.error)||'That did not go through. It is still on your phone.'});
+    }catch(e){this.setState({sosErr:'That did not go through. It is still on your phone.'});}
+    this._sosBusy=false;this.loadSos();
+  }
+
+  /** Deleted means deleted: the footage here and the stamp there. */
+  async sosForget(){
+    const a=this.state.sosAlert;if(!a)return;
+    await this.sosDrop(a.id);
+    try{await this.authFetch('/api/sos/'+a.id,{method:'DELETE'},9000);}catch(e){}
+    this.sosLock(false);
+    this.setState({sosOpen:false,sosPhase:'choose',sosAlert:null});
+    this.loadSos();
+  }
+
+  async loadSos(){
+    try{const r=await this.authFetch('/api/sos',{},9000);
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.alerts)this.setState({sosList:j.alerts});}catch(e){}
+  }
+
+  sosBindings(){
+    const S=this.state,ph=S.sosPhase||'choose',a=S.sosAlert||null;
+    const jn=this.sosJourney();
+    const sec=S.sosSecs||0;
+    const dark={display:'block'},gone={display:'none'};
+    const big=(bg,fg,bd)=>({display:'block',cursor:'pointer',background:bg,color:fg,
+      border:bd||'none',borderRadius:11,padding:'18px 18px',marginBottom:10,
+      font:'700 16px/1.3 Manrope,sans-serif',minHeight:56});
+    const sent=!!(a&&a.status==='sent');
+    const mark=!!(a&&a.kind==='mark');
+
+    let held='';
+    if(a&&!sent){
+      held=(a.hasMedia
+        ?'Saved on this phone. khaali holds only the line above, never the picture. '
+        :'khaali holds only the line above. ')+'Nothing has been sent to anybody.';
+      if(a.stamp&&a.stamp.pnr&&!a.stamp.verified)
+        held+=' The journey is as your phone reported it; khaali could not check it against a live booking.';
+    }else if(a&&sent){
+      held=(a.hasMedia
+        ?'The footage is still only on your phone. khaali handed on the line above, and nothing else.'
+        :'khaali handed on the line above. There was nothing else to hand on, and that was the point.');
+    }
+
+    return {
+      sosBtn:{flex:'none',cursor:'pointer',font:"800 11.5px/1 Manrope,sans-serif",
+        letterSpacing:'.12em',borderRadius:999,padding:'9px 12px',
+        border:'1px solid var(--k-e2ccd3)',background:'var(--k-fff8f9)',
+        color:'var(--k-fg-d8385a)'},
+      openSos:()=>this.openSos(),
+      closeSos:()=>this.closeSos(),
+      sosOpen:!!S.sosOpen,
+
+      sosChoose:ph==='choose'?dark:gone,
+      sosWhere:jn.train
+        ?('khaali already knows you are on '+jn.train
+          +(jn.coach?', berth '+jn.coach+'/'+jn.berth:'')
+          +'. It stamps the train, the berth, the minute and where the train is. You type nothing.')
+        :'No booking of yours is running just now, so khaali will stamp the time only. Everything else still works.',
+      sosVideo:()=>this.sosCapture('video'),
+      sosPhoto:()=>this.sosCapture('photo'),
+      sosMark:()=>this.markMoment(),
+      sosBtnVideo:big('#d8385a','#fff'),
+      sosBtnPhoto:big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
+      sosBtnMark:big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
+      sosSubLine:{font:'500 12.5px/1.5 Manrope,sans-serif',opacity:.82,marginTop:5},
+      sosErrStyle:{display:S.sosErr?'block':'none',marginTop:16,padding:'12px 14px',
+        borderRadius:8,background:'#2a1620',border:'1px solid #45202f',
+        font:'600 12.5px/1.6 Manrope,sans-serif',color:'#f2a6b6'},
+      sosErrText:S.sosErr||'',
+
+      sosPastStyle:{display:(S.sosList||[]).length?'block':'none'},
+      sosPast:(S.sosList||[]).filter(x=>!a||x.id!==a.id).slice(0,6).map(m=>({
+        line:m.status==='deleted'?'Deleted':(m.line||'A moment with no train attached'),
+        sub:m.status==='deleted'?'Nothing is left of it - not the footage, not the stamp.'
+          :m.status==='sent'?('Handed on \u00b7 '+m.ref)
+          :'Held. Nothing has been sent.'})),
+
+      sosWait:(ph==='arming'||ph==='working')?dark:gone,
+      sosWaitText:ph==='arming'?'Opening the camera...':'Stamping the moment...',
+
+      sosRec:ph==='rec'?{display:'flex',flexDirection:'column',flex:1}:gone,
+      sosClock:String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'),
+      sosStopBtn:()=>this.sosStopRec(),
+
+      sosDone:(ph==='done'||ph==='denied')?dark:gone,
+      sosDoneHead:ph==='denied'?'The camera stayed shut.'
+        :sent?'Handed on.':mark?'Marked.':'Saved on your phone.',
+      sosStampLine:S.sosLine||(ph==='denied'?'Nothing was recorded.':''),
+      sosHeldNote:held,
+      sosRefStyle:{display:sent?'block':'none',marginTop:14,padding:'13px 15px',
+        borderRadius:9,background:'#12211a',border:'1px solid #23402f',
+        font:'600 12.5px/1.65 Manrope,sans-serif',color:'#8fd6ab'},
+      sosRefText:sent?('Reference '+a.ref+' \u00b7 '
+        +(a.channel==='rpf'?'the Railway Protection Force':'the person you trust')
+        +'. khaali has prepared the report and handed it over. It has not sent anybody to your coach, and in this prototype the handover is simulated.'):'',
+      sosChoices:(ph==='done'&&a&&!sent)?dark:gone,
+      sosToRpf:()=>this.sosSend('rpf'),
+      sosToTrusted:()=>this.sosSend('trusted'),
+      sosForgetBtn:()=>this.sosForget(),
+      sosBtnRpf:big('#d8385a','#fff'),
+      sosBtnTrust:big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
+      sosBtnKeep:big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
+      sosBtnDrop:big('transparent','#8b8b95','1px solid #2b2b36'),
+      sosBtnDone:Object.assign(big('#1b1b23','#f2f2f4','1px solid #2b2b36'),
+        {display:(ph==='denied'||sent)?'block':'none',textAlign:'center',marginTop:18}),
+    };
+  }
+
   orderBindings(){
     const S=this.state,ST=this.ST;
     const chip=(on)=>({font:'700 12px/1 Manrope,sans-serif',padding:'10px 12px',borderRadius:7,cursor:'pointer',
@@ -5783,6 +6107,7 @@ class Component extends DCLogic {
         const pairs=this.dupPairs();
         return {
           ...this.orderBindings(),
+          ...this.sosBindings(),
           goWallet:()=>this.go('wallet'),
           walletBal:String(this.walletAvail())+(this.walletHeld()?' \u00b7 '+this.walletHeld()+' blocked':''),
           walletChip:{flex:'none',cursor:'pointer',font:"700 12.5px/1 'IBM Plex Mono',monospace",

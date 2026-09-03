@@ -31,6 +31,7 @@ import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
 import * as digilocker from './digilocker.mjs';
+import * as sos from './sos.mjs';
 import crypto from 'node:crypto';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,10 @@ const ORDERS = new Map();
 // consent requests for the document-locker stand-in: short-lived, and the
 // only thing kept afterwards is the answer the holder agreed to share
 const CONSENTS = new Map();
+// Moments somebody marked. These hold the stamp - train, coach, berth, time,
+// where the train was - and never the photograph or the video, which stays on
+// the phone that took it. There is nothing here to leak.
+const ALERTS = new Map();
 // sign-in sessions for the locker's own page; the code is handed back to be
 // printed on screen, because a demo must never ask for a code sent to a real
 // phone - that is a phishing page whatever the label says
@@ -978,6 +983,57 @@ async function api(req, res, url) {
         counts[t.no + '|' + c.k] = store.availability(t.no, date, c.k, from, to).counts;
     }
     return send(res, 200, { counts });
+  }
+
+  // ------------------------------------------------------------- sos --
+  if (p === '/api/sos' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in so the moment carries your name.' });
+    // a stamp is only worth anything if the journey behind it is really hers
+    const j = b.journey || {};
+    if (j.pnr) {
+      const bk = store.getBooking(String(j.pnr));
+      if (bk && bk.who !== who) return send(res, 403, { ok: false, error: 'That is not your booking.' });
+      if (bk) {
+        // the booking is the authority, not what the phone sent
+        j.train = bk.train; j.date = bk.date; j.cls = bk.cls; j.from = bk.from; j.to = bk.to;
+        j.verified = true;
+      }
+    }
+    const id = crypto.randomBytes(9).toString('hex');
+    const r = sos.newAlert({ id, who, kind: b.kind, journey: j });
+    if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
+    ALERTS.set(id, r.alert);
+    journal.append({ t: 'sos', id, who, kind: r.alert.kind, at: r.alert.createdAt });
+    return send(res, 200, { ok: true, alert: sos.publicOf(r.alert), line: sos.lineOf(r.alert) });
+  }
+  if (p === '/api/sos') {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in first.' });
+    return send(res, 200, { alerts: [...ALERTS.values()].filter(a => a.who === who)
+      .sort((x, y) => y.createdAt - x.createdAt)
+      .map(a => ({ ...sos.publicOf(a), line: sos.lineOf(a) })) });
+  }
+  const mSos = p.match(/^\/api\/sos\/([a-f0-9]+)(\/send)?$/);
+  if (mSos) {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in first.' });
+    const a = ALERTS.get(mSos[1]);
+    if (!a || a.who !== who) return send(res, 404, { error: 'unknown alert' });
+    if (req.method === 'POST' && mSos[2] === '/send') {
+      let b; try { b = await readBody(req); } catch { b = {}; }
+      const r = sos.handOver(a, b.channel);
+      if (!r.ok) return send(res, 409, { ok: false, error: r.reason });
+      journal.append({ t: 'sossent', id: a.id, channel: r.channel, ref: r.ref });
+      return send(res, 200, { ok: true, alert: sos.publicOf(a), line: sos.lineOf(a) });
+    }
+    if (req.method === 'DELETE') {
+      sos.remove(a);
+      journal.append({ t: 'sosgone', id: a.id });
+      return send(res, 200, { ok: true, alert: sos.publicOf(a) });
+    }
+    return send(res, 200, { ok: true, alert: sos.publicOf(a), line: sos.lineOf(a) });
   }
 
   // ------------------------------------------- the document locker demo --

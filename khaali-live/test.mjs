@@ -10,6 +10,7 @@ import * as journal from './journal.mjs';
 import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
 import * as dl from './digilocker.mjs';
+import * as sos from './sos.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -1472,6 +1473,73 @@ t('a waitlist with no fallback is left where it was, and nothing is taken', () =
   assert.strictEqual(o.status, 'expired');
   assert.strictEqual(o.declined, undefined, 'no rules were written, so none are explained');
   assert.strictEqual(o.pnr, undefined);
+});
+
+console.log('\nsos: marking the moment, without holding the footage');
+const J = { train: '16021', date: '2026-09-10', cls: 'SL', coach: 'S4', berth: 31, pnr: '4500770355', from: 0, to: 13 };
+const at = new Date('2026-09-10T23:14:00+05:30').getTime();
+
+t('the stamp carries what she would otherwise have to type while frightened', () => {
+  const r = sos.newAlert({ id: 'a1', who: 'her@x', kind: 'video', journey: J }, at);
+  assert.ok(r.ok, r.reason);
+  const s = r.alert.stamp;
+  assert.strictEqual(s.train, '16021');
+  assert.strictEqual(s.coach, 'S4');
+  assert.strictEqual(s.berth, 31);
+  assert.strictEqual(s.clock, '11:14 PM');
+  assert.ok(s.where && /between|after|before/.test(s.where.text), s.where && s.where.text);
+  assert.match(sos.lineOf(r.alert), /16021 Kaveri Express .* S4\/31 .* 11:14 PM/);
+});
+
+t('khaali never holds the footage, only the note that it exists', () => {
+  const a = sos.newAlert({ id: 'a2', who: 'her@x', kind: 'video', journey: J }, at).alert;
+  const flat = JSON.stringify(sos.publicOf(a));
+  assert.ok(!/blob|base64|data:|dataUrl/i.test(flat), 'nothing that could be media: ' + flat);
+  assert.strictEqual(sos.publicOf(a).hasMedia, true, 'but it knows one exists on her phone');
+  const mark = sos.newAlert({ id: 'a3', who: 'her@x', kind: 'mark', journey: J }, at).alert;
+  assert.strictEqual(sos.publicOf(mark).hasMedia, false, 'and a silent mark has none at all');
+  assert.ok(mark.stamp.clock, 'yet it still says when and where');
+});
+
+t('capturing is not reporting: an alert is held until she says otherwise', () => {
+  const a = sos.newAlert({ id: 'a4', who: 'her@x', kind: 'photo', journey: J }, at).alert;
+  assert.strictEqual(a.status, 'held');
+  assert.strictEqual(a.ref, undefined, 'nothing has been handed anywhere');
+  const r = sos.handOver(a, 'rpf', at + 60000);
+  assert.ok(r.ok);
+  assert.strictEqual(a.status, 'sent');
+  assert.match(a.ref, /^KH-16021-\d{6}$/);
+  assert.strictEqual(sos.handOver(a, 'nowhere').reason, 'bad-channel', 'only the two real channels');
+});
+
+t('deleted means deleted: the stamp goes too, not just the video', () => {
+  const a = sos.newAlert({ id: 'a5', who: 'her@x', kind: 'video', journey: J }, at).alert;
+  assert.ok(sos.remove(a, at + 5).ok);
+  assert.strictEqual(a.stamp, null);
+  assert.strictEqual(a.media, null);
+  const pub = sos.publicOf(a);
+  assert.strictEqual(pub.status, 'deleted');
+  assert.strictEqual(pub.stamp, undefined, 'and there is nothing left to show');
+  assert.strictEqual(sos.lineOf(a), '');
+  assert.strictEqual(sos.handOver(a, 'rpf').reason, 'deleted', 'a deleted moment cannot be sent');
+});
+
+t('a stamp says whether khaali could confirm the journey, or only repeat it', () => {
+  const claimed = sos.newAlert({ id: 'v1', who: 'her@x', kind: 'mark', journey: J }, at).alert;
+  assert.strictEqual(claimed.stamp.verified, false, 'nobody checked this one');
+  const checked = sos.newAlert({ id: 'v2', who: 'her@x', kind: 'mark',
+    journey: { ...J, verified: true } }, at).alert;
+  assert.strictEqual(checked.stamp.verified, true);
+});
+
+t('a moment with no journey still works, and says so', () => {
+  const r = sos.newAlert({ id: 'a6', who: 'her@x', kind: 'mark', journey: {} }, at);
+  assert.ok(r.ok);
+  assert.strictEqual(r.alert.stamp.train, null);
+  assert.match(sos.lineOf(r.alert), /No train attached/);
+  // and a journey that is not real is refused rather than stamped with a lie
+  assert.strictEqual(sos.newAlert({ id: 'x', who: 'h', kind: 'mark', journey: { train: '99999' } }).reason, 'unknown-train');
+  assert.strictEqual(sos.newAlert({ id: 'x', who: 'h', kind: 'nope', journey: J }).reason, 'bad-kind');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

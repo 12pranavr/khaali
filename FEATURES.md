@@ -894,6 +894,80 @@ berths, because the seat does not exist until allotment.
 
 ---
 
+## 11a. SOS - marking the moment
+
+A woman alone at 11pm being stared at does not file a complaint. Filing means
+being seen doing it, being asked to explain it, and being disbelieved. What she
+wants is for the moment not to disappear.
+
+So khaali holds **the stamp and never the footage**.
+
+`sos.mjs` knows three kinds of moment:
+
+| Kind | What the phone does | What khaali stores |
+|---|---|---|
+| `mark` | nothing at all | the stamp |
+| `photo` | one frame, kept in IndexedDB | the stamp, plus a note that media exists |
+| `video` | `MediaRecorder`, kept in IndexedDB | the stamp, plus a note that media exists |
+
+The stamp is everything she would otherwise have to type while frightened:
+train and name, date, class, coach and berth, PNR, the clock, and where the
+train was on its run at that minute (`whereIs`, from the timetable). She booked
+the journey, so khaali already knew all of it. It also carries `verified` -
+whether khaali could match the PNR to a booking of hers, or is only repeating
+what the phone claimed. An unverified stamp is still worth having; pretending
+it was checked would not be.
+
+`lineOf` renders it as one sentence a person can read out, hand over, or read
+back in court:
+
+> 16021 Kaveri Express · Thu, 10 Sept 2026 · S4/31 · 11:14 PM · after Mysuru Jn · PNR 450077
+
+Two consequences follow, and both are the point:
+
+- khaali never holds a picture of anybody's face. There is nothing on the
+  server to leak, subpoena, or misuse.
+- She can record nothing at all and still mark the moment. `mark` is silent,
+  invisible, needs no camera permission, and is what the screen falls back to
+  when the camera is refused.
+
+**Capturing is not reporting.** An alert is `held` until she says otherwise.
+When she is safe she gets four choices: delete it, keep it and tell nobody,
+send it to the RPF, or send it to someone she trusts. `handOver` marks it
+`sent`, records the channel and returns a reference `KH-<train>-<6 digits>`.
+The footage still never leaves the phone. khaali prepares a report and hands
+it over; it does not send anybody to her coach, and it never says it has.
+
+`remove` deletes the stamp as well as the media reference, and `publicOf`
+returns nothing but the id and the status afterwards. Deleted means deleted.
+
+### Routes
+
+| Route | Does |
+|---|---|
+| `POST /api/sos` | make the stamp. Carries no media, and never will |
+| `GET /api/sos` | her moments, and only hers |
+| `POST /api/sos/:id/send` | hand it to `rpf` or `trusted` |
+| `DELETE /api/sos/:id` | destroy the stamp and the note of the media |
+
+A PNR belonging to someone else is refused. A PNR this server never issued is
+stamped as unverified rather than refused, because the demo bookings are local.
+
+### What the screen does
+
+One press on **SOS** in the header opens a near-black page: no preview, no
+shutter sound, no flash, no confirm dialog, and the page behind it pinned so
+nothing slides under her thumb. Closing mid-recording stops and keeps nothing.
+
+### What is honest about it
+
+The handover is simulated and the page says so. Browsers cannot record
+invisibly - the permission prompt, the tab indicator and the phone's own
+recording dot are not ours to hide - and the screen says that too, then offers
+`mark` for exactly that case.
+
+---
+
 ## 12. Notifications
 
 A bell in the header collects live cards: cancellations on trains you have
