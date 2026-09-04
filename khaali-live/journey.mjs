@@ -457,6 +457,52 @@ export function trainsBetween(fromIdx, toIdx, after, limit = 12) {
   }).filter(Boolean).filter(x => x.dep >= after).sort((a, b) => a.dep - b.dep).slice(0, limit);
 }
 
+/**
+ * Ride a bus out of one corridor station and pick the train up at another.
+ *
+ * The bus has to actually start near where she is and end near a station that
+ * lies BETWEEN her and where she is going - a bus that overshoots, or doubles
+ * back, is not a leg of this journey however convenient its timetable looks.
+ * The berth count asked for is the one for the stretch she actually rides,
+ * which is the point: it can be free when the whole run is not.
+ */
+function busThenTrain(fromRail, toRail, after, freeOf, within = 2.5) {
+  const out = [];
+  if (fromRail < 0 || toRail < 0 || fromRail === toRail) return out;
+  const dir = toRail > fromRail ? 1 : -1;
+  BUSES.forEach(raw => {
+    if (km(GEO[fromRail], { lat: raw.fromLat, lng: raw.fromLng }) > within) return;
+    // BUSES is the raw table; the seat odds are what busesBetween() adds, and
+    // without them the leg reaches the allocator with no seat at all
+    const bus = { ...raw, seat: seatOdds({ mode: 'bus', at: raw.nStops ? raw.boardIdx / raw.nStops : null }) };
+    const mid = railNear(bus.toLat, bus.toLng, within);
+    if (!mid) return;
+    // strictly between, and going her way
+    if ((mid.i - fromRail) * dir <= 0 || (toRail - mid.i) * dir <= 0) return;
+    const nb = nextBus(bus, after);
+    if (!nb.ok) return;
+    const arrive = nb.board + bus.runMin;
+    const legs = [busLegOut(bus, nb, arrive)];
+    // the walk from where the bus stops to the platform, if there is one
+    let ready = arrive;
+    if (mid.km > 0.05) {
+      const w = Math.max(1, Math.round(mid.km / WALK_KMH * 60));
+      legs.push({ mode: 'walk', name: 'Walk', from: bus.to, to: ST[mid.i].n, km: mid.km, min: w,
+        depMin: arrive, arrMin: arrive + w, dep: hhmm(dayMin(arrive)), arr: hhmm(dayMin(arrive + w)),
+        fare: 0, source: 'measured', fromLat: bus.toLat, fromLng: bus.toLng,
+        toLat: GEO[mid.i].lat, toLng: GEO[mid.i].lng, seat: null });
+      ready = arrive + w;
+    }
+    trainsBetween(mid.i, toRail, ready).slice(0, 4).forEach(t => {
+      out.push({ kind: 'bus+train',
+        legs: legs.concat([LEG_TRAIN(t, mid.i, toRail, freeOf(t.train, mid.i, toRail))]),
+        dep: nb.board, arr: t.arr,
+        fare: busFare(bus) + railFare('SL', Math.abs(ST[toRail].km - ST[mid.i].km)) });
+    });
+  });
+  return out;
+}
+
 const LEG_TRAIN = (t, fi, ti, freeSL) => ({
   mode: 'train', id: t.train, name: t.name, from: ST[fi].n, to: ST[ti].n, fromIdx: fi, toIdx: ti,
   dep: hhmm(t.dep), arr: hhmm(t.arr), depMin: t.dep, arrMin: t.arr, min: t.min,
@@ -484,11 +530,21 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
 
   // ---- both ends on the corridor: it is simply a train ----
   if (from.kind === 'rail' && to.kind === 'rail') {
-    if (!use('train')) return { ok: true, chains: [] };
-    trainsBetween(fromRail, toRail, after).forEach(t => {
+    if (use('train')) trainsBetween(fromRail, toRail, after).forEach(t => {
       out.push({ kind: 'train', legs: [LEG_TRAIN(t, fromRail, toRail, freeOf(t.train, fromRail, toRail))],
         dep: t.dep, arr: t.arr, fare: railFare('SL', Math.abs(ST[toRail].km - ST[fromRail].km)) });
     });
+    // ...or the bus for the stretch the bus has seats on, and the train for the
+    // stretch the train has berths on.
+    //
+    // This is seat hop, one level up. khaali already chains two partial berths
+    // on one train because a berth taken Bangarpet to Whitefield can be free
+    // from Whitefield onward - that is the whole product. The same fact makes a
+    // bus worth taking first: she boards it where it STARTS, so she sits, and
+    // by the time she reaches the corridor the berth that was occupied behind
+    // her has come free in front of her. Neither vehicle could carry her the
+    // whole way seated; together they can.
+    if (use('bus') && use('train')) out.push(...busThenTrain(fromRail, toRail, after, freeOf));
   }
 
   // ---- already on the line ----

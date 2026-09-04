@@ -60,6 +60,18 @@ export const LIMITS = {
   // line is only here so khaali never answers "Bangarpet to Majestic" with a
   // ninety-kilometre taxi.
   maxRideKm: 25,
+  // ...and the one allowance that runs the other way. The limits above exist so
+  // the NETWORK cannot push her into a worse journey. A journey that gets her a
+  // seat when the fastest way leaves her standing is not the network pushing -
+  // it is the thing she asked for by choosing a profile that values sitting
+  // down. So a seat buys extra minutes, but only on a profile that says it
+  // wants one, and only when the seat is real.
+  extraMinForASeat: 30,
+  // The seat weight at which she has actually asked for this. Deliberately
+  // ABOVE `balanced` (14): on the default profile the old rule still stands
+  // whole - forty minutes of her morning are not the network to spend. Only
+  // `comfortable` (30) has said, in as many words, that it would rather sit.
+  seatProfileMin: 20,
 };
 export const PROFILE_LIMITS = {
   fastest: { extraMin: 10 }, balanced: { extraMin: 25 }, network: { extraMin: 30 },
@@ -78,8 +90,20 @@ export function span(c, { after = null, by = null } = {}) {
   return c.totalMin;
 }
 
-/** How much standing costs, in minutes, by the seat word the engine gave. */
+/**
+ * How much standing costs, in minutes-equivalent, by the seat word the engine
+ * gave - for a REFERENCE stand of this many minutes.
+ *
+ * It used to be a flat figure, which said that standing for two hours from
+ * Bangarpet is the same imposition as standing for ten minutes to Whitefield.
+ * It is not. The cost scales with the time she actually spends on her feet.
+ */
 const SEAT_COST = { yes: 0, likely: 2, maybe: 6, standing: 14, unknown: 4 };
+const SEAT_REF_MIN = 45;
+
+/** Minutes she spends on a vehicle she probably will not sit on. */
+const standingMin = c => c.legs.reduce((n, l) =>
+  (l.seat && l.seat.rank != null && l.seat.rank <= 1) ? n + (l.min || 0) : n, 0);
 
 const walkKm = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.km || 0), 0);
 const walkMin = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.min || 0), 0);
@@ -90,7 +114,9 @@ const seatRank = c => (c.seat && c.seat.rank != null) ? c.seat.rank : -1;
  * Score one chain. Returns the parts, so a trace can show its work.
  */
 export function score(c, w, ref) {
-  const seatW = (SEAT_COST[(c.seat || {}).word] ?? 4) * (w.seat / 14);
+  const onFeet = standingMin(c);
+  const scale = onFeet ? Math.min(3, Math.max(0.5, onFeet / SEAT_REF_MIN)) : 1;
+  const seatW = (SEAT_COST[(c.seat || {}).word] ?? 4) * scale * (w.seat / 14);
   const p = pressure(c);
   const passenger = {
     time: span(c, ref) * w.time,
@@ -144,7 +170,10 @@ export function allocate(chains, { profile = 'balanced', limits = {}, maxChanges
     const broken = hard(c);
     // the network may not push her past these
     const overLimit = [];
-    if (sp(c) - sp(fastest) > L.extraMin) overLimit.push('SLOWER_THAN_LIMIT');
+    // a seat she would not otherwise get is worth waiting longer for
+    const buysASeat = seatRank(c) > seatRank(fastest) && (w.seat || 0) >= L.seatProfileMin;
+    const slack = L.extraMin + (buysASeat ? L.extraMinForASeat : 0);
+    if (sp(c) - sp(fastest) > slack) overLimit.push('SLOWER_THAN_LIMIT');
     if (c.changes - fastest.changes > L.extraChanges) overLimit.push('MORE_CHANGES_THAN_LIMIT');
     if (walkKm(c) > L.maxWalkKm) overLimit.push('LONGER_WALK_THAN_LIMIT');
     if (rideKm(c) > L.maxRideKm) overLimit.push('LONGER_RIDE_THAN_LIMIT');
@@ -218,6 +247,8 @@ export function explain(rec, fastest, cheapest, ref = {}) {
   if (rec.changes < fastest.changes) reasons.push('FEWER_CHANGES');
   if (rec !== fastest && dt > 0) reasons.push(dt <= 10 ? 'ONLY_MINUTES_SLOWER' : 'SLOWER_BUT_WORTH_IT');
   if (rec.changes === 0) reasons.push('DIRECT');
+  // the switch itself is the point, when it is the point
+  if (rec.kind === 'bus+train' && seatRank(rec) > seatRank(fastest)) reasons.unshift('SWITCHED_WHERE_IT_FILLS');
   // a hired ride is never silently preferred: if one is on the recommended
   // journey, saying why is part of the recommendation
   if (facts.hired.length) {
@@ -244,6 +275,7 @@ export function sentence(reason) {
   const parts = [];
   if (has('FASTEST')) parts.push('This is the fastest way');
   else if (f.timeDifferenceMinutes > 0) parts.push('About ' + f.timeDifferenceMinutes + ' minutes slower than the fastest way');
+  if (has('SWITCHED_WHERE_IT_FILLS')) parts.push('you change vehicles where the crowd does');
   if (has('BETTER_SEAT')) parts.push(f.seat === 'yes' ? 'you get a seat' : 'a seat is ' + f.seat);
   if (has('LOWER_CROWDING')) parts.push('it keeps you off the most crowded stretch');
   if (has('CHEAPER')) parts.push('it saves ₹' + (-f.fareDifference));

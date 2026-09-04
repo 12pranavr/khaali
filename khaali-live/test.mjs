@@ -2487,6 +2487,85 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
 });
 
+console.log('\nthe switch: ride each vehicle for the stretch it has room on');
+
+// khaali's own idea, one level up. Seat hop chains two partial berths on one
+// train because a berth taken Bangarpet->Whitefield can be free onward. The
+// same fact makes the bus worth taking first: she boards it where it STARTS so
+// she sits, and by the time she reaches the corridor the berth that was
+// occupied behind her has come free in front of her.
+const iOf = c => ST.findIndex(x => x.c === c);
+const WFD_I = iOf('WFD');
+// nothing free before Whitefield, plenty after: the interval model as a fixture
+const fullEarly = (no, f) => (f < WFD_I ? 0 : 120);
+const capEarly = (no, fi) => ({ free: fi < WFD_I ? 0 : 120, total: 432 });
+const plainly = () => 200, capPlain = () => ({ free: 200, total: 432 });
+const ride = (to, counts) => JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'rail', id: to }, after: 420, counts });
+
+t('the bus for the stretch it has seats on, the train for the stretch it does', () => {
+  const sw = ride('BNC', fullEarly).chains.filter(c => c.kind === 'bus+train');
+  assert.ok(sw.length, 'khaali never offered the switch');
+  const c = sw[0];
+  const bus = c.legs.find(l => l.mode === 'bus'), train = c.legs.find(l => l.mode === 'train');
+  assert.ok(bus && train);
+  assert.ok(c.legs.indexOf(bus) < c.legs.indexOf(train), 'the bus comes first or it is not this journey');
+  assert.strictEqual(bus.seat.word, 'yes', 'she boards where the bus starts, so she sits');
+  assert.strictEqual(train.seat.word, 'yes', 'and takes a berth free on the stretch she rides');
+  assert.strictEqual(c.seat.word, 'yes', 'the chain carries the worst seat on it; both are good');
+  const walk = c.legs.find(l => l.mode === 'walk');
+  assert.ok(walk && walk.km > 0, 'the bus does not stop on the platform, and khaali says so');
+});
+
+t('the switch wins when standing is long, and loses when it buys nothing', () => {
+  const long = ride('SBC', fullEarly);
+  CAP.annotate(long.chains, { trainCap: capEarly });
+  const a = AL.allocate(long.chains, { profile: 'comfortable', after: 420 });
+  assert.ok(a.recommended != null);
+  const rec = long.chains[a.recommended];
+  assert.strictEqual(rec.kind, 'bus+train', 'Comfortable should switch rather than stand for hours');
+  assert.strictEqual(rec.seat.word, 'yes');
+  assert.ok(a.reason.reasons.includes('SWITCHED_WHERE_IT_FILLS'), a.reason.reasons.join(','));
+  assert.ok(/crowd does/.test(AL.sentence(a.reason)), AL.sentence(a.reason));
+
+  // ...and the same journey when the train has berths all the way: no reason to move
+  const easy = ride('SBC', plainly);
+  CAP.annotate(easy.chains, { trainCap: capPlain });
+  ['balanced', 'comfortable', 'fastest', 'network'].forEach(profile => {
+    const b = AL.allocate(easy.chains, { profile, after: 420 });
+    assert.notStrictEqual(easy.chains[b.recommended].kind, 'bus+train',
+      profile + ' changed vehicles for nothing');
+  });
+});
+
+t('standing two hours is not the imposition standing ten minutes is', () => {
+  const of = min => ({ legs: [{ mode: 'train', min, seat: { word: 'standing', rank: 0 } }],
+    seat: { word: 'standing', rank: 0 }, fare: 10, changes: 0, totalMin: min, dep: 0, arr: min });
+  const w = AL.WEIGHTS.comfortable, ref = { minFare: 10, after: null, by: null };
+  assert.ok(AL.score(of(130), w, ref).passenger.seat > AL.score(of(12), w, ref).passenger.seat * 2,
+    'a long stand must cost more than a short one');
+});
+
+t('a seat buys extra minutes only on the profile that asked for one', () => {
+  // the old rule stands whole on the default profile: forty minutes of her
+  // morning are not the network to spend
+  assert.ok(AL.LIMITS.seatProfileMin > AL.WEIGHTS.balanced.seat, 'balanced must not get the allowance');
+  assert.ok(AL.WEIGHTS.comfortable.seat >= AL.LIMITS.seatProfileMin, 'comfortable must');
+});
+
+t('the simulated bus stays labelled all the way through the switch', () => {
+  const c = ride('BNC', fullEarly).chains.find(x => x.kind === 'bus+train');
+  assert.strictEqual(c.legs.find(l => l.mode === 'bus').source, 'simulated');
+  assert.ok(c.simulated, 'and the chain carries it too');
+});
+
+t('a bus that overshoots or doubles back is not a leg of this journey', () => {
+  ride('BNC', fullEarly).chains.filter(c => c.kind === 'bus+train').forEach(c => {
+    const mid = ST.findIndex(x => x.n === c.legs.find(l => l.mode === 'train').from);
+    assert.ok(mid > iOf('BWT') && mid < iOf('BNC'),
+      'switched at ' + ST[mid].n + ', which is not between Bangarpet and Cantt');
+  });
+});
+
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
 
 // The point from the screenshot: 20 km north of Majestic, where nothing runs.
