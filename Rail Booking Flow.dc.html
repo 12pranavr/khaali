@@ -72,6 +72,12 @@ a{color:var(--k-fg-d8385a);text-decoration:none}a:hover{color:var(--k-fg-a71f3d)
 [style*="Manrope"]{font-family:Archivo,'Manrope',system-ui,sans-serif!important}
 h1[style],h2[style]{font-family:'Cormorant Garamond',Georgia,serif!important;font-weight:600!important;letter-spacing:.005em!important}
 h1.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-weight:700!important;letter-spacing:-.045em!important}
+/* The plan page: the question on the left, and it stays there. */
+.k-planshell{display:grid;grid-template-columns:396px minmax(0,1fr);gap:18px;align-items:start}
+.k-planside{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.k-planpair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:1040px){.k-planshell{grid-template-columns:minmax(0,1fr)}.k-planside{position:static}}
+@media (max-width:720px){.k-planpair{grid-template-columns:minmax(0,1fr)}}
 h2.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-weight:700!important;letter-spacing:-.03em!important}
 /* Paper grain on every page */
 body{background-image:repeating-linear-gradient(45deg, rgba(31,42,99,.018) 0 2px, transparent 2px 6px)}
@@ -677,12 +683,142 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <symbol id="ktk-car" viewBox="0 0 24 24"><path fill="currentColor" d="M5.8 5.5A2 2 0 0 1 7.7 4h8.6a2 2 0 0 1 1.9 1.5L19.4 10H21v2h-1v6.5a1.5 1.5 0 0 1-3 0V18H7v.5a1.5 1.5 0 0 1-3 0V12H3v-2h1.6l1.2-4.5ZM7.4 6l-.9 4h11l-.9-4H7.4ZM7 13.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm10 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/></symbol>
 </svg>
 <div class="k-mono" style="background:#ececee;color:#111113;min-height:100vh">
-<div style="max-width:1240px;margin:0 auto;padding:24px 22px 70px">
-  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
-    <h1 style="margin:0;font:700 24px/1.2 Manrope,sans-serif;letter-spacing:-.02em">{{ pHeadFrom }} &rarr; {{ pHeadTo }}</h1>
-    <div style="font-size:13.5px;color:var(--k-fg-8a8a84)">{{ pHeadSub }}</div>
-  </div>
-  <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">The whole way, in one place: the train, the walk nobody mentions, the bus, the metro. Book the journey here &#8212; the train, and a trip pass for the bus and the metro on it, spent when the trip is.</div>
+<div style="max-width:1300px;margin:0 auto;padding:22px 20px 70px">
+  <div class="k-planshell">
+
+    <div class="k-planside">
+
+      <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:6px;display:flex;gap:4px">
+        <button onClick="{{ pickPlan }}" style="{{ pPlanTab }}">Plan it for me</button>
+        <button onClick="{{ pickBuild }}" style="{{ pBuildTab }}">Build my own</button>
+      </div>
+
+      <sc-if value="{{ pIsPlan }}" hint-placeholder-val="{{ true }}">
+        <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+
+          <div class="k-stnwrap" style="min-width:0;position:relative">
+            <label style="background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:14px;padding:11px 14px;display:flex;flex-direction:column;gap:3px;cursor:text">
+              <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">From</span>
+              <input value="{{ pFromTxt }}" onChange="{{ setPFromTxt }}" onFocus="{{ openPFrom }}" placeholder="Station, metro or bus stop" style="border:0;background:transparent;font:700 16px/1.2 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a);outline:none;width:100%;padding:0"></input>
+            </label>
+            <div style="{{ pFromPanel }}">
+              <sc-for list="{{ pFromSuggs }}" as="o" hint-placeholder-count="5">
+                <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;padding:0 2px;margin:-4px 0">
+            <div class="k-swap" onClick="{{ pSwap }}" title="Swap" style="width:34px;height:34px;flex:none;border-radius:999px;background:var(--k-14161a);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
+            <span style="height:1px;background:var(--k-e6e5e0);flex:1"></span>
+            <span style="font:600 12px/1 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ pHeadTag }}</span>
+          </div>
+
+          <div class="k-stnwrap" style="min-width:0;position:relative">
+            <label style="background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:14px;padding:11px 14px;display:flex;flex-direction:column;gap:3px;cursor:text">
+              <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">To</span>
+              <input value="{{ pToTxt }}" onChange="{{ setPToTxt }}" onFocus="{{ openPTo }}" placeholder="Station, metro or bus stop" style="border:0;background:transparent;font:700 16px/1.2 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a);outline:none;width:100%;padding:0;text-overflow:ellipsis"></input>
+            </label>
+            <div style="{{ pToPanel }}">
+              <sc-for list="{{ pToSuggs }}" as="o" hint-placeholder-count="5">
+                <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px">
+            <div class="k-calwrap" style="position:relative;flex:1;min-width:0">
+              <div style="background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:14px;padding:8px;display:flex;align-items:center;gap:6px">
+                <div onClick="{{ dayPrev }}" style="{{ dayPrevStyle }}">&#8249;</div>
+                <div onClick="{{ toggleCal }}" style="flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;gap:2px;align-items:center">
+                  <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Date</span>
+                  <span style="font:700 15px/1.1 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a)">{{ dateBtnText }}</span>
+                </div>
+                <div onClick="{{ dayNext }}" style="{{ dayNextStyle }}">&#8250;</div>
+              </div>
+              <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                  <div style="{{ calHeadStyle }}">{{ calHead }}</div>
+                  <div onClick="{{ calPrev.onClick }}" style="{{ calPrev.style }}">{{ calPrev.glyph }}</div>
+                  <div onClick="{{ calNext.onClick }}" style="{{ calNext.style }}">{{ calNext.glyph }}</div>
+                </div>
+                <div style="display:flex">
+                  <sc-for list="{{ calDows }}" as="d" hint-placeholder-count="7"><div style="{{ d.style }}">{{ d.t }}</div></sc-for>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;width:315px">
+                  <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+                    <div onClick="{{ c.onClick }}" style="{{ c.style }}"><span>{{ c.t }}</span><span style="{{ c.nStyle }}">{{ c.n }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div onClick="{{ pSearch }}" style="flex:none;padding:0 24px;border-radius:14px;background:var(--k-14161a);color:#fff;font:700 15px/1 Archivo,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center">Search</div>
+          </div>
+
+          <div style="height:1px;background:var(--k-f0efeb)"></div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Rank by</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ pProfileChips }}" as="t" hint-placeholder-count="5">
+                <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">How</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <div onClick="{{ pAllModes }}" style="{{ pAllStyle }}">All</div>
+              <sc-for list="{{ pModeChips }}" as="m" hint-placeholder-count="5">
+                <div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.l }}</div>
+              </sc-for>
+            </div>
+            <div style="{{ pHireNoteStyle }}">{{ pHireNote }}</div>
+          </div>
+
+          <button onClick="{{ pOptsToggle }}" style="{{ pOptsLineStyle }}">
+            <span style="{{ pMoreLabelStyle }}">{{ pMoreLabel }}</span>
+            <span style="{{ pOptsTextStyle }}">{{ pOptsText }}</span>
+          </button>
+
+          <div style="{{ pOptsDrawer }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="8">
+                  <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+                </sc-for>
+                <input type="time" value="{{ pAfterVal }}" onChange="{{ setPAfterVal }}" style="{{ pAfterCustomStyle }}"></input>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Reach by</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                <sc-for list="{{ pByChips }}" as="t" hint-placeholder-count="7">
+                  <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+                </sc-for>
+                <input type="time" value="{{ pByVal }}" onChange="{{ setPByVal }}" style="{{ pByCustomStyle }}"></input>
+              </div>
+            </div>
+            <div onClick="{{ togglePStep }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+              <span style="{{ pStepBox }}">{{ pStepTick }}</span>
+              <span style="font:600 13px/1 Archivo,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--k-f0efeb)">
+              <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Anywhere</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <sc-for list="{{ pHereChips }}" as="t" hint-placeholder-count="2">
+                  <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9678; {{ t.l }}</div>
+                </sc-for>
+                <sc-for list="{{ pAnyChips }}" as="t" hint-placeholder-count="2">
+                  <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9679; {{ t.l }}</div>
+                </sc-for>
+              </div>
+              <div style="{{ pPickNoteStyle }}">{{ pPickNote }}</div>
+            </div>
+          </div>
+        </div>
 
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px">
     <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Or just say it</div>
@@ -692,111 +828,9 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     </div>
     <div style="{{ pSayNoteStyle }}">{{ pSayNote }}</div>
   </div>
+      </sc-if>
 
-  <div style="{{ pGeoNoteStyle }}">{{ pGeoNote }}</div>
-  <div class="k-searchgrid" style="margin-top:20px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px;display:grid;grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr) auto auto;gap:12px;align-items:end">
-    <div class="k-stnwrap" style="min-width:0;position:relative">
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">From</div>
-      <input value="{{ pFromTxt }}" onChange="{{ setPFromTxt }}" onFocus="{{ openPFrom }}" placeholder="Station or metro stop" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
-      <div style="{{ pFromPanel }}">
-        <sc-for list="{{ pFromSuggs }}" as="o" hint-placeholder-count="5">
-          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
-        </sc-for>
-      </div>
-    </div>
-    <div class="k-swap" onClick="{{ pSwap }}" title="Swap" style="height:46px;width:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;color:var(--k-fg-d8385a);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
-    <div class="k-stnwrap" style="min-width:0;position:relative">
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">To</div>
-      <input value="{{ pToTxt }}" onChange="{{ setPToTxt }}" onFocus="{{ openPTo }}" placeholder="Station or metro stop" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
-      <div style="{{ pToPanel }}">
-        <sc-for list="{{ pToSuggs }}" as="o" hint-placeholder-count="5">
-          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
-        </sc-for>
-      </div>
-    </div>
-    <div class="k-calwrap" style="position:relative">
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">Date</div>
-      <div style="display:flex;align-items:center;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;overflow:hidden">
-        <div onClick="{{ dayPrev }}" style="{{ dayPrevStyle }}">&#8249;</div>
-        <div onClick="{{ toggleCal }}" style="min-width:118px;text-align:center;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);cursor:pointer">{{ dateBtnText }}</div>
-        <div onClick="{{ dayNext }}" style="{{ dayNextStyle }}">&#8250;</div>
-      </div>
-      <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <div style="{{ calHeadStyle }}">{{ calHead }}</div>
-          <div onClick="{{ calPrev.onClick }}" style="{{ calPrev.style }}">{{ calPrev.glyph }}</div>
-          <div onClick="{{ calNext.onClick }}" style="{{ calNext.style }}">{{ calNext.glyph }}</div>
-        </div>
-        <div style="display:flex">
-          <sc-for list="{{ calDows }}" as="d" hint-placeholder-count="7"><div style="{{ d.style }}">{{ d.t }}</div></sc-for>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;width:315px">
-          <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
-            <div onClick="{{ c.onClick }}" style="{{ c.style }}"><span>{{ c.t }}</span><span style="{{ c.nStyle }}">{{ c.n }}</span></div>
-          </sc-for>
-        </div>
-      </div>
-    </div>
-    <div onClick="{{ pSearch }}" style="height:46px;padding:0 26px;border-radius:9px;background:var(--k-d8385a);color:var(--k-fg-fff);font:800 14.5px/1 Manrope,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center">Search</div>
-  </div>
-
-  <button onClick="{{ pOptsToggle }}" style="{{ pOptsLineStyle }}">
-    <span style="{{ pOptsTextStyle }}">{{ pOptsText }}</span>
-    <span style="{{ pOptsCueStyle }}">{{ pOptsCue }}</span>
-  </button>
-
-  <div style="{{ pOptsDrawer }}">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Anywhere</span>
-      <sc-for list="{{ pHereChips }}" as="t" hint-placeholder-count="2">
-        <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9678; {{ t.l }}</div>
-      </sc-for>
-      <sc-for list="{{ pAnyChips }}" as="t" hint-placeholder-count="2">
-        <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9679; {{ t.l }}</div>
-      </sc-for>
-    </div>
-    <div style="{{ pPickNoteStyle }}">{{ pPickNote }}</div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">How</span>
-      <div onClick="{{ pAllModes }}" style="{{ pAllStyle }}">All</div>
-      <sc-for list="{{ pModeChips }}" as="m" hint-placeholder-count="5">
-        <div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.l }}</div>
-      </sc-for>
-    </div>
-    <div style="{{ pHireNoteStyle }}">{{ pHireNote }}</div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Your own</span>
-      <div onClick="{{ pcToggle }}" style="{{ pcToggleStyle }}">{{ pcToggleLabel }}</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
-      <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="8">
-        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
-      </sc-for>
-      <input type="time" value="{{ pAfterVal }}" onChange="{{ setPAfterVal }}" style="{{ pAfterCustomStyle }}"></input>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Reach by</span>
-      <sc-for list="{{ pByChips }}" as="t" hint-placeholder-count="7">
-        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
-      </sc-for>
-      <input type="time" value="{{ pByVal }}" onChange="{{ setPByVal }}" style="{{ pByCustomStyle }}"></input>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Rank by</span>
-      <sc-for list="{{ pProfileChips }}" as="t" hint-placeholder-count="5">
-        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
-      </sc-for>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Access</span>
-      <div onClick="{{ togglePStep }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
-        <span style="{{ pStepBox }}">{{ pStepTick }}</span>
-        <span style="font:600 13px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
-      </div>
-    </div>
-  </div>
-
+      <sc-if value="{{ pIsBuild }}" hint-placeholder-val="{{ false }}">
   <div style="{{ pcWrapStyle }}">
     <div style="{{ pcLeadStyle }}">{{ pcLead }}</div>
     <sc-for list="{{ pcRows }}" as="r" hint-placeholder-count="3">
@@ -824,6 +858,48 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div onClick="{{ pcAdd }}" style="{{ pcAddStyle }}">{{ pcAddLabel }}</div>
       <button onClick="{{ pcRun }}" style="{{ pcRunStyle }}">{{ pcRunLabel }}</button>
     </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+
+      <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:11px">
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <h1 class="k-hp" style="margin:0;font:700 30px/1.1 Archivo,sans-serif;letter-spacing:-.035em;color:var(--k-fg-14161a)">{{ pHeadFrom }} <span style="color:var(--k-fg-8a8a84);font-weight:500">&rarr;</span> {{ pHeadTo }}</h1>
+          <span style="font:700 11px/1 'JetBrains Mono',monospace;letter-spacing:.1em;background:var(--k-e6f4ec);color:var(--k-fg-14663a);padding:6px 10px;border-radius:7px">{{ pHeadTag }}</span>
+        </div>
+        <p style="margin:0;font:500 15px/1.55 Archivo,sans-serif;color:var(--k-fg-6a6d75);max-width:74ch">The whole way, in one place: the train, the walk nobody mentions, the bus, the metro. Book the journey here &#8212; the train, and a trip pass for the bus and the metro on it, spent when the trip is.</p>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font:600 13.5px/1.4 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ pSummary }}</span>
+          <span style="width:1px;height:13px;background:var(--k-e6e5e0)"></span>
+          <span style="{{ pWaysStyle }}">{{ pWays }}</span>
+        </div>
+  <div style="{{ pGeoNoteStyle }}">{{ pGeoNote }}</div>
+      </div>
+
+      <div style="{{ pAxisStyle }}">
+        <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ pAxisLead }}</span>
+        <div style="display:flex;justify-content:space-between">
+          <sc-for list="{{ pAxis }}" as="a" hint-placeholder-count="5">
+            <span style="font:600 11px/1 'JetBrains Mono',monospace;color:var(--k-fg-6a6d75)">{{ a.label }}</span>
+          </sc-for>
+        </div>
+      </div>
+
+  <div style="{{ pBusyStyle }}">Working out the trains, the walk and the metro&hellip;</div>
+  <div style="{{ pErrStyle }}">{{ pErrText }}
+    <div style="{{ pTryHireWrap }}">
+      <div style="{{ pTryHireLeadStyle }}">{{ pTryHireLead }}</div>
+      <sc-for list="{{ pTryHire }}" as="h" hint-placeholder-count="2">
+        <div onClick="{{ h.onClick }}" style="{{ h.style }}">{{ h.l }}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="{{ pEmptyStyle }}">Pick where you are starting and where you are going, then press Search. khaali plans a train into the city and the Purple Line beyond it &mdash; and says so plainly when a pair is not on this demo yet.</div>
+
+      <div style="{{ pcOutStyle }}">
     <div style="{{ pcErrStyle }}">{{ pcErr }}</div>
     <div style="{{ pcHeadStyle }}">{{ pcHead }}</div>
     <div style="{{ pcStepsStyle }}">
@@ -856,19 +932,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         </div>
       </div>
     </div>
-  </div>
-
-  <div style="{{ pBusyStyle }}">Working out the trains, the walk and the metro&hellip;</div>
-  <div style="{{ pErrStyle }}">{{ pErrText }}
-    <div style="{{ pTryHireWrap }}">
-      <div style="{{ pTryHireLeadStyle }}">{{ pTryHireLead }}</div>
-      <sc-for list="{{ pTryHire }}" as="h" hint-placeholder-count="2">
-        <div onClick="{{ h.onClick }}" style="{{ h.style }}">{{ h.l }}</div>
-      </sc-for>
-    </div>
-  </div>
-
-  <div style="{{ pEmptyStyle }}">Pick where you are starting and where you are going, then press Search. khaali plans a train into the city and the Purple Line beyond it &mdash; and says so plainly when a pair is not on this demo yet.</div>
+      </div>
 
   <div style="{{ pMetroStyle }}">
     <div style="font:800 20px/1.2 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ pMetroHead }}</div>
@@ -884,51 +948,6 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     </sc-for>
     <div style="font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb)">{{ pMetroFare }}</div>
   </div>
-
-  <div style="{{ pAskStyle }}">
-    <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Ask about the recommended way</div>
-    <div style="display:flex;gap:10px">
-      <input value="{{ pAskTxt }}" onChange="{{ setPAsk }}" onKeyDown="{{ onPAskKey }}" placeholder="Why through Whitefield? Will I get a seat? How crowded is the metro?" style="flex:1;min-width:0;height:42px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 13.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
-      <button onClick="{{ onPAsk }}" style="flex:none;border:none;background:var(--k-1f3f8f);color:#fff;font:700 13px/1 Manrope,sans-serif;padding:0 16px;height:42px;border-radius:9px;cursor:pointer">{{ pAskBtn }}</button>
-    </div>
-    <div style="{{ pAskAnsStyle }}">{{ pAskAns }}</div>
-    <div style="margin-top:6px;font:500 11px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ pAskBy }}</div>
-  </div>
-  <div style="{{ pSimStyle }}">
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <div>
-        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">The network</div>
-        <div style="font:500 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">One recommendation is a courtesy. Ten thousand of the same one is a crowd.</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">
-        <sc-for list="{{ pSimNChips }}" as="c" hint-placeholder-count="3">
-          <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.l }}</div>
-        </sc-for>
-        <button onClick="{{ onPSim }}" style="{{ pSimBtnStyle }}">{{ pSimBtn }}</button>
-      </div>
-    </div>
-    <div style="{{ pSimFindingStyle }}">{{ pSimFinding }}</div>
-    <div style="{{ pSimTableStyle }}">
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)"></div>
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Today</div>
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Allocated</div>
-      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Change</div>
-      <sc-for list="{{ pSimRows }}" as="s" hint-placeholder-count="5">
-        <div>{{ s.k }}</div>
-        <div style="font:600 13px/1 'IBM Plex Mono',monospace">{{ s.b }}</div>
-        <div style="font:700 13px/1 'IBM Plex Mono',monospace;color:var(--k-fg-14161a)">{{ s.a }}</div>
-        <div style="{{ s.dStyle }}">{{ s.d }}</div>
-      </sc-for>
-    </div>
-    <div style="{{ pSimNoteStyle }}">{{ pSimNote }}</div>
-  </div>
-  <div class="{{ pMapClass }}" style="{{ pMapStyle }}"><div id="k-planmap" style="width:100%;height:100%"></div></div>
-  <div style="{{ pMapPlainWrapStyle }}">
-    <div onClick="{{ togglePTraffic }}" style="{{ pTrafficStyle }}">{{ pTrafficLabel }}</div>
-    <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
-  </div>
-  <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
-  <div style="{{ pMapNoteStyle }}">{{ pMapNote }}</div>
 
   <div style="{{ pRowsStyle }}">
     <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
@@ -989,6 +1008,14 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <sc-for list="{{ r.badges }}" as="b" hint-placeholder-count="2">
             <span style="{{ b.style }}"><svg width="13" height="13"><use href="{{ b.ref }}"></use></svg>{{ b.l }}</span>
           </sc-for>
+        </div>
+
+        <div style="{{ r.trackWrap }}">
+          <div style="position:absolute;top:0;bottom:0;left:{{ r.trackLeft }};width:{{ r.trackWidth }};display:flex;gap:2px">
+            <sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="3">
+              <span style="{{ b.style }}"></span>
+            </sc-for>
+          </div>
         </div>
 
         <div style="{{ r.trkWrap }}">
@@ -1059,12 +1086,63 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div onClick="{{ pDropHire }}" style="{{ pDropHireStyle }}">{{ pDropHireLabel }}</div>
     </div>
   </div>
+
   <div style="{{ pTripWrap }}">
     <img src="{{ pTripQr }}" alt="" style="{{ pTripQrStyle }}">
     <div style="flex:1;min-width:200px">
       <div style="{{ pTripHeadStyle }}">{{ pTripHead }}</div>
       <div style="{{ pTripSubStyle }}">{{ pTripSub }}</div>
       <a href="{{ pTripOpen }}" target="_blank" style="{{ pTripOpenStyle }}">Open the pass &#8599;</a>
+    </div>
+  </div>
+
+      <div class="k-planpair">
+  <div style="{{ pAskStyle }}">
+    <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Ask about the recommended way</div>
+    <div style="display:flex;gap:10px">
+      <input value="{{ pAskTxt }}" onChange="{{ setPAsk }}" onKeyDown="{{ onPAskKey }}" placeholder="Why through Whitefield? Will I get a seat? How crowded is the metro?" style="flex:1;min-width:0;height:42px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 13.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
+      <button onClick="{{ onPAsk }}" style="flex:none;border:none;background:var(--k-1f3f8f);color:#fff;font:700 13px/1 Manrope,sans-serif;padding:0 16px;height:42px;border-radius:9px;cursor:pointer">{{ pAskBtn }}</button>
+    </div>
+    <div style="{{ pAskAnsStyle }}">{{ pAskAns }}</div>
+    <div style="margin-top:6px;font:500 11px/1.4 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ pAskBy }}</div>
+  </div>
+  <div style="{{ pSimStyle }}">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div>
+        <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:6px">The network</div>
+        <div style="font:500 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">One recommendation is a courtesy. Ten thousand of the same one is a crowd.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap">
+        <sc-for list="{{ pSimNChips }}" as="c" hint-placeholder-count="3">
+          <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.l }}</div>
+        </sc-for>
+        <button onClick="{{ onPSim }}" style="{{ pSimBtnStyle }}">{{ pSimBtn }}</button>
+      </div>
+    </div>
+    <div style="{{ pSimFindingStyle }}">{{ pSimFinding }}</div>
+    <div style="{{ pSimTableStyle }}">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)"></div>
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Today</div>
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Allocated</div>
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Change</div>
+      <sc-for list="{{ pSimRows }}" as="s" hint-placeholder-count="5">
+        <div>{{ s.k }}</div>
+        <div style="font:600 13px/1 'IBM Plex Mono',monospace">{{ s.b }}</div>
+        <div style="font:700 13px/1 'IBM Plex Mono',monospace;color:var(--k-fg-14161a)">{{ s.a }}</div>
+        <div style="{{ s.dStyle }}">{{ s.d }}</div>
+      </sc-for>
+    </div>
+    <div style="{{ pSimNoteStyle }}">{{ pSimNote }}</div>
+  </div>
+      </div>
+
+  <div class="{{ pMapClass }}" style="{{ pMapStyle }}"><div id="k-planmap" style="width:100%;height:100%"></div></div>
+  <div style="{{ pMapPlainWrapStyle }}">
+    <div onClick="{{ togglePTraffic }}" style="{{ pTrafficStyle }}">{{ pTrafficLabel }}</div>
+    <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
+  </div>
+  <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
+  <div style="{{ pMapNoteStyle }}">{{ pMapNote }}</div>
     </div>
   </div>
 </div>
@@ -6648,9 +6726,9 @@ class Component extends DCLogic {
         .map(p=>({n:p.n,c:p.k==='rail'?p.c:p.k==='place'?'MAP':'METRO',km:p.k==='rail'?'rail':p.k==='place'?'map':'metro',
           row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
             borderBottom:'1px solid var(--k-f4f3ef)'},
-          nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
-          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:p.k==='rail'?'var(--k-fg-d8385a)':'#8C2877'},
-          kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
+          nStyle:{flex:1,font:'600 13.5px/1.3 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
+          cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:p.k==='rail'?'var(--k-fg-d8385a)':'#8C2877'},
+          kmStyle:{font:"500 10.5px/1 'JetBrains Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
           onPick:()=>{this.setState(which==='from'
             ?{pFromK:p.k,pFromId:p.id,pTxtF:null,pOpen:null}
             :{pToK:p.k,pToId:p.id,pTxtT:null,pOpen:null});}}))
@@ -6658,9 +6736,9 @@ class Component extends DCLogic {
         .concat(((S.pStops||{})[which]||[]).slice(0,5).map(st=>({n:st.name+(st.hint?' · '+st.hint:''),c:st.station?'BUS STATION':'BUS STOP',km:'bus',
           row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
             borderBottom:'1px solid var(--k-f4f3ef)'},
-          nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
-          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'#1f6fd0'},
-          kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
+          nStyle:{flex:1,font:'600 13.5px/1.3 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
+          cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:'#1f6fd0'},
+          kmStyle:{font:"500 10.5px/1 'JetBrains Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
           onPick:()=>{
             this.planAddPlace({id:st.id,name:st.name,lat:st.lat,lng:st.lng,near:null,stop:true});
             this.setState(which==='from'?{pFromK:'place',pFromId:st.id,pTxtF:null,pOpen:null}
@@ -6669,8 +6747,8 @@ class Component extends DCLogic {
         .concat(q.length>=3?[{n:(S.pGeoBusy===which?'Looking for ':'Search the map for ')+'\u201c'+txt.trim()+'\u201d',c:'MAP',km:'',
           row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
             background:'var(--k-fafaf8)',borderBottom:'1px solid var(--k-f4f3ef)'},
-          nStyle:{flex:1,font:'700 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
-          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-1f3f8f)'},
+          nStyle:{flex:1,font:'700 13px/1.3 Archivo,sans-serif',color:'var(--k-fg-1f3f8f)'},
+          cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:'var(--k-fg-1f3f8f)'},
           kmStyle:{width:44},
           onPick:()=>this.planGeocode(which,txt.trim())}]:[]);
     };
@@ -6696,6 +6774,12 @@ class Component extends DCLogic {
       standing:{c:'var(--k-fg-a71f3d)',bg:'var(--k-fdf3f5)',t:'Standing, most likely',short:'Standing'},
       unknown:{c:'var(--k-fg-8a8a84)',bg:'var(--k-f1f1ee)',t:'Seat not known',short:'Unknown'}};
     const chains=(R&&R.chains)||[];
+    // One clock for all of them. t0 is the first departure, t1 the last
+    // arrival; every bar below is a slice of that window, so two tickets side
+    // by side can be compared by eye and not by subtraction.
+    const AXt0=chains.length?Math.min.apply(null,chains.map(c=>c.dep)):0;
+    const AXt1=chains.length?Math.max.apply(null,chains.map(c=>c.arr)):0;
+    const AXwin=Math.max(AXt1-AXt0,1);
     const best=chains.length?Math.min.apply(null,chains.map(c=>c.totalMin)):0;
     const cheap=chains.length?Math.min.apply(null,chains.map(c=>c.fare)):0;
     const rows=chains.map((c,ci)=>{
@@ -6714,7 +6798,7 @@ class Component extends DCLogic {
       const isSel=S.pSelIdx===ci;
       // one binding, or dc keeps the first and drops the rest - which is how
       // "Fastest" ended up as dark text with no ground on the ink card
-      const TAGBASE={font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.07em',
+      const TAGBASE={font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.07em',
         textTransform:'uppercase',padding:'5px 8px',borderRadius:999};
       const tag=(t,bg,fg2c)=>({t,style:{...TAGBASE,background:isRec?'rgba(255,255,255,.14)':bg,
         color:isRec?'#ffffff':fg2c}});
@@ -6739,13 +6823,21 @@ class Component extends DCLogic {
       const nSt=Math.min(stops.length,4);
       return {
         isRec,
+        // ---- where this way sits on the shared clock ----
+        trackLeft:((c.dep-AXt0)/AXwin*100).toFixed(2)+'%',
+        trackWidth:(Math.max(c.totalMin,1)/AXwin*100).toFixed(2)+'%',
+        trackWrap:{position:'relative',height:8,borderRadius:4,
+          background:isRec?INKINS:'var(--k-f1f1ee)',margin:'0 16px 12px'},
+        bars:c.legs.map(l=>({flex:String(Math.max(l.min||1,1)),
+          style:{flex:String(Math.max(l.min||1,1)),display:'block',borderRadius:2,
+            background:(MODE[l.mode]||MODE.walk).c}})),
         // ---- the ticket itself ----
         tkStyle:{background:isRec?INK:'var(--k-fff)',borderRadius:18,gridColumn:isRec?'1/-1':'auto',
           overflow:'hidden',cursor:'pointer',position:'relative',
           border:isRec?('1px solid '+IP.ring):('1px solid '+(isSel?'var(--k-d8385a)':'var(--k-e6e5e0)')),
           boxShadow:isSel?'0 0 0 3px rgba(216,56,90,.16)':(isRec?IP.shadow:'none')},
         icStyle:{width:32,height:32,borderRadius:10,flex:'none',display:'flex',alignItems:'center',
-          justifyContent:'center',background:M0.c,color:'#fff',font:'700 13px/1 Manrope,sans-serif'},
+          justifyContent:'center',background:M0.c,color:'#fff',font:'700 13px/1 Archivo,sans-serif'},
         iconRef:'#ktk-'+({train:'train',metro:'metro',bus:'bus',walk:'walk',car:'car',bike:'car',auto:'car'}[(ride[0]||{}).mode]||'train'),
         // ---- route badges: the one place colour is allowed to shout ----
         badges:ride.slice(0,4).map(l=>{
@@ -6758,7 +6850,7 @@ class Component extends DCLogic {
             ref:'#ktk-'+({train:'train',metro:'metro',bus:'bus',car:'car',bike:'car',auto:'car'}[l.mode]||'train'),
             style:{display:'inline-flex',alignItems:'center',gap:7,background:M.c,color:'#fff',
               padding:'6px 11px 6px 8px',borderRadius:999,
-              font:'800 11.5px/1 Manrope,sans-serif',letterSpacing:'.01em',maxWidth:'100%',
+              font:'800 11.5px/1 Archivo,sans-serif',letterSpacing:'.01em',maxWidth:'100%',
               overflow:'hidden',whiteSpace:'nowrap'}};
         }),
         badgeRowStyle:{display:'flex',gap:7,flexWrap:'wrap',padding:'12px 16px 0'},
@@ -6789,42 +6881,42 @@ class Component extends DCLogic {
         // ---- codes above the times, dates under the places ----
         fromCode:this.planCode(stops[0])||'',
         toCode:this.planCode(stops[stops.length-1])||'',
-        codeStyle:{font:'700 11px/1 Manrope,sans-serif',letterSpacing:'.13em',color:fg2,marginBottom:6},
-        dayStyle:{font:'600 11px/1.35 Manrope,sans-serif',color:fg2,marginTop:3,opacity:.85},
+        codeStyle:{font:'700 11px/1 Archivo,sans-serif',letterSpacing:'.13em',color:fg2,marginBottom:6},
+        dayStyle:{font:'600 11px/1.35 Archivo,sans-serif',color:fg2,marginTop:3,opacity:.85},
         dayText:(()=>{try{const d=new Date(this.dateIsoFor(S.dayIdx||0)+'T00:00:00');
           return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return '';}})(),
         // ---- the arc, and the time it takes, under it ----
         arcWrapStyle:{position:'relative',flex:'none',width:104,height:38},
         arcStroke:isRec?ONINK2:'var(--k-dedcd6)',
         arcDurStyle:{position:'absolute',left:0,right:0,top:19,textAlign:'center',
-          font:'700 11.5px/1 Manrope,sans-serif',color:fg2,fontVariantNumeric:'tabular-nums'},
+          font:'700 11.5px/1 Archivo,sans-serif',color:fg2,fontVariantNumeric:'tabular-nums'},
         rule:{height:1,background:isRec?'rgba(255,255,255,.14)':'var(--k-e6e5e0)',margin:'14px 0 0'},
-        whoStyle:{font:'600 10.5px/1.3 Manrope,sans-serif',color:fg2},
+        whoStyle:{font:'600 10.5px/1.3 Archivo,sans-serif',color:fg2},
         whoText:isRec?('Recommended of '+chains.length):ride.map(l=>MODE[l.mode].n).join(', then ').toLowerCase(),
-        nmStyle:{font:'800 13.5px/1.35 Manrope,sans-serif',color:fg,letterSpacing:'-.01em',
+        nmStyle:{font:'800 13.5px/1.35 Archivo,sans-serif',color:fg,letterSpacing:'-.01em',
           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'100%'},
         nmText:ride.map(namesOf).join(', then ')||'On foot',
-        statStyle:{marginLeft:'auto',flex:'none',font:'700 10.5px/1 Manrope,sans-serif',
+        statStyle:{marginLeft:'auto',flex:'none',font:'700 10.5px/1 Archivo,sans-serif',
           padding:'6px 10px',borderRadius:999,color:sk.c,background:sk.bg},
         statText:sk.t,
         // the recommended card runs the full width so it cannot be missed, but
         // its departure and arrival stay a ticket's width apart
         odStyle:{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',
           gap:10,alignItems:'center',maxWidth:isRec?560:'none'},
-        bigStyle:{font:'800 27px/1 Manrope,sans-serif',letterSpacing:'-.035em',color:fg,
+        bigStyle:{font:'800 27px/1 Archivo,sans-serif',letterSpacing:'-.035em',color:fg,
           fontVariantNumeric:'tabular-nums'},
-        placeStyle:{font:'600 11.5px/1.35 Manrope,sans-serif',color:fg2,marginTop:5,overflowWrap:'anywhere'},
+        placeStyle:{font:'600 11.5px/1.35 Archivo,sans-serif',color:fg2,marginTop:5,overflowWrap:'anywhere'},
         fromName:stops[0],toName:stops[stops.length-1],
         lnStyle:{flex:1,height:0,borderTop:'2px dotted '+(isRec?ONINK2:'var(--k-dedcd6)')},
         midIcStyle:{width:26,height:26,borderRadius:999,flex:'none',display:'flex',alignItems:'center',
           justifyContent:'center',background:isRec?ONINK:'var(--k-14161a)',
-          color:isRec?INK:'var(--k-fg-fff)',font:'700 11px/1 Manrope,sans-serif'},
+          color:isRec?INK:'var(--k-fg-fff)',font:'700 11px/1 Archivo,sans-serif'},
         midGlyph:M0.g,
         // ---- the stub across the bottom ----
         stripStyle:{margin:'0 14px 14px',background:insetBg,borderRadius:14,padding:'10px 13px',
           display:'flex',alignItems:'center',gap:9,flexWrap:'wrap'},
-        miniStyle:{font:'700 11.5px/1 Manrope,sans-serif',color:fg2,fontVariantNumeric:'tabular-nums'},
-        fareStyle:{marginLeft:'auto',font:'800 18px/1 Manrope,sans-serif',letterSpacing:'-.02em',color:fg,
+        miniStyle:{font:'700 11.5px/1 Archivo,sans-serif',color:fg2,fontVariantNumeric:'tabular-nums'},
+        fareStyle:{marginLeft:'auto',font:'800 18px/1 Archivo,sans-serif',letterSpacing:'-.02em',color:fg,
           fontVariantNumeric:'tabular-nums'},
         // ---- where it calls, for the recommended one ----
         trkWrap:{display:isRec?'block':'none',position:'relative',padding:'2px 18px 14px'},
@@ -6835,9 +6927,9 @@ class Component extends DCLogic {
             textAlign:i===0?'left':(i===nSt-1?'right':'center'),minWidth:0},
           dot:{width:18,height:18,borderRadius:999,background:ONINK,marginBottom:7,
             boxShadow:'0 0 0 3px '+INK},
-          nm:{font:'700 11px/1.3 Manrope,sans-serif',color:ONINK,overflow:'hidden',
+          nm:{font:'700 11px/1.3 Archivo,sans-serif',color:ONINK,overflow:'hidden',
             textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:110},
-          tm:{font:'600 10.5px/1.3 Manrope,sans-serif',color:ONINK2,marginTop:2,
+          tm:{font:'600 10.5px/1.3 Archivo,sans-serif',color:ONINK2,marginTop:2,
             fontVariantNumeric:'tabular-nums'}})),
         // ---- the four numbers a pass carries ----
         factsWrap:{display:isRec?'grid':'none',gap:'10px 14px',padding:'0 18px 14px',
@@ -6847,8 +6939,8 @@ class Component extends DCLogic {
           {k:'Door to door',v:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m',ref:'#ktk-clock'},
           {k:'Total',v:'\u20b9'+c.fare,ref:'#ktk-fare'}].map(x=>({...x,
           kRowStyle:{display:'flex',alignItems:'center',gap:6,color:ONINK2},
-          kStyle:{font:'600 10px/1 Manrope,sans-serif',color:ONINK2},
-          vStyle:{font:'800 13.5px/1.3 Manrope,sans-serif',color:ONINK,marginTop:3,letterSpacing:'-.01em',
+          kStyle:{font:'600 10px/1 Archivo,sans-serif',color:ONINK2},
+          vStyle:{font:'800 13.5px/1.3 Archivo,sans-serif',color:ONINK,marginTop:3,letterSpacing:'-.01em',
             overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}})),
         rowStyle:{background:isSel?'var(--k-fdf3f5)':'var(--k-fff)',
           border:(isRec?'2px solid var(--k-d8385a)':'1px solid '+(isSel?'var(--k-d8385a)':'var(--k-e6e5e0)')),
@@ -6857,25 +6949,25 @@ class Component extends DCLogic {
         onSelect:()=>this.planSelect(c,ci),
         onMapNote:isSel?'On the map':'',
         onMapNoteStyle:{display:isSel?'inline-block':'none',
-          font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.09em',textTransform:'uppercase',
+          font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.09em',textTransform:'uppercase',
           padding:'5px 7px',borderRadius:4,background:'var(--k-fdf3f5)',color:'var(--k-fg-d8385a)'},
         headStyle:{display:isRec?'flex':'none',alignItems:'center',gap:10,marginBottom:12},
         headText:'Recommended for you',
         headSub:isRec&&R.reason?('confidence '+(R.reason.facts.capacityConfidence||'').toLowerCase()):'',
         whyText:isRec?(R.explanation||''):'',
         whyStyle:{display:isRec&&R.explanation?'block':'none',margin:'0 18px 14px',padding:'11px 13px',
-          borderRadius:12,background:INKINS,font:'600 12.5px/1.55 Manrope,sans-serif',color:ONINK},
+          borderRadius:12,background:INKINS,font:'600 12.5px/1.55 Archivo,sans-serif',color:ONINK},
         dep:c.depText,arr:c.arrText,
         dur:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m',
         fare:'\u20b9'+c.fare,
         changes:c.changes===0?'direct':(c.changes+(c.changes===1?' change':' changes')),
         pills:c.legs.filter(l=>l.mode!=='walk').map(l=>({
           t:(MODE[l.mode]||MODE.walk).n,
-          style:{font:'700 10.5px/1 Manrope,sans-serif',letterSpacing:'.04em',padding:'6px 9px',
+          style:{font:'700 10.5px/1 Archivo,sans-serif',letterSpacing:'.04em',padding:'6px 9px',
             borderRadius:5,color:'#fff',background:(MODE[l.mode]||MODE.walk).c}})),
         seatText:sk.t,seatWhy:c.seat.why,
         seatStyle:{display:'inline-flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:999,
-          font:'700 12px/1 Manrope,sans-serif',color:sk.c,background:sk.bg},
+          font:'700 12px/1 Archivo,sans-serif',color:sk.c,background:sk.bg},
         tags,
         legs:c.legs.map(l=>({
           dotStyle:{background:(MODE[l.mode]||MODE.walk).c},
@@ -6892,16 +6984,16 @@ class Component extends DCLogic {
               +(l.dep?('  '+l.dep+' '+'\u2192'+' '+l.arr):'')),
           seatText:l.seat?((SEAT[l.seat.word]||SEAT.unknown).t+' '+'\u00b7'+' '+l.seat.why):'',
           seatStyle:{display:l.seat?'block':'none',
-            font:'600 11.5px/1.5 Manrope,sans-serif',marginTop:2,
+            font:'600 11.5px/1.5 Archivo,sans-serif',marginTop:2,
             color:(SEAT[(l.seat||{}).word]||SEAT.unknown).c},
           // "0% full" is a silly thing to say about a car she hired for herself
           capText:(l.cap&&!NOCAP.includes(l.mode))?((l.cap.occupancy==null?'how full: unknown':'about '+Math.round(l.cap.occupancy*100)+'% full')
             +' \u00b7 '+(CAPQ[l.cap.quality]||l.cap.quality)+(l.cap.source?' \u00b7 '+l.cap.source:'')):'',
           capStyle:{display:(l.cap&&!NOCAP.includes(l.mode))?'block':'none',
-            font:'500 11px/1.5 Manrope,sans-serif',marginTop:2,color:'var(--k-fg-8a8a84)'},
+            font:'500 11px/1.5 Archivo,sans-serif',marginTop:2,color:'var(--k-fg-8a8a84)'},
           srcText:l.source==='simulated'?'simulated':(l.source||''),
           srcStyle:{display:l.source?'inline-block':'none',marginLeft:7,
-            font:'700 9px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
+            font:'700 9px/1 Archivo,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
             padding:'3px 5px',borderRadius:3,
             background:l.source==='simulated'?'var(--k-fdf0e3)':'var(--k-f1f1ee)',
             color:l.source==='simulated'?'var(--k-fg-8a4a12)':'var(--k-fg-8a8a84)'}})),
@@ -6909,14 +7001,14 @@ class Component extends DCLogic {
           borderTop:'1px dashed var(--k-dedcd6)'},
         footStyle:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',
           padding:'0 16px 16px'},
-        toggleStyle:{cursor:'pointer',font:'700 12px/1 Manrope,sans-serif',
+        toggleStyle:{cursor:'pointer',font:'700 12px/1 Archivo,sans-serif',
           color:isRec?ONINK2:'var(--k-fg-8a8a84)',textDecoration:'underline'},
-        tagStyle:{font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.07em',textTransform:'uppercase',
+        tagStyle:{font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.07em',textTransform:'uppercase',
           padding:'5px 7px',borderRadius:999},
         legWrapStyle:{display:open?'block':'none',margin:'0 16px 16px',padding:'14px 16px',
           borderRadius:14,background:insetBg},
-        legTitleStyle:{font:'700 13px/1.35 Manrope,sans-serif',color:fg},
-        legSubStyle:{font:'600 12px/1.5 Manrope,sans-serif',color:fg2},
+        legTitleStyle:{font:'700 13px/1.35 Archivo,sans-serif',color:fg},
+        legSubStyle:{font:'600 12px/1.5 Archivo,sans-serif',color:fg2},
         toggleLabel:open?'Hide the legs':'See every leg',
         onToggle:()=>{this.planSelect(c,ci);this.setState({pOpenIdx:open?null:ci});},
         onChoose:()=>{
@@ -6935,11 +7027,11 @@ class Component extends DCLogic {
         chooseStyle:(isRec||isSel)
           ? {flex:'none',marginLeft:'auto',border:'none',
              background:tl?'var(--k-d8385a)':(this.planTripOf(c).legs.length?'#8C2877':'var(--k-1f3f8f)'),
-             color:'#fff',font:'700 13px/1 Manrope,sans-serif',padding:'13px 18px',borderRadius:999,
+             color:'#fff',font:'700 13px/1 Archivo,sans-serif',padding:'13px 18px',borderRadius:999,
              cursor:'pointer',minHeight:44}
           : {flex:'none',marginLeft:'auto',background:'transparent',
              border:'1px solid var(--k-dedcd6)',color:'var(--k-fg-40434a)',
-             font:'700 13px/1 Manrope,sans-serif',padding:'12px 17px',borderRadius:999,
+             font:'700 13px/1 Archivo,sans-serif',padding:'12px 17px',borderRadius:999,
              cursor:'pointer',minHeight:44},
       };
     });
@@ -6973,31 +7065,31 @@ class Component extends DCLogic {
           if(set.has(k))set.delete(k);else set.add(k);
           this.setState({pModes:[...set]});},
           style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
-            font:'700 13px/1 Manrope,sans-serif',
+            font:'700 13px/1 Archivo,sans-serif',
             border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
             background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
             color:on?'#fff':'var(--k-fg-40434a)'}};}),
       pAllModes:()=>this.setState({pModes:[...NET]}),
       pAllStyle:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
-        font:'700 13px/1 Manrope,sans-serif',
+        font:'700 13px/1 Archivo,sans-serif',
         border:'1px solid '+(allNet?'var(--k-14161a)':'var(--k-dedcd6)'),
         background:allNet?'var(--k-14161a)':'var(--k-fff)',
         color:allNet?'#fff':'var(--k-fg-40434a)'},
       pHireNote:hiring?('A '+(hiring==='both'?'car or bike':hiring)
         +' is only offered where no bus khaali knows can reach, and the fare is an estimate.'):'',
       pHireNoteStyle:{display:hiring?'block':'none',marginTop:8,
-        font:'600 12px/1.55 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+        font:'600 12px/1.55 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       // say it in a sentence
       pSayTxt:S.pSayTxt||'',
       setPSay:e=>this.setState({pSayTxt:e.target.value}),
       onPSay:()=>this.planSay(),
       onPSayKey:e=>{if(e.key==='Enter')this.planSay();},
       pSayBtnStyle:{flex:'none',border:'none',background:'var(--k-14161a)',color:'#fff',
-        font:'700 13px/1 Manrope,sans-serif',padding:'0 18px',height:46,borderRadius:9,cursor:'pointer',
+        font:'700 13px/1 Archivo,sans-serif',padding:'0 18px',height:46,borderRadius:9,cursor:'pointer',
         opacity:S.pSayBusy?.6:1},
       pSayBtn:S.pSayBusy?'Reading\u2026':'Plan it',
       pSayNote:S.pSayNote||'',
-      pSayNoteStyle:{display:S.pSayNote?'block':'none',marginTop:8,font:'600 12.5px/1.5 Manrope,sans-serif',
+      pSayNoteStyle:{display:S.pSayNote?'block':'none',marginTop:8,font:'600 12.5px/1.5 Archivo,sans-serif',
         color:/could not/.test(S.pSayNote||'')?'var(--k-fg-a71f3d)':'var(--k-fg-14663a)'},
       // ask about the recommended way
       pAskStyle:{display:(R&&R.recommended!=null)?'block':'none',marginTop:14,background:'var(--k-fff)',
@@ -7008,7 +7100,7 @@ class Component extends DCLogic {
       onPAskKey:e=>{if(e.key==='Enter')this.planAsk();},
       pAskBtn:S.pAskBusy?'\u2026':'Ask',
       pAskAns:S.pAskAns||'',
-      pAskAnsStyle:{display:S.pAskAns?'block':'none',marginTop:10,font:'500 13.5px/1.6 Manrope,sans-serif',
+      pAskAnsStyle:{display:S.pAskAns?'block':'none',marginTop:10,font:'500 13.5px/1.6 Archivo,sans-serif',
         color:'var(--k-fg-14161a)',padding:'10px 12px',background:'var(--k-fafaf8)',borderRadius:8},
       pAskBy:S.pAskAns?('answered from the journey facts'+(S.pAskBy==='model'?' by the model':'')):'',
       // ten thousand people
@@ -7018,16 +7110,16 @@ class Component extends DCLogic {
       pSimBtn:S.pSimBusy?'Running the morning twice\u2026':'What if '+(S.pSimN||2000).toLocaleString('en-IN')+' people did this?',
       pSimNChips:[300,2000,10000].map(k=>{const on=(S.pSimN||2000)===k;return {l:k.toLocaleString('en-IN'),
         onClick:()=>this.setState({pSimN:k,pSim:null}),
-        style:{cursor:'pointer',padding:'7px 11px',borderRadius:999,font:'700 12px/1 Manrope,sans-serif',
+        style:{cursor:'pointer',padding:'7px 11px',borderRadius:999,font:'700 12px/1 Archivo,sans-serif',
           border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),background:on?'var(--k-14161a)':'var(--k-fff)',
           color:on?'#fff':'var(--k-fg-40434a)'}};}),
-      pSimBtnStyle:{border:'none',background:'var(--k-14161a)',color:'#fff',font:'700 13px/1 Manrope,sans-serif',
+      pSimBtnStyle:{border:'none',background:'var(--k-14161a)',color:'#fff',font:'700 13px/1 Archivo,sans-serif',
         padding:'12px 16px',borderRadius:8,cursor:'pointer',opacity:S.pSimBusy?.6:1},
       pSimFinding:(S.pSim&&(S.pSim.finding||S.pSim.err))||'',
-      pSimFindingStyle:{display:S.pSim?'block':'none',marginTop:12,font:'700 14px/1.5 Manrope,sans-serif',
+      pSimFindingStyle:{display:S.pSim?'block':'none',marginTop:12,font:'700 14px/1.5 Archivo,sans-serif',
         color:S.pSim&&S.pSim.err?'var(--k-fg-a71f3d)':'var(--k-fg-14161a)'},
       pSimTableStyle:{display:(S.pSim&&S.pSim.baseline)?'grid':'none',gridTemplateColumns:'1fr auto auto auto',gap:'6px 18px',
-        marginTop:12,font:'600 12.5px/1.4 Manrope,sans-serif',color:'var(--k-fg-40434a)',alignItems:'baseline'},
+        marginTop:12,font:'600 12.5px/1.4 Archivo,sans-serif',color:'var(--k-fg-40434a)',alignItems:'baseline'},
       pSimRows:(S.pSim&&S.pSim.baseline)?[
         ['Most crowded vehicle',S.pSim.baseline.peakOccupancy+'%',S.pSim.allocated.peakOccupancy+'%',S.pSim.delta.peakOccupancy],
         ['Vehicles past 90%',S.pSim.baseline.overloadedVehicles,S.pSim.allocated.overloadedVehicles,S.pSim.delta.overloadedVehicles],
@@ -7035,25 +7127,25 @@ class Component extends DCLogic {
         ['Buses used',S.pSim.baseline.busOccupancy+'%',S.pSim.allocated.busOccupancy+'%',S.pSim.delta.busOccupancy],
         ['Minutes, average',S.pSim.baseline.averageMinutes,S.pSim.allocated.averageMinutes,S.pSim.delta.averageMinutes],
       ].map(([k,b,a,d])=>({k,b:String(b),a:String(a),d:(d>0?'+':'')+d,
-        dStyle:{font:"600 12px/1 'IBM Plex Mono',monospace",color:d<0?'var(--k-fg-14663a)':d>0?'var(--k-fg-a71f3d)':'var(--k-fg-8a8a84)'}})):[],
+        dStyle:{font:"600 12px/1 'JetBrains Mono',monospace",color:d<0?'var(--k-fg-14663a)':d>0?'var(--k-fg-a71f3d)':'var(--k-fg-8a8a84)'}})):[],
       pSimNote:(S.pSim&&S.pSim.baseline)?('Baseline: everyone takes the way that gets them there soonest. Allocated: each person gets the best way given everyone before them. '
         +S.pSim.n.toLocaleString('en-IN')+' people ready between '+this.toHHMM(S.pSim.start)+' and '+this.toHHMM(S.pSim.end)+', '+(S.pSim.profile)+' profile. Bus loads are estimated, metro loads predicted, train loads counted; the KSRTC leg is simulated.'):'',
-      pSimNoteStyle:{display:(S.pSim&&S.pSim.baseline)?'block':'none',marginTop:10,font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+      pSimNoteStyle:{display:(S.pSim&&S.pSim.baseline)?'block':'none',marginTop:10,font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pAfterChips:this.planTimeChips('after'),
       pByChips:this.planTimeChips('by'),
       pAfterVal:S.pTime||'',pByVal:S.pBy||'',
       setPAfterVal:e=>this.setState({pTime:e.target.value,pAfterCustom:true}),
       setPByVal:e=>this.setState({pBy:e.target.value,pByCustom:true}),
       pAfterCustomStyle:{display:S.pAfterCustom?'inline-block':'none',height:34,padding:'0 10px',borderRadius:999,
-        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Manrope,sans-serif',outline:'none'},
+        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Archivo,sans-serif',outline:'none'},
       pByCustomStyle:{display:S.pByCustom?'inline-block':'none',height:34,padding:'0 10px',borderRadius:999,
-        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Manrope,sans-serif',outline:'none'},
+        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Archivo,sans-serif',outline:'none'},
       // how to rank: the passenger's own weighting of time, money and comfort
       pProfileChips:[['balanced','Balanced'],['fastest','Fastest'],['cheapest','Cheapest'],['comfortable','Comfortable'],['network','Network-smart']].map(([k,l])=>{
         const on=(S.pProfile||'balanced')===k;
         return {l,onClick:()=>this.setState({pProfile:k}),
           style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
-            font:'700 12.5px/1 Manrope,sans-serif',
+            font:'700 12.5px/1 Archivo,sans-serif',
             border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),
             background:on?'var(--k-14161a)':'var(--k-fff)',
             color:on?'#fff':'var(--k-fg-40434a)'}};}),
@@ -7062,7 +7154,7 @@ class Component extends DCLogic {
         l:(S.pPick===k?'Tap the map for the '+l:'Pin the '+l+' on the map'),
         onClick:()=>this.planPick(k),
         style:{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,
-          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Manrope,sans-serif',minHeight:36,
+          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Archivo,sans-serif',minHeight:36,
           border:'1px solid '+(S.pPick===k?'var(--k-d8385a)':'var(--k-dedcd6)'),
           background:S.pPick===k?'var(--k-d8385a)':'var(--k-fff)',
           color:S.pPick===k?'#fff':'var(--k-fg-40434a)'}})),
@@ -7070,27 +7162,30 @@ class Component extends DCLogic {
         l:(S.pGeoBusy===k?'Finding you…':l),
         onClick:()=>this.planLocate(k),
         style:{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,
-          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Manrope,sans-serif',minHeight:36,
+          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Archivo,sans-serif',minHeight:36,
           border:'1px solid var(--k-dedcd6)',background:'var(--k-fff)',color:'var(--k-fg-40434a)',
           opacity:S.pGeoBusy===k?.6:1}})),
       pPickNote:S.pPick?('Tap the map to set the '+(S.pPick==='from'?'start':'destination')
         +', or drag the pin. Tap as often as you like — khaali renames the point each time and says '
         +'what it can plan through near it. Press the chip again when it is where you want it.'):'',
       pPickNoteStyle:{display:S.pPick?'block':'none',marginTop:9,padding:'10px 12px',borderRadius:8,
-        background:'var(--k-fdf3f5)',font:'600 12.5px/1.55 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+        background:'var(--k-fdf3f5)',font:'600 12.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
       // the paper: names and roads by default, or the quiet grey for a route read alone
       // ---- a journey she draws herself ----
       pcOn:!!S.pcOn,
       pcToggleLabel:S.pcOn?'✕  Close the custom journey':'+  Build a custom journey',
       pcToggle:()=>this.setState({pcOn:!S.pcOn,pcRes:null,pcErr:''}),
       pcToggleStyle:{cursor:'pointer',display:'inline-flex',alignItems:'center',minHeight:38,
-        padding:'9px 16px',borderRadius:999,font:'700 13px/1 Manrope,sans-serif',
+        padding:'9px 16px',borderRadius:999,font:'700 13px/1 Archivo,sans-serif',
         border:'1px solid '+(S.pcOn?'var(--k-14161a)':'var(--k-dedcd6)'),
         background:S.pcOn?'var(--k-14161a)':'var(--k-fff)',color:S.pcOn?'#fff':'var(--k-fg-40434a)'},
-      pcWrapStyle:{display:S.pcOn?'block':'none',marginTop:14,background:'var(--k-fff)',
+      // the panel of stops is the question; pcOutStyle below is its answer
+      pcOutStyle:{display:(S.pcOn&&(S.pcRes||S.pcErr||S.pcBusy))?'block':'none',
+        background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:20,padding:'20px 22px'},
+      pcWrapStyle:{display:S.pcOn?'block':'none',background:'var(--k-fff)',
         border:'1px solid var(--k-e6e5e0)',borderRadius:13,padding:'16px 18px'},
       pcLead:'Every stop in order, and the vehicle for each hop if you have a view. Each hop leaves when the one before it lands.',
-      pcLeadStyle:{font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginBottom:14},
+      pcLeadStyle:{font:'500 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)',marginBottom:14},
       pcRows:this.pcList().map((st,i)=>{
         const p=st?this.planPlace(st.k,st.id):null;
         const txt=(S.pcTxt&&S.pcTxt[i]!=null)?S.pcTxt[i]:(p?p.n:'');
@@ -7101,23 +7196,23 @@ class Component extends DCLogic {
           .slice(0,6)
           .map(x=>({n:x.n,c:x.k==='rail'?x.c:x.k==='place'?'MAP':'METRO',
             row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--k-f4f3ef)'},
-            nStyle:{flex:1,font:'600 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
-            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:x.k==='rail'?'var(--k-fg-d8385a)':x.k==='place'?'var(--k-fg-8a8a84)':'#8C2877'},
+            nStyle:{flex:1,font:'600 13px/1.3 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
+            cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:x.k==='rail'?'var(--k-fg-d8385a)':x.k==='place'?'var(--k-fg-8a8a84)':'#8C2877'},
             onPick:()=>{const t=(S.pcTxt||[]).slice();t[i]=null;this.setState({pcTxt:t});this.pcSet(i,{k:x.k,id:x.id});}}))
           .concat((((S.pStops||{})['c'+i])||[]).slice(0,4).map(bs=>({n:bs.name+(bs.hint?' · '+bs.hint:''),c:bs.station?'BUS STN':'BUS STOP',
             row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--k-f4f3ef)'},
-            nStyle:{flex:1,font:'600 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
-            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'#1f6fd0'},
+            nStyle:{flex:1,font:'600 13px/1.3 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
+            cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:'#1f6fd0'},
             onPick:()=>{this.planAddPlace({id:bs.id,name:bs.name,lat:bs.lat,lng:bs.lng,near:null,stop:true});
               const t=(S.pcTxt||[]).slice();t[i]=null;this.setState({pcTxt:t});this.pcSet(i,{k:'place',id:bs.id});}})))
           .concat(q.length>=3?[{n:(S.pcGeoBusy===i?'Looking for ':'Search the map for ')+'“'+String(txt).trim()+'”',c:'MAP',
             row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer'},
-            nStyle:{flex:1,font:'700 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
-            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)'},
+            nStyle:{flex:1,font:'700 13px/1.3 Archivo,sans-serif',color:'var(--k-fg-1f3f8f)'},
+            cStyle:{font:"600 10px/1 'JetBrains Mono',monospace",color:'var(--k-fg-8a8a84)'},
             onPick:()=>this.pcGeocode(i,String(txt).trim())}]:[]);
         return {
           label:i===0?'Start':(i===this.pcList().length-1?'End':('Stop '+(i+1))),
-          labelStyle:{width:54,flex:'none',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.12em',
+          labelStyle:{width:54,flex:'none',font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.12em',
             textTransform:'uppercase',color:'var(--k-fg-8a8a84)'},
           dotStyle:{width:11,height:11,borderRadius:'50%',flex:'none',
             background:i===0?'#2fa866':(i===this.pcList().length-1?'var(--k-d8385a)':'var(--k-14161a)')},
@@ -7132,7 +7227,7 @@ class Component extends DCLogic {
           onDrop:()=>this.pcDrop(i),
           dropStyle:{display:this.pcList().length>2?'inline-flex':'none',cursor:'pointer',flex:'none',
             width:30,height:30,alignItems:'center',justifyContent:'center',borderRadius:8,
-            border:'1px solid var(--k-dedcd6)',color:'var(--k-fg-8a8a84)',font:'700 14px/1 Manrope,sans-serif'},
+            border:'1px solid var(--k-dedcd6)',color:'var(--k-fg-8a8a84)',font:'700 14px/1 Archivo,sans-serif'},
           // The hop OUT of this stop, drawn under it. A row of mode chips
           // floating below the whole list belongs to no hop in particular,
           // which is no use when there are three of them.
@@ -7143,7 +7238,7 @@ class Component extends DCLogic {
             ?('to '+(()=>{const nx=this.pcList()[i+1];const q=nx?this.planPlace(nx.k,nx.id):null;
               return q?(q.n.length>26?q.n.slice(0,25)+'…':q.n):'the next stop';})()+' by')
             :'',
-          hopLabelStyle:{flex:'none',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.1em',
+          hopLabelStyle:{flex:'none',font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.1em',
             textTransform:'uppercase',color:'var(--k-fg-8a8a84)',marginRight:2},
           hopChips:(i<this.pcList().length-1)
             ? [['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car','Car'],['bike','Bike']].map(([k,l])=>{
@@ -7152,7 +7247,7 @@ class Component extends DCLogic {
                 const hire=k==='car'||k==='bike';
                 return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
                   else this.pcToggleMode(i,k);},
-                  style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Manrope,sans-serif',
+                  style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Archivo,sans-serif',
                     minHeight:30,display:'inline-flex',alignItems:'center',
                     border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
                     background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
@@ -7167,7 +7262,7 @@ class Component extends DCLogic {
           const hire=k==='car'||k==='bike';
           return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
             else this.pcToggleMode(i,k);},
-            style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Manrope,sans-serif',minHeight:30,
+            style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Archivo,sans-serif',minHeight:30,
               display:'inline-flex',alignItems:'center',
               border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
               background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
@@ -7176,32 +7271,32 @@ class Component extends DCLogic {
       pcAdd:()=>this.pcAdd(),
       pcAddLabel:'+  Add a stop',
       pcAddStyle:{display:this.pcList().length<8?'inline-flex':'none',cursor:'pointer',alignItems:'center',minHeight:34,
-        padding:'8px 14px',borderRadius:999,font:'700 12px/1 Manrope,sans-serif',
+        padding:'8px 14px',borderRadius:999,font:'700 12px/1 Archivo,sans-serif',
         border:'1px dashed var(--k-d4d3ce)',background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
       pcRun:()=>this.pcRun(),
       pcRunLabel:S.pcBusy?'Working out every hop…':'Plan this journey',
       pcRunStyle:{border:'none',background:'var(--k-d8385a)',color:'#fff',minHeight:46,
-        font:'800 14px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:9,cursor:'pointer',
+        font:'800 14px/1 Archivo,sans-serif',padding:'14px 22px',borderRadius:9,cursor:'pointer',
         opacity:S.pcBusy?.6:1},
       pcErr:S.pcErr||'',
       pcErrStyle:{display:S.pcErr?'block':'none',marginTop:12,padding:'12px 14px',borderRadius:9,
-        background:'var(--k-fdf3f5)',font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+        background:'var(--k-fdf3f5)',font:'600 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-a71f3d)'},
       pcHead:S.pcRes?(Math.floor(S.pcRes.totalMin/60)+'h '+String(S.pcRes.totalMin%60).padStart(2,'0')+'m  ·  ₹'+S.pcRes.fare
         +'  ·  '+S.pcRes.steps.length+(S.pcRes.steps.length===1?' hop':' hops')):'',
-      pcHeadStyle:{display:S.pcRes?'block':'none',marginTop:16,font:'800 19px/1.2 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      pcHeadStyle:{display:S.pcRes?'block':'none',marginTop:16,font:'800 19px/1.2 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
       pcSteps:S.pcRes?S.pcRes.steps.map(st=>({
         title:(st.n+1)+'.  '+st.from.name+'  →  '+st.to.name,
-        titleStyle:{font:'700 13.5px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+        titleStyle:{font:'700 13.5px/1.4 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
         when:st.depText+' → '+st.arrText+'  ·  '+st.totalMin+' min  ·  ₹'+st.fare
           +'  ·  '+(st.seat&&st.seat.word==='yes'?'you sit':st.seat?st.seat.word:''),
-        whenStyle:{font:'600 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:2},
+        whenStyle:{font:'600 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:2},
         legs:st.legs.filter(l=>l.mode!=='walk').map(l=>({
           t:(l.name||l.line||l.mode),
-          style:{font:'700 10px/1 Manrope,sans-serif',letterSpacing:'.03em',padding:'5px 8px',borderRadius:5,color:'#fff',
+          style:{font:'700 10px/1 Archivo,sans-serif',letterSpacing:'.03em',padding:'5px 8px',borderRadius:5,color:'#fff',
             background:l.mode==='train'?'var(--k-d8385a)':l.mode==='metro'?'#8C2877':l.mode==='bus'?'#1f6fd0'
               :l.mode==='car'?'#0f8a7e':l.mode==='bike'?'#c9701a':'var(--k-8a8a84)'}})),
         alt:st.alternatives?(st.alternatives+' other way'+(st.alternatives===1?'':'s')+' khaali found for this hop'):'',
-        altStyle:{display:st.alternatives?'block':'none',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:3},
+        altStyle:{display:st.alternatives?'block':'none',font:'500 11px/1.5 Archivo,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:3},
         rowStyle:{padding:'12px 0',borderTop:'1px solid var(--k-f0efeb)'},
       })):[],
       pcStepsStyle:{display:S.pcRes?'block':'none',marginTop:8},
@@ -7212,7 +7307,7 @@ class Component extends DCLogic {
       pcBookStyle:(()=>{const c=this.pcChain();const t=this.planTripOf(c||{});
         const any=this.pcTrains().length||t.legs.length||t.rides.length;
         return {display:any?'inline-flex':'none',alignItems:'center',border:'none',
-          background:'var(--k-d8385a)',color:'#fff',font:'700 13px/1 Manrope,sans-serif',
+          background:'var(--k-d8385a)',color:'#fff',font:'700 13px/1 Archivo,sans-serif',
           padding:'13px 18px',borderRadius:7,cursor:'pointer',minHeight:44};})(),
       pcBookGo:()=>this.pcBookAll(),
       pcBookNote:(()=>{if(!S.pcRes)return '';
@@ -7227,29 +7322,29 @@ class Component extends DCLogic {
           : one;})(),
       pcBookErr:S.pcBookErr||'',
       pcBookErrStyle:{display:S.pcBookErr?'block':'none',marginTop:8,
-        font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
+        font:'600 12px/1.5 Archivo,sans-serif',color:'var(--k-fg-d8385a)'},
       pcPassWrapStyle:{display:S.pcPass?'flex':'none',gap:14,alignItems:'center',flexWrap:'wrap',
         marginTop:14,padding:14,borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)'},
       pcPassQr:S.pcPass?S.pcPass.qr:'',
       pcPassQrStyle:{display:S.pcPass?'block':'none',flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
       pcPassHead:S.pcPass?('Trip pass \u00b7 \u20b9'+S.pcPass.fare+' \u00b7 '
         +(S.pcPass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')):'',
-      pcPassHeadStyle:{font:'700 14px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      pcPassHeadStyle:{font:'700 14px/1.4 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
       pcPassSub:S.pcPass?('Every bus and metro hop on this journey \u00b7 any departure, once \u00b7 the ticket ends when the trip does'
         +((S.pcPass.skipped&&S.pcPass.skipped.length)
           ?(' \u00b7 the '+S.pcPass.skipped.map(x=>x.name).join(' and ')+' seat is bought at the counter'):'')):'',
       pcPassSubStyle:{display:S.pcPass?'block':'none',marginTop:4,
-        font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+        font:'500 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       pcRideRows:(S.pcRides||[]).map(r=>({
         t:(r.kind==='bike'?'Bike':'Car')+'  \u00b7  '+r.from+' \u2192 '+r.to+'  \u00b7  '+(r.code||r.id),
-        style:{font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'}})),
+        style:{font:'600 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'}})),
       pcNote:S.pcRes?S.pcRes.note:'',
-      pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+      pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pTrafficLabel:S.pTraffic?'Hide traffic':'Show traffic',
       togglePTraffic:()=>{this.setState({pTraffic:!S.pTraffic});
         setTimeout(()=>{if(S.pTraffic)this.planClearTraffic();else this.planTraffic();},0);},
       pTrafficStyle:{cursor:'pointer',padding:'6px 11px',borderRadius:999,marginRight:8,
-        font:'700 11.5px/1 Manrope,sans-serif',minHeight:30,display:'inline-flex',alignItems:'center',
+        font:'700 11.5px/1 Archivo,sans-serif',minHeight:30,display:'inline-flex',alignItems:'center',
         border:'1px solid '+(S.pTraffic?'#e07b16':'var(--k-dedcd6)'),
         background:S.pTraffic?'#e07b16':'var(--k-fff)',color:S.pTraffic?'#fff':'var(--k-fg-40434a)'},
       pRoadNote:(S.pTraffic&&S.pRoad)
@@ -7258,12 +7353,12 @@ class Component extends DCLogic {
           +S.pRoad.stats.samples.toLocaleString('en-IN')+' timed BMTC segments; WHEN it is slow is a declared curve, not a measurement. Grey is unmeasured.')
         :'',
       pRoadNoteStyle:{display:(S.pTraffic&&S.pRoad)?'block':'none',marginTop:6,
-        font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+        font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pMapPlainLabel:S.pMapPlain?'Show street names':'Hide street names',
       togglePMapPlain:()=>{this.setState({pMapPlain:!S.pMapPlain});
         setTimeout(()=>{if(this._pmap)this.planBase(this._pmap);},0);},
       pMapPlainStyle:{cursor:'pointer',padding:'6px 11px',borderRadius:999,
-        font:'700 11.5px/1 Manrope,sans-serif',minHeight:30,display:'inline-flex',alignItems:'center',
+        font:'700 11.5px/1 Archivo,sans-serif',minHeight:30,display:'inline-flex',alignItems:'center',
         border:'1px solid var(--k-dedcd6)',background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
       pMapPlainWrapStyle:{display:(S.pMapChain||S.pPick||S.pMapOpen)?'flex':'none',
         justifyContent:'flex-end',marginTop:8},
@@ -7280,42 +7375,45 @@ class Component extends DCLogic {
       pTripQrStyle:{display:S.pTripPass?'block':'none',flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
       pTripHead:S.pTripPass?('Trip pass · ₹'+S.pTripPass.fare+' · '
         +(S.pTripPass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')):(S.pTripErr||''),
-      pTripHeadStyle:{font:'700 14px/1.4 Manrope,sans-serif',
+      pTripHeadStyle:{font:'700 14px/1.4 Archivo,sans-serif',
         color:S.pTripPass?'var(--k-fg-14161a)':'var(--k-fg-d8385a)'},
       pTripSub:S.pTripPass?('Good on '+new Date(S.pTripPass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
         +' · any departure, once · the ticket ends when the trip does'
         +((S.pTripPass.skipped&&S.pTripPass.skipped.length)
           ?(' · the '+S.pTripPass.skipped.map(x=>x.name).join(' and ')+' seat is bought at the counter')
           :'')):'',
-      pTripSubStyle:{display:S.pTripPass?'block':'none',marginTop:4,font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      pTripSubStyle:{display:S.pTripPass?'block':'none',marginTop:4,font:'500 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       pTripOpen:S.pTripPass?(S.pTripPass.scanUrl||'#'):'#',
       pTripOpenStyle:{display:S.pTripPass?'inline-block':'none',marginTop:6,
-        font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
+        font:'600 11.5px/1 Archivo,sans-serif',color:'var(--k-fg-1f3f8f)'},
       pMapNoteStyle:{display:S.pMapChain?'block':'none',marginTop:7,
-        font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+        font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       // ---- the one line that stands for seven rows ----
       pOptsToggle:()=>this.setState({pOpts:!S.pOpts}),
       pOptsText:this.planOptsLine(),
       pOptsCue:S.pOpts?'Done':'Change',
-      pOptsLineStyle:{marginTop:14,width:'100%',display:'flex',alignItems:'center',gap:12,
+      pOptsLineStyle:{width:'100%',display:'flex',alignItems:'baseline',gap:9,
         flexWrap:'wrap',background:'none',border:'none',padding:0,cursor:'pointer',textAlign:'left'},
-      pOptsTextStyle:{font:'600 13.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
-      pOptsCueStyle:{marginLeft:'auto',font:'700 12.5px/1 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
-      pOptsDrawer:{display:S.pOpts?'grid':'none',gap:12,marginTop:14,paddingTop:14,
-        borderTop:'1px dashed var(--k-dedcd6)'},
+      pMoreLabel:S.pOpts?'Hide timing and access':'Timing and access',
+      pMoreLabelStyle:{font:'700 13.5px/1.4 Archivo,sans-serif',color:'var(--k-fg-1f3f8f)',flex:'none'},
+      pOptsTextStyle:{display:S.pOpts?'none':'block',font:'500 12px/1.5 Archivo,sans-serif',
+        color:'var(--k-fg-8a8a84)',flex:1,minWidth:0},
+      pOptsCueStyle:{display:'none'},
+      pOptsDrawer:{display:S.pOpts?'grid':'none',gap:14,
+        background:'var(--k-fafaf8)',border:'1px solid var(--k-f0efeb)',borderRadius:14,padding:14},
       pStepOn:!!S.pStep,
       togglePStep:()=>this.setState({pStep:!S.pStep}),
       pStepBox:{width:17,height:17,borderRadius:4,flex:'none',
         border:'1px solid '+(S.pStep?'var(--k-d8385a)':'var(--k-d4d3ce)'),
         background:S.pStep?'var(--k-d8385a)':'var(--k-fff)',color:'#fff',
-        font:'700 11px/17px Manrope,sans-serif',textAlign:'center'},
+        font:'700 11px/17px Archivo,sans-serif',textAlign:'center'},
       pStepTick:S.pStep?'\u2713':'',
       pSearch:()=>this.planSearch(),
 
       // the head
       pHeadFrom:F?F.n:'',pHeadTo:T?T.n:'',
       pGeoNote:S.pGeoNote||'',
-      pGeoNoteStyle:{display:S.pGeoNote?'block':'none',marginTop:6,font:'600 12px/1.4 Manrope,sans-serif',
+      pGeoNoteStyle:{display:S.pGeoNote?'block':'none',marginTop:6,font:'600 12px/1.4 Archivo,sans-serif',
         color:/^Set the /.test(S.pGeoNote||'')?'var(--k-fg-14663a)':'var(--k-fg-a71f3d)'},
       pHeadSub:(F&&T)?(({rail:'Railway',metro:'Metro',place:'Anywhere'})[F.k]+' to '+({rail:'railway',metro:'metro',place:'anywhere on the map'})[T.k]
         +((R&&R.rows&&R.rows.length)?' \u00b7 '+R.rows.length+(R.rows.length===1?' way to go':' ways to go')
@@ -7323,21 +7421,21 @@ class Component extends DCLogic {
 
       // the results
       pBusyStyle:{display:S.pBusy?'block':'none',padding:'26px 4px',
-        font:'700 14px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+        font:'700 14px/1.5 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pErrStyle:{display:(R&&R.err)?'block':'none',marginTop:18,padding:'14px 16px',borderRadius:10,
         background:'var(--k-fdf3f5)',border:'1px solid var(--k-e2ccd3)',
-        font:'600 13px/1.6 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+        font:'600 13px/1.6 Archivo,sans-serif',color:'var(--k-fg-a71f3d)'},
       pErrText:(R&&R.err)||'',
       // the question asked at the moment it is useful, not described in a manual
       pTryHire:(R&&R.canHire)?[['car','Try a car'],['bike','Try a bike']].map(([k,l])=>({l,
         onClick:()=>{const set=new Set(this.planModes());set.add(k);
           this.setState({pModes:[...set]});setTimeout(()=>this.planSearch(),0);},
         style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
-          font:'700 13px/1 Manrope,sans-serif',border:'1px solid #0f8a7e',
+          font:'700 13px/1 Archivo,sans-serif',border:'1px solid #0f8a7e',
           background:'#0f8a7e',color:'#fff'}})):[],
       pTryHireWrap:{display:(R&&R.canHire)?'flex':'none',gap:9,marginTop:12,flexWrap:'wrap',alignItems:'center'},
       pTryHireLead:'khaali does not run these, and the fare is an estimate:',
-      pTryHireLeadStyle:{font:'600 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',width:'100%'},
+      pTryHireLeadStyle:{font:'600 12.5px/1.5 Archivo,sans-serif',color:'var(--k-fg-6a6d75)',width:'100%'},
       pRows:rows,
         // a ticket is a ticket, not a banner: at 1240px a single column
         // stretched every one of them to eleven hundred pixels wide
@@ -7345,26 +7443,26 @@ class Component extends DCLogic {
           gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,340px),1fr))',
           gap:12,alignItems:'start'},
       pNoteStyle:{gridColumn:'1/-1',display:rows.length?'block':'none',marginTop:8,
-        font:'500 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+        font:'500 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       // The last mile, offered where she is looking at it. She may have twelve
       // journeys and still want the door instead of the stop.
       pEndHireWrap:{gridColumn:'1/-1',display:(rows.length&&!hiring)?'flex':'none',gap:9,marginTop:14,padding:'13px 15px',
         borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
         flexWrap:'wrap',alignItems:'center'},
       pEndHireLead:'Want the last mile door to door? khaali does not run these, and the fare is an estimate.',
-      pEndHireLeadStyle:{width:'100%',font:'600 12.5px/1.55 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      pEndHireLeadStyle:{width:'100%',font:'600 12.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       pEndHire:[['car','Add a car'],['bike','Add a bike']].map(([k,l])=>({l,
         onClick:()=>{const set=new Set(this.planModes());set.add(k);
           this.setState({pModes:[...set]});setTimeout(()=>this.planSearch(),0);},
         style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
-          font:'700 13px/1 Manrope,sans-serif',border:'1px solid '+(k==='bike'?'#c9701a':'#0f8a7e'),
+          font:'700 13px/1 Archivo,sans-serif',border:'1px solid '+(k==='bike'?'#c9701a':'#0f8a7e'),
           background:k==='bike'?'#c9701a':'#0f8a7e',color:'#fff'}})),
       // ...and the way back out again
       pDropHireWrap:{gridColumn:'1/-1',display:hiring?'flex':'none',gap:9,marginTop:14,alignItems:'center',flexWrap:'wrap'},
       pDropHire:()=>{this.setState({pModes:[...NET]});setTimeout(()=>this.planSearch(),0);},
       pDropHireLabel:'Drop the '+(hiring==='both'?'car and bike':hiring)+' — public transport only',
       pDropHireStyle:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
-        font:'700 12.5px/1 Manrope,sans-serif',border:'1px solid var(--k-dedcd6)',
+        font:'700 12.5px/1 Archivo,sans-serif',border:'1px solid var(--k-dedcd6)',
         background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
       pNoteText:'Sorted by when you actually get there, not when the train leaves. Train times and fares are khaali\u2019s; the metro comes from BMRCL\u2019s published timetable.',
 
@@ -7381,7 +7479,37 @@ class Component extends DCLogic {
 
       pEmptyStyle:{display:(!S.pBusy&&!R)?'block':'none',marginTop:22,padding:'30px 24px',
         background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:12,
-        font:'600 13.5px/1.7 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+        font:'600 13.5px/1.7 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
+
+      // ---- plan it for me, or build my own ----
+      // The same switch the options drawer used to hide. Two ways of asking
+      // the same question, so they sit next to each other and only one shows.
+      pIsPlan:!S.pcOn, pIsBuild:!!S.pcOn,
+      pickPlan:()=>this.setState({pcOn:false}),
+      pickBuild:()=>{this.pcList();this.setState({pcOn:true,pcRes:null,pcErr:''});},
+      pPlanTab:{border:'none',flex:1,cursor:'pointer',borderRadius:15,padding:'13px 0',
+        font:'700 14.5px/1 Archivo,sans-serif',
+        background:S.pcOn?'transparent':'var(--k-14161a)',
+        color:S.pcOn?'var(--k-fg-6a6d75)':'#fff'},
+      pBuildTab:{border:'none',flex:1,cursor:'pointer',borderRadius:15,padding:'13px 0',
+        font:'700 14.5px/1 Archivo,sans-serif',
+        background:S.pcOn?'var(--k-14161a)':'transparent',
+        color:S.pcOn?'#fff':'var(--k-fg-6a6d75)'},
+
+      // ---- the shared clock, written out ----
+      pAxis:chains.length?[0,.25,.5,.75,1].map(f=>({label:this.toHHMM(Math.round(AXt0+AXwin*f))})):[],
+      pAxisStyle:{display:chains.length?'flex':'none',flexDirection:'column',gap:6,
+        marginTop:14,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+        borderRadius:14,padding:'12px 18px 10px'},
+      pAxisLead:'Shared time axis — every way drawn on the same clock',
+
+      // ---- what was asked, and what came back ----
+      pSummary:this.planOptsLine(),
+      pWays:chains.length?(chains.length+(chains.length===1?' way found':' ways found')):'',
+      pWaysStyle:{display:chains.length?'inline':'none',font:'600 13px/1.5 Archivo,sans-serif',
+        color:'var(--k-fg-8a8a84)'},
+      pHeadTag:(F&&T)?(({rail:'Railway',metro:'Metro',place:'Anywhere'})[F.k]+' to '
+        +({rail:'railway',metro:'metro',place:'anywhere'})[T.k]).toUpperCase():'',
     };
   }
 
