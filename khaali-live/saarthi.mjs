@@ -48,7 +48,8 @@ export function systemPrompt(today) {
     // ---- the one decision that matters ----
     'THE ONLY QUESTION YOU DECIDE: is this about TRAINS BETWEEN TWO CORRIDOR STATIONS, or is it a JOURNEY? Trains between two corridor stations — seats, fares, timings, availability — is the "search" action. Everything else that involves getting from one place to another is the "plan" action.',
     'TRAIN SEARCH: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day; include "around":"HH:MM" in 24-hour time ONLY when they name a time of day — morning/subah/belagge/kaalai means AM, evening/shaam/sanje/maalai/raat means PM, so "around 7:30 in the evening" becomes "around":"19:30"). NEVER ask which date before searching: with no date named, omit the date field and search anyway.',
-    'JOURNEY: {"say":"","action":{"type":"plan","from":"<their words for the origin>","to":"<their words for the destination>","after":"HH:MM","modes":["train","metro","bus"]}} — "after" ONLY if they named a time; "modes" ONLY if they restricted themselves, and include "car" or "bike" ONLY if they actually asked to hire one.',
+    'JOURNEY: {"say":"","action":{"type":"plan","from":"<their words for the origin>","to":"<their words for the destination>","after":"HH:MM","by":"HH:MM","day":"today"|"tomorrow"|"+N","modes":["train","metro","bus"]}} — "after" ONLY if they named a time to leave after; "by" ONLY if they named a time to arrive by ("before four", "I have to be there by 3:30"); "day" ONLY if they named a day; "modes" ONLY if they restricted themselves, and include "car" or "bike" ONLY if they actually asked to hire one.',
+    'A person often says both: "tomorrow at 12, I have to be there before 3:30" is after 12:00, by 15:30, day tomorrow. Put all three in. Dropping one of them plans a different journey from the one they asked for.',
 
     // ---- the failure this file exists to prevent ----
     'A PLACE YOU DO NOT RECOGNISE IS A PLAN, NEVER A REFUSAL. khaali knows 9,875 BMTC bus stops, every Purple Line metro station, and can find any address, landmark, office, hospital, temple, mall or neighbourhood in Bengaluru on the map. Kodigehalli Gate, Hebbal, Indiranagar, Koramangala, Electronic City, Manyata Tech Park, a friend’s house in Jayanagar — all of these are places khaali plans journeys to every day. You do NOT know which places are in the data and you must never guess that one is missing.',
@@ -94,6 +95,9 @@ export function shots(now = Date.now()) {
     // --- a landmark, with a time ---
     { role: 'user', content: 'mujhe kal subah 9 baje tak Manyata Tech Park pahunchna hai Whitefield se' },
     { role: 'assistant', content: J({ say: '', action: { type: 'plan', from: 'Whitefield', to: 'Manyata Tech Park', after: '07:00' } }) },
+
+    { role: 'user', content: 'I want to go from Bangarpet to Hebbal tomorrow at 12 pm. I have to be there before 3:30.' },
+    { role: 'assistant', content: J({ say: '', action: { type: 'plan', from: 'Bangarpet', to: 'Hebbal', after: '12:00', by: '15:30', day: 'tomorrow' } }) },
 
     { role: 'user', content: 'kal Whitefield se Mandya 3AC me kitna hoga?' },
     { role: 'assistant', content: J({ say: '', action: { type: 'search', from: 1, to: 11, cls: '3A', date: tom } }) },

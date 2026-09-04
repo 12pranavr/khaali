@@ -81,6 +81,18 @@ let JREC = [];
 // says yesterday
 const TODAY = () => { const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const DATE_FOR = n => { const d = new Date(Date.now() + (n || 0) * 86400000);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+/**
+ * What to call one way of going, so a link can name it and the page can find
+ * it again. The minute it leaves, then every vehicle it uses in order. Two
+ * different journeys cannot share that, and the same journey cannot lose it
+ * between the answer and the page.
+ */
+export const chainKey = c => !c ? '' : [String(c.dep)].concat(
+  (c.legs || []).filter(l => l.mode !== 'walk')
+    .map(l => l.mode + ':' + String(l.id || l.line || l.name || ''))).join('|');
 
 // Simulation clock: can be shifted to any time of day and run faster than real
 // time, so a demo can watch the whole day's traffic in minutes.
@@ -2330,12 +2342,33 @@ async function api(req, res, url) {
         const modes = (Array.isArray(act.modes) ? act.modes : [])
           .map(x => String(x).toLowerCase()).filter(x => journey.ALL_MODES.includes(x));
         const use = modes.length ? modes : [...journey.MODES];
-        const mt = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(act.after || ''));
-        const after = mt ? (+mt[1]) * 60 + (+mt[2]) : (simNow().getHours() * 60 + simNow().getMinutes());
-        const date = TODAY();
-        const r = journey.journeysAnywhere({ from: A.end, to: B.end, after, modes: use,
-          counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } } });
-        let en;
+        const clockOf = v => { const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(v || ''));
+          return m ? (+m[1]) * 60 + (+m[2]) : null; };
+        // "tomorrow" is a day, not a turn of phrase: it changes which trains
+        // run, which berths are free, and what the link has to say.
+        const dayIdx = (() => { const d = String(act.day || '').trim().toLowerCase();
+          if (!d || d === 'today') return 0;
+          if (d === 'tomorrow') return 1;
+          const n = parseInt(d.replace(/^\+/, ''), 10);
+          return Number.isFinite(n) && n >= 0 && n <= 60 ? n : 0; })();
+        const asked = clockOf(act.after);
+        const by = clockOf(act.by);
+        // a day that has not started yet starts at midnight, not at the hour
+        // it happens to be now
+        const after = asked != null ? asked
+          : dayIdx > 0 ? 0 : (simNow().getHours() * 60 + simNow().getMinutes());
+        const planFor = (d, at) => journey.journeysAnywhere({ from: A.end, to: B.end, after: at, by, modes: use,
+          counts: (no, f, t) => { try { return store.countsFor(String(no), DATE_FOR(d), 'SL', f, t).free; } catch (e) { return null; } } });
+        let day = dayIdx, from = after, r = planFor(day, from), rolled = false;
+        // Asked at eleven at night with no day named, "nothing runs between now
+        // and midnight" is true and useless. Nothing is missing from khaali's
+        // map; the day is simply over. Answer with tomorrow and say so.
+        if ((!r.ok || !r.chains.length) && !dayIdx && asked == null) {
+          const t = planFor(1, 0);
+          if (t.ok && t.chains.length) { r = t; day = 1; from = 0; rolled = true; }
+        }
+        const date = DATE_FOR(day);
+        let en, pick = '';
         if (!r.ok || !r.chains.length) {
           en = 'I could not find a way from ' + A.name + ' to ' + B.name + ' with what khaali knows'
             + (modes.length ? ' using only ' + use.join(' and ') : '') + '.';
@@ -2345,11 +2378,13 @@ async function api(req, res, url) {
             const k = store.countsFor(String(no), date, 'SL', fi, ti);
             return { free: k.free, total: k.free + k.part + k.taken + k.locked };
           } });
-          const a = allocate.allocate(r.chains, { after });
-          const c = r.chains[a.recommended != null ? a.recommended : 0];
+          const a = allocate.allocate(r.chains, { after: from, by });
+          const c = a.chains[a.recommended != null ? a.recommended : 0];
+          pick = chainKey(c);
           const legs = c.legs.filter(l => l.mode !== 'walk')
             .map(l => l.mode === 'metro' ? (l.line || 'the metro') : (l.name || l.mode));
-          en = 'From ' + A.name + ' to ' + B.name + ', leave at ' + c.depText + ' and you are there by '
+          const when = rolled ? 'Nothing more leaves tonight. Tomorrow, from ' : 'From ';
+          en = when + A.name + ' to ' + B.name + ', leave at ' + c.depText + ' and you are there by '
             + c.arrText + '. That is ' + legs.join(', then ') + ', about ₹' + c.fare + '. '
             + allocate.sentence(a.reason);
         }
@@ -2359,7 +2394,11 @@ async function api(req, res, url) {
           ? (A.end.lat.toFixed(5) + ',' + A.end.lng.toFixed(5)) : A.end.id,
           toKind: B.end.kind, toId: B.end.kind === 'place'
             ? (B.end.lat.toFixed(5) + ',' + B.end.lng.toFixed(5)) : B.end.id,
-          fromName: A.name, toName: B.name, after: String(after), modes: use.join(',') });
+          fromName: A.name, toName: B.name, after: String(from) });
+        if (by != null) q2.set('by', String(by));
+        if (day) q2.set('day', String(day));
+        if (modes.length) q2.set('modes', use.join(','));   // only what she asked to be held to
+        if (pick) q2.set('pick', pick);
         return send(res, 200, { say: sayP, lang: sl ? sl[1] : null, link: '/plan?' + q2.toString() });
       }
 

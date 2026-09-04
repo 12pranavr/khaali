@@ -1034,6 +1034,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <span style="font:500 13px/1.3 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ r.modeLabel }}</span>
           <span style="font:700 16px/1.3 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-14161a)">{{ r.via }}</span>
           <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <span style="{{ r.fromSaarthiStyle }}">SAARTHI SHOWED YOU THIS</span>
             <span style="{{ r.recStyle }}">RECOMMENDED</span>
             <span style="{{ r.seatTint }}">{{ r.seatWord }}</span>
           </span>
@@ -4082,6 +4083,26 @@ class Component extends DCLogic {
 
   urlFor(){const S=this.state;
     let u=this.ROUTES[S.page]||'/';
+    // The planner's address is its question. Without this the query khaali
+    // was just handed is wiped on the next render, so reloading a link from
+    // Saarthi - or sharing it, or pressing back onto it - lands on an empty
+    // planner and the answer she was looking at is gone.
+    if(S.page==='plan'){
+      const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
+      const T=this.planPlace(S.pToK||'metro',S.pToId||'KGWA');
+      if(!F||!T||!S.pRes)return u;
+      const p=new URLSearchParams({fromKind:F.k,fromId:F.id,toKind:T.k,toId:T.id});
+      if(F.k==='place')p.set('fromName',F.n);
+      if(T.k==='place')p.set('toName',T.n);
+      const af=this.planTimeVal();if(af!=null)p.set('after',String(af));
+      const by=this.planByMin();if(by!=null)p.set('by',String(by));
+      if(S.dayIdx)p.set('day',String(S.dayIdx));
+      if(S.pProfile&&S.pProfile!=='balanced')p.set('profile',S.pProfile);
+      if(S.pModes&&S.pModes.length)p.set('modes',S.pModes.join(','));
+      const ch=(S.pRes.chains||[])[S.pSelIdx!=null?S.pSelIdx:-1];
+      if(ch)p.set('pick',this.planChainKey(ch));
+      return u+'?'+p.toString();
+    }
     if(this.JOURNEY_PAGES.indexOf(S.page)<0)return u;
     const q=['from='+S.from,'to='+S.to,'cls='+S.cls];
     if(S.dayIdx)q.push('day='+S.dayIdx);
@@ -4120,10 +4141,28 @@ class Component extends DCLogic {
         const m=String(id).match(/^(-?[\d.]+),(-?[\d.]+)$/);if(!m)return;
         this.planAddPlace({id,name:nm||('A point on the map'),lat:parseFloat(m[1]),lng:parseFloat(m[2]),near:null});
       });
-      const af=num('after');if(af!=null&&af>=0&&af<1440){patch.pTime=this.toHHMM(af);patch.pAfterCustom=true;}
+      // pTime and pBy hold a 24-hour clock, because that is what a time input
+      // holds and what planMinOf() will accept. toHHMM() writes "12:05 PM",
+      // which planMinOf() rejects - and rejects silently, back to midnight.
+      const hhmm24=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+      if(fk&&fi&&tk&&ti){
+        patch.pTime=null;patch.pAfterCustom=false;
+        patch.pBy=null;patch.pByCustom=false;
+        patch.pModes=null;patch.pProfile='balanced';patch.pStep=false;
+        patch.pMaxChanges=null;patch.pWant=null;patch.pLead=null;
+        if(!q.get('day'))patch.dayIdx=0;
+      }
+      const af=num('after');if(af!=null&&af>=0&&af<1440){patch.pTime=hhmm24(af);patch.pAfterCustom=true;}
+      // "I have to be there before half three" is half the question; it was
+      // being thrown away between the answer and the page
+      const bym=num('by');if(bym!=null&&bym>=0&&bym<2880){patch.pBy=hhmm24(bym%1440);patch.pByCustom=true;}
+      const pf=q.get('profile');
+      if(pf&&['balanced','fastest','cheapest','comfortable','network'].includes(pf))patch.pProfile=pf;
       const md=(q.get('modes')||'').split(',').map(x=>x.trim()).filter(Boolean);
       if(md.length)patch.pModes=md;
-      if(fk&&fi&&tk&&ti)patch.pAutoSearch=true;
+      // which of the ways she was shown. The planner opens on that one.
+      const pick=q.get('pick');if(pick)patch.pWant=String(pick).slice(0,200);
+      if(fk&&fi&&tk&&ti){patch.pAutoSearch=true;this._autoRan=false;}
     }
     // A confirm or ticket link has no hold or booking behind it on a cold load.
     patch.page=this.TRANSIENT[page]||page;
@@ -6317,6 +6356,13 @@ class Component extends DCLogic {
   /** "Leave after" and "Reach by" are one control with two meanings, and the
       meaning changes what the engine searches for - not what the list is
       filtered by afterwards. */
+  /** What to call one way of going. Must match chainKey() in server.mjs, or
+    * a link can name a journey this page will never find. */
+  planChainKey(c){
+    if(!c)return '';
+    return [String(c.dep)].concat((c.legs||[]).filter(l=>l.mode!=='walk')
+      .map(l=>l.mode+':'+String(l.id||l.line||l.name||''))).join('|');
+  }
   planMinOf(v){if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}return null;}
   planTimeVal(){return this.planMinOf(this.state.pTime);}
   planByMin(){return this.planMinOf(this.state.pBy);}
@@ -6552,7 +6598,7 @@ class Component extends DCLogic {
     const after=this.planAfterMin();
     const by=this.planByMin();
     // a new question: the old answer's route comes off the map with it
-    this.setState({pBusy:true,pRes:null,pOpenIdx:null,pSelIdx:null,pMapChain:null,pBookChain:null,pPick:null});
+    this.setState({pBusy:true,pRes:null,pOpenIdx:null,pSelIdx:null,pMapChain:null,pBookChain:null,pPick:null,pLead:null});
     // the whole journey, from the one route that knows about all three modes
     try{
       const qs='fromKind='+F.k+'&fromId='+encodeURIComponent(F.id)+(F.k==='place'?'&fromName='+encodeURIComponent(F.n):'')
@@ -6577,11 +6623,20 @@ class Component extends DCLogic {
         const res={kind:'chains',from:F,to:T,chains:j.chains,
           recommended:j.recommended,reason:j.reason,explanation:j.explanation,
           err:j.chains.length?null:this.planEmptyText(after,by)};
-        this.setState({pBusy:false,pRes:res,pAskAns:'',pAskTxt:''});
+        this.setState({pBusy:false,pRes:res,pAskAns:'',pAskTxt:'',pWant:null});
         // the answer is drawn before she asks for it: the recommended way is on
         // the map the moment the results land
-        const ri=(j.recommended!=null)?j.recommended:0;
-        if(j.chains[ri])this.planSelect(j.chains[ri],ri);
+        //
+        // ...unless she arrived from Saarthi, who already named one. Then that
+        // is the way to open, even if the ranking here would have put another
+        // first - being shown one journey and handed a different one is worse
+        // than being handed a slower one.
+        let ri=(j.recommended!=null)?j.recommended:0, lead=null;
+        if(S.pWant){
+          const want=j.chains.findIndex(c=>this.planChainKey(c)===S.pWant);
+          if(want>=0){ri=want;lead=want;}
+        }
+        if(j.chains[ri]){this.planSelect(j.chains[ri],ri);this.setState({pOpenIdx:ri,pLead:lead});}
         if(j.recommended!=null)this.planPhrase(res);
         return;
       }
@@ -7134,7 +7189,12 @@ class Component extends DCLogic {
       const times=ride.length?[ride[0].dep||c.depText].concat(ride.map(l=>l.arr||c.arrText)):[c.depText,c.arrText];
       const nSt=Math.min(stops.length,4);
       return {
-        isRec,
+        isRec, isLead:S.pLead===ci,
+        // she asked Saarthi, Saarthi named this one, and this is the one she
+        // is looking at - said out loud so it is not a silent reordering
+        fromSaarthiStyle:{display:S.pLead===ci?'inline-block':'none',
+          font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
+          background:'#E9EEF6',color:'#1B3A6B',padding:'6px 10px',borderRadius:6},
         // ---- where this way sits on the shared clock ----
         trackLeft:((c.dep-AXt0)/AXwin*100).toFixed(2)+'%',
         trackWidth:(Math.max(c.totalMin,1)/AXwin*100).toFixed(2)+'%',
@@ -7439,7 +7499,8 @@ class Component extends DCLogic {
       };
     });
 
-    rows.sort((a,b)=>(b.isRec?1:0)-(a.isRec?1:0));
+    // the one Saarthi named leads, then the allocator's own choice, then the rest
+    rows.sort((a,b)=>((b.isLead?2:0)+(b.isRec?1:0))-((a.isLead?2:0)+(a.isRec?1:0)));
 
     const mp=(R&&R.kind==='metro')?R.plan:null;
     return {
@@ -8810,7 +8871,7 @@ class Component extends DCLogic {
       if(S0.page==='plan'&&S0.pAutoSearch&&!this._autoRan){
         this._autoRan=true;this.setState({pAutoSearch:false});
         setTimeout(()=>this.planSearch(),120);}
-      if(S0.page!=='plan')this._autoRan=false;
+      if(S0.page!=='plan')this._autoRan=false;   // and a fresh link resets it too
       if(S0.page==='plan'&&S0.pMapChain&&this._pmapSig!==this.planMapSig(S0.pMapChain))
         this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
       // A route that is no longer the answer must come OFF the map. The box
