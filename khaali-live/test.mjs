@@ -18,6 +18,7 @@ import * as SIM from './sim.mjs';
 import * as JY from './journey.mjs';
 import * as DM from './demand.mjs';
 import * as DP from './dispatch.mjs';
+import * as CM from './commit.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
@@ -2243,8 +2244,51 @@ t('a window that has gone, or is too far off to act on, is not demand', () => {
   const recs = [dec('no-bus'), dec('no-bus'), dec('no-bus')];
   assert.strictEqual(DM.hotspots(recs, { nowMin: 8 * 60 + 20 }).length, 1, 'twenty minutes out');
   assert.strictEqual(DM.hotspots(recs, { nowMin: 6 * 60 }).length, 0, 'two and a half hours out');
-  assert.strictEqual(DM.prune(recs, 6 * 60).length, 0);
-  assert.strictEqual(DM.prune(recs, 8 * 60 + 20).length, 3);
+  // prune needs a day to know what is finished; a dateless record is the seed
+  const dated = [dec('no-bus', { date: '2026-09-05' }), dec('no-bus', { date: '2026-09-05' })];
+  assert.strictEqual(DM.prune(dated, 6 * 60, '2026-09-05').length, 0, 'hours past its half hour');
+  assert.strictEqual(DM.prune(dated, 8 * 60 + 20, '2026-09-05').length, 2, 'twenty minutes out');
+});
+
+t('pruning keeps the seed and keeps a journey booked for a later day', () => {
+  // Both of these were bugs the first time the sweep called prune(). The seed
+  // is a typical day, not a dated one - pruning it at nine empties the
+  // afternoon and nothing reloads the file until a restart. And a booking for
+  // next Tuesday is early, not old.
+  const seed = dec('no-bus', { seed: true });
+  const soon = dec('no-bus', { date: '2026-09-05' });
+  const later = dec('no-bus', { date: '2026-09-12' });
+  const gone = dec('no-bus', { date: '2026-09-01' });
+  const all = [seed, soon, later, gone];
+  const kept = DM.prune(all, 6 * 60, '2026-09-05');   // hours before their window
+  assert.ok(kept.includes(seed), 'the seed is a typical day and is always kept');
+  assert.ok(kept.includes(later), 'a morning that has not happened is not old');
+  assert.ok(!kept.includes(gone), 'a morning that has been and gone is');
+  assert.ok(!kept.includes(soon), 'and today\'s, once its half hour is far behind');
+});
+
+t('a journey booked for next week is not somebody standing there this morning', () => {
+  const here = [dec('no-bus', { date: '2026-09-05' }), dec('no-bus', { date: '2026-09-05' }),
+                dec('no-bus', { date: '2026-09-05' })];
+  const next = [dec('no-bus', { date: '2026-09-12' }), dec('no-bus', { date: '2026-09-12' }),
+                dec('no-bus', { date: '2026-09-12' })];
+  const at = { nowMin: 8 * 60 + 20, today: '2026-09-05' };
+  assert.strictEqual(DM.hotspots(here.concat(next), at)[0].ceiling, 3, 'only today counts');
+  assert.strictEqual(DM.hotspots(next, at).length, 0);
+  // and a dateless record - the seed - counts on whatever day it is asked
+  assert.strictEqual(DM.hotspots([dec('no-bus'), dec('no-bus'), dec('no-bus')], at)[0].ceiling, 3);
+});
+
+t('the two HIGH/MEDIUM/LOW bands no longer share a name', () => {
+  // One bands how sure khaali is; the other bands how many people there are.
+  // Under one name, the first page to show both would have put HIGH beside
+  // HIGH meaning two different things.
+  const h = DM.hotspots([dec('no-bus'), dec('no-bus'), dec('no-bus')], { nowMin: 8 * 60 + 20 })[0];
+  assert.strictEqual(h.word, undefined, 'the count band is not called word');
+  assert.ok(['HIGH', 'MEDIUM', 'LOW'].includes(h.size));
+  const p = CAP.pressure({ legs: [{ mode: 'train', min: 60, cap: { occupancy: 0.5, quality: 'exact' } }] });
+  assert.strictEqual(p.word, undefined, 'nor is the confidence band');
+  assert.ok(['HIGH', 'MEDIUM', 'LOW'].includes(p.certainty));
 });
 
 t('a seeded row says it is seeded, all the way to the page', () => {
@@ -2331,6 +2375,137 @@ t('what a driver is shown carries no phone number and admits what it is', () => 
   assert.strictEqual(DP.publicOf(o, { forDriver: 'driver-aaa' }).mine, true);
 });
 
+console.log('\nthe other side: drivers who say they will be somewhere');
+
+// A commitment is a driver's statement about a place and a half hour. What is
+// pinned here is mostly what it is NOT: not a booking, not a promise anybody
+// can hold them to, and not a position khaali keeps.
+
+const SPOT = { lat: 12.9698, lng: 77.7500 };            // White Field Bus Station
+const NEARBY = { lat: 12.9701234, lng: 77.7498765 };    // a few metres off it
+const AWAY = { lat: 13.05, lng: 77.62 };                // the far side of the city
+
+const said = (extra) => CM.declare({ id: 'c' + (said.n = (said.n || 0) + 1),
+  driver: 'd1', at: 'Whitefield', lat: AWAY.lat, lng: AWAY.lng, window: 510,
+  hotLat: SPOT.lat, hotLng: SPOT.lng, ...(extra || {}) }).record;
+
+t('a driver says they will be somewhere, and it is not a booking', () => {
+  const c = said({ share: true });
+  assert.strictEqual(c.outcome, null);
+  assert.strictEqual(c.window, 510);
+  assert.strictEqual(c.band, 2, 'the morning band, not a minute');
+  assert.ok(c.km0 > 10, 'how far off they were when they said it');
+  assert.strictEqual(c.fix, null, 'saying yes is not sharing where you are');
+  assert.strictEqual(CM.declare({ id: 'x', driver: 'd', at: 'A', window: 9999 }).reason, 'bad-window');
+  assert.strictEqual(CM.declare({ id: 'x', driver: 'd', at: 'A', window: 510, ahead: 200 }).reason, 'too-far-ahead');
+  assert.strictEqual(CM.AHEAD_MAX, DM.KEEP_MIN, 'no promising into a window with no demand published');
+});
+
+t('a commitment is still on during the half hour it was for', () => {
+  const c = said();
+  assert.strictEqual(CM.over(c, 8 * 60), false, 'half an hour before');
+  assert.strictEqual(CM.over(c, 8 * 60 + 40), false, 'ten minutes INTO it');
+  assert.strictEqual(CM.over(c, 8 * 60 + 55), false, 'and at the end of it');
+  assert.strictEqual(CM.over(c, 11 * 60), true, 'two hours later it is over');
+});
+
+t('a driver who shared nothing did not miss - khaali could not see', () => {
+  // The subtlest dishonesty available here: counting a privacy choice as a
+  // failure. It would make the number worse for exactly the drivers who
+  // exercised the option, and make the option look like it costs something.
+  const quiet = said({ share: false });
+  const shared = said({ share: true });
+  const [a] = CM.sweep([quiet], 11 * 60, 9000);
+  const [b] = CM.sweep([shared], 11 * 60, 9000);
+  assert.strictEqual(a.outcome, 'lapsed', 'khaali cannot say');
+  assert.strictEqual(b.outcome, 'missed', 'they let khaali look, and were not there');
+});
+
+t('a driver who took a ride from there kept their word, whatever they shared', () => {
+  const quiet = said({ share: false });
+  const [r] = CM.sweep([quiet], 11 * 60, 9000, () => true);
+  assert.strictEqual(r.outcome, 'kept', 'serving a ride is the strongest evidence there is');
+});
+
+t('a position is rounded on the server, and only the latest one is kept', () => {
+  const c = said({ share: true });
+  CM.here(c, NEARBY, 1000);
+  assert.strictEqual(String(c.fix.lat).split('.')[1].length <= CM.FIX_DP, true, c.fix.lat);
+  assert.ok(!Array.isArray(c.fix), 'there is no trail, and there is not going to be one');
+  const first = c.fix;
+  CM.here(c, { lat: 12.98, lng: 77.74 }, 2000);
+  assert.notStrictEqual(c.fix, first, 'overwritten, not appended to');
+  assert.strictEqual(CM.here(said({ share: false }), NEARBY, 1000).reason, 'no-consent');
+});
+
+t('a position does not outlive the window it was for', () => {
+  const c = said({ share: true });
+  CM.here(c, NEARBY, 1000);
+  assert.ok(c.fix);
+  assert.strictEqual(CM.close(c, 'kept', 2000).ok, true);
+  assert.strictEqual(c.fix, null, 'close() discards it in its own body, so every path does');
+  const d = said({ share: true });
+  CM.here(d, NEARBY, 1000);
+  CM.withdraw(d, 2000);
+  assert.strictEqual(d.fix, null, 'and so does withdrawing');
+});
+
+t('a stale position cannot hold a rung up', () => {
+  const c = said({ share: true });
+  CM.here(c, NEARBY, 0);
+  assert.strictEqual(CM.rungOf(c, { now: 0 }).rung, 'available');
+  assert.strictEqual(CM.rungOf(c, { now: CM.FIX_STALE_MS + 1 }).rung, 'said-yes',
+    'expiry comes before deletion, deliberately');
+});
+
+t('available is where the ride state says, not where the driver is', () => {
+  // A driver parked outside the station with a passenger already in the car is
+  // near it and is NOT available, and reading that off a position would have
+  // got it exactly backwards.
+  const c = said({ share: true });
+  CM.here(c, NEARBY, 0);
+  assert.strictEqual(CM.rungOf(c, { now: 0, holding: false }).rung, 'available');
+  assert.strictEqual(CM.rungOf(c, { now: 0, holding: true }).rung, 'nearby');
+  assert.strictEqual(CM.rungOf(c, { now: 0, holding: true }).rung !== 'available', true);
+  // and two rungs never touch a position at all
+  assert.strictEqual(CM.rungOf(said(), { now: 0 }).rung, 'said-yes');
+  assert.strictEqual(CM.rungOf(said(), { now: 0, served: true }).rung, 'served');
+});
+
+t('moving toward is two numbers, never a path', () => {
+  const c = said({ share: true });
+  assert.ok(c.km0 > 10);
+  CM.here(c, { lat: 13.0, lng: 77.70 }, 0);            // closer, but not near
+  assert.strictEqual(CM.rungOf(c, { now: 0 }).rung, 'moving-toward');
+  assert.ok(CM.MOVE_KM >= 0.25, 'the threshold must clear the rounding, or it fires on noise');
+  const still = said({ share: true });
+  CM.here(still, AWAY, 0);
+  assert.strictEqual(CM.rungOf(still, { now: 0 }).rung, 'said-yes', 'not moving is not progress');
+});
+
+t('a commitment that has ended cannot be re-ended', () => {
+  const c = said();
+  assert.ok(CM.close(c, 'kept', 1000).ok);
+  assert.strictEqual(CM.close(c, 'missed', 2000).reason, 'kept', 'the first answer stands');
+  assert.strictEqual(CM.withdraw(c, 2000).reason, 'kept');
+  assert.strictEqual(CM.close(said(), 'flying', 1000).reason, 'bad-outcome');
+  assert.strictEqual(CM.sweep([c], 11 * 60, 3000).length, 0, 'and the sweep leaves it alone');
+});
+
+t('what khaali keeps of a finished commitment is not a record of anybody', () => {
+  const c = said({ share: true });
+  CM.here(c, NEARBY, 1000);
+  CM.close(c, 'kept', 2000);
+  const f = CM.forget(c);
+  assert.deepStrictEqual(Object.keys(f).sort(), ['at', 'band', 'closedAt', 'outcome', 'seed']);
+  assert.ok(!('driver' in f) && !('fix' in f) && !('window' in f),
+    'no driver, no position, and no minute finer than a three-hour band');
+  const v = CM.publicOf(c, { forDriver: 'd2' });
+  assert.ok(!('fix' in v) && !('driver' in v) && !('km0' in v), 'and none of it reaches another driver');
+  assert.strictEqual(v.mine, false);
+  assert.strictEqual(CM.publicOf(c, { forDriver: 'd1' }).mine, true);
+});
+
 console.log('\nallocation: which way, and why - on a network that does not exist');
 
 // A -> B -> C -> D. A direct train A->D, a bus A->B, a train B->D. Every
@@ -2409,7 +2584,7 @@ t('unknown is not zero, and the confidence says so', () => {
   const p = a.chains[0].alloc.pressure;
   assert.strictEqual(a.chains[0].legs[0].cap.occupancy, null);
   assert.ok(p.value > 0.2, 'an unknown leg is scored as half full, not empty: ' + p.value);
-  assert.strictEqual(p.word, 'LOW');
+  assert.strictEqual(p.certainty, 'LOW');
   assert.match(AL.sentence(a.reason), /unknown/);
 });
 

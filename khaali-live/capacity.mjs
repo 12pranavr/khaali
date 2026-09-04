@@ -129,8 +129,11 @@ export function pressure(chain) {
   const p = den ? num / den : 0.25;
   let c = n ? conf / n : 0.3;
   if (chain.legs.some(l => l.source === 'simulated')) c *= 0.85;
+  // `certainty`, not `word`. demand.mjs bands a COUNT into the same three
+  // strings, and a page that showed both would put HIGH next to HIGH meaning
+  // two different things - how sure khaali is, and how many people there are.
   return { value: Math.round(p * 1000) / 1000, confidence: Math.round(c * 100) / 100,
-    unknownLegs: unknown, word: c >= 0.8 ? 'HIGH' : c >= 0.55 ? 'MEDIUM' : 'LOW' };
+    unknownLegs: unknown, certainty: c >= 0.8 ? 'HIGH' : c >= 0.55 ? 'MEDIUM' : 'LOW' };
 }
 
 /**

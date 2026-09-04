@@ -40,6 +40,7 @@ import * as sos from './sos.mjs';
 import * as journey from './journey.mjs';
 import * as demand from './demand.mjs';
 import * as dispatch from './dispatch.mjs';
+import * as commit from './commit.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
@@ -249,6 +250,14 @@ setInterval(matchOrders, 20000).unref();
 const DEMAND = [];
 const OFFERS = new Map();
 
+// The supply side. COMMITS holds windows that have not ended; HISTORY holds
+// what became of the ones that have, in commit.forget() shape - an anonymous
+// outcome at a place in a three-hour band, with no driver and no position in
+// it. That split is the retention policy, and it is in the shape of the data
+// rather than in a promise about it.
+const COMMITS = new Map();
+const HISTORY = [];
+
 // Six places seeded so a demo map is not blank. They are ordinary records
 // through the ordinary pipeline, carrying seed:true all the way to the page,
 // and deleting the file empties the map - which is the correct behaviour and
@@ -285,6 +294,12 @@ try {
     if (r.t === 'ride' && r.ride && r.ride.id) RIDES.set(r.ride.id, { ...r.ride });
     if (r.t === 'ridegone') { const x = RIDES.get(r.id); if (x) hire.cancelRide(x, r.at); }
     if (r.t === 'lastmile' && r.rec) DEMAND.push({ ...r.rec });
+    // The `fix: null` is not tidiness. It is the line that makes "the position
+    // is discarded when the window ends" true across a restart: a commitment
+    // comes back, and where the driver was does not.
+    if (r.t === 'commit' && r.c && r.c.id) COMMITS.set(r.c.id, { ...r.c, fix: null, kmNow: null });
+    if (r.t === 'commitgone') { const c = COMMITS.get(r.id); if (c) commit.withdraw(c, r.at); }
+    if (r.t === 'commitclose') { const c = COMMITS.get(r.id); if (c) commit.close(c, r.outcome, r.at); }
     if (r.t === 'offer' && r.offer && r.offer.id) OFFERS.set(r.offer.id, { ...r.offer });
     if (r.t === 'offeraccept') { const o = OFFERS.get(r.id); if (o) dispatch.accept(o, r.driver, r.at); }
     if (r.t === 'offerstage') {
@@ -294,6 +309,13 @@ try {
     }
     if (r.t === 'offergone') { const o = OFFERS.get(r.id); if (o) dispatch.cancel(o, r.why || 'cancelled', r.at); }
     if (r.t === 'offerexpire') { const o = OFFERS.get(r.id); if (o) { o.status = 'expired'; o.endedWhy = 'nobody took it'; } }
+  }
+  // A commitment that has closed is no longer a commitment; it is one row of
+  // khaali's own record of how often a yes turned out to be true.
+  for (const [id, c] of [...COMMITS]) {
+    if (!c.outcome) continue;
+    HISTORY.push(commit.forget(c));
+    COMMITS.delete(id);
   }
   for (const o of ORDERS.values()) {
     const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
@@ -870,7 +892,50 @@ setInterval(() => {
     journal.append({ t: 'offerexpire', id: o.id, at: now });
     sseSend({ type: 'offer', id: o.id, who: o.who, status: 'expired' });
   }
+  // And a declaration for a half hour that has gone is history, not demand.
+  // hotspots() already filters by window when it reads, so this changes no
+  // answer - but DEMAND was growing for the life of the process on top of the
+  // seed and every lastmile line ever journalled, and an array nobody empties
+  // is a leak whether or not it is currently wrong. prune() keeps the seed and
+  // keeps journeys booked for a later day; only what is finished goes.
+  const then = simNow();
+  const kept = demand.prune(DEMAND, then.getHours() * 60 + then.getMinutes(), TODAY());
+  if (kept.length !== DEMAND.length) DEMAND.splice(0, DEMAND.length, ...kept);
+
+  // And every half hour a driver promised has now been and gone. What became
+  // of it is decided by commit.sweep and written down here - including the
+  // position being dropped, which close() does in its own body so that this
+  // loop cannot forget to.
+  const nowMin = then.getHours() * 60 + then.getMinutes();
+  for (const done of commit.sweep([...COMMITS.values()], nowMin, now, servedFrom)) {
+    const c = COMMITS.get(done.id);
+    if (!commit.close(c, done.outcome, now).ok) continue;
+    journal.append({ t: 'commitclose', id: c.id, outcome: c.outcome, at: now });
+    HISTORY.push(commit.forget(c));
+    COMMITS.delete(c.id);
+  }
 }, 30000);
+
+/** Did this driver actually take a ride from that place in that half hour?
+    The strongest evidence a commitment was kept, and it needs no position. */
+function servedFrom(c) {
+  for (const o of OFFERS.values()) {
+    if (o.driver !== c.driver || o.status !== 'done') continue;
+    if (o.from !== c.at) continue;
+    if (o.acceptedAt == null) continue;
+    const m = new Date(o.acceptedAt);
+    if (demand.windowOf(m.getHours() * 60 + m.getMinutes()) === c.window) return true;
+  }
+  return false;
+}
+
+/** Is this driver in the middle of a ride? khaali's own state, and exact -
+    which is why `available` is read from here and never from a position. */
+function holdingA(driver) {
+  for (const o of OFFERS.values())
+    if (o.driver === driver && (o.status === 'accepted' || o.status === 'arrived')) return true;
+  return false;
+}
 
 setInterval(() => {
   const line = `data: ${JSON.stringify({ type: 'tick', at: Date.now() })}\n\n`;
@@ -886,7 +951,8 @@ const PAID = new Set(['/api/tts', '/api/stt', '/api/chat', '/api/odds/explain', 
 // A separate bucket from the paid one: a driver polling every five seconds is
 // ordinary use here, and the paid routes' 'Saarthi needs a breather' is the
 // wrong sentence for a page with no Saarthi on it.
-const OPEN = [['/api/demand', 60], ['/api/offers', 120], ['/api/lastmile', 30]];
+const OPEN = [['/api/demand', 60], ['/api/offers', 120], ['/api/lastmile', 30],
+  ['/api/commit', 60], ['/api/supply', 60]];
 function overOpenLimit(req, res, p) {
   const hit = OPEN.find(([pre]) => p === pre || p.startsWith(pre + '/'));
   if (!hit) return false;
@@ -1833,7 +1899,7 @@ async function api(req, res, url) {
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const lat = parseFloat(q.get('lat')), lng = parseFloat(q.get('lng'));
     const near = (isFinite(lat) && isFinite(lng)) ? { lat, lng } : null;
-    const rows = demand.hotspots(DEMAND, { nowMin, near });
+    const rows = demand.hotspots(DEMAND, { nowMin, today: TODAY(), near });
     return send(res, 200, {
       today: TODAY(), minute: nowMin, floor: demand.FLOOR,
       windowMin: demand.WINDOW_MIN, hotspots: rows,
@@ -1845,6 +1911,105 @@ async function api(req, res, url) {
         : 'Nobody has booked a journey that ends off the network in the next hour and a half.',
       simulated: true,
     });
+  }
+
+  // ------------------------------------------------ the other side ------
+  //
+  // A driver says they expect to be around a place in a half hour. This is not
+  // a booking and it binds nobody: it never reaches dispatch.accept, it never
+  // blocks a ride, and a driver who said yes to Whitefield may take a ride in
+  // Hebbal without khaali noticing or minding.
+  if (p === '/api/commit' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const driver = String(b.driver || '').slice(0, 40);
+    if (!driver) return send(res, 400, { ok: false, error: 'no driver id' });
+    const at = String(b.at || '');
+    const window = demand.windowOf(+b.window);
+    const now = simNow(), nowMin = now.getHours() * 60 + now.getMinutes();
+    const ahead = ((window - demand.windowOf(nowMin)) % 1440 + 1440) % 1440;
+    // One yes per driver per place per half hour. A second is not more supply.
+    for (const c of COMMITS.values())
+      if (c.driver === driver && c.at === at && c.window === window && !c.outcome)
+        return send(res, 409, { ok: false, reason: 'already-said',
+          commit: commit.publicOf(c, { forDriver: driver }) });
+    // the place is one khaali is already publishing demand for, not a string
+    const spot = demand.hotspots(DEMAND, { nowMin, today: TODAY() })
+      .find(h => h.at === at && h.window === window);
+    if (!spot) return send(res, 404, { ok: false, reason: 'no-such-window',
+      error: 'khaali is not showing demand for that place and half hour.' });
+    const d = commit.declare({
+      id: crypto.randomBytes(8).toString('hex'), driver, at, window, ahead,
+      lat: b.lat, lng: b.lng, hotLat: spot.lat, hotLng: spot.lng,
+      share: !!b.share, date: TODAY(),
+    }, now.getTime());
+    if (!d.ok) return send(res, 400, { ok: false, reason: d.reason });
+    COMMITS.set(d.record.id, d.record);
+    journal.append({ t: 'commit', c: d.record });
+    return send(res, 200, { ok: true, commit: commit.publicOf(d.record, { forDriver: driver }) });
+  }
+
+  const mCommit = p.match(/^\/api\/commit\/([a-f0-9]+)(\/here)?$/);
+  if (mCommit) {
+    const c = COMMITS.get(mCommit[1]);
+    if (!c) return send(res, 404, { ok: false, error: 'no such commitment' });
+    let b = {}; if (req.method === 'POST') { try { b = await readBody(req); } catch { b = {}; } }
+    const driver = String((b.driver || q.get('driver') || '')).slice(0, 40);
+    if (c.driver !== driver) return send(res, 403, { ok: false, reason: 'not-yours' });
+    const now = simNow().getTime();
+    // A rounded position, while the window is on. Rounded HERE, not wherever
+    // the phone felt like rounding it - the same posture /api/lastmile takes.
+    //
+    // Nothing about this is journalled, and that is deliberate. The journal is
+    // append-only and replayed at boot, on a disk khaali does not control, so a
+    // position written there would outlive the window it was for, survive every
+    // restart, and make "deleted when the half hour ends" false in exactly the
+    // place nobody looks. sos.mjs DOES keep a trail - 180 positions - because
+    // an officer looking for a missing person needs a path. A driver saying
+    // they will be near a bus stand does not.
+    if (mCommit[2] && req.method === 'POST') {
+      const r = commit.here(c, { lat: b.lat, lng: b.lng }, now);
+      if (!r.ok) return send(res, 409, { ok: false, reason: r.reason });
+      const rung = commit.rungOf(c, { now, holding: holdingA(driver) });
+      return send(res, 200, { ok: true, km: r.km, rung: rung.rung, why: rung.why });
+    }
+    if (req.method === 'DELETE') {
+      if (commit.withdraw(c, now).ok) journal.append({ t: 'commitgone', id: c.id, at: now });
+      return send(res, 200, { ok: true, commit: commit.publicOf(c, { forDriver: driver }) });
+    }
+    // Changing their own answer about sharing. Turning it off discards the
+    // position immediately rather than waiting for the window to end - the
+    // driver has just said stop, and stop means now.
+    if (req.method === 'POST' && b.share !== undefined) {
+      c.share = !!b.share;
+      if (!c.share) { c.fix = null; c.kmNow = null; }
+    }
+    return send(res, 200, { ok: true, commit: commit.publicOf(c, { forDriver: driver }),
+      rung: commit.rungOf(c, { now, holding: holdingA(driver) }).rung });
+  }
+
+  // What the board looks like from the supply side: how many have said yes to
+  // each window, and how far along each of them is. Counts of DRIVERS, shown
+  // to drivers - nothing here is about a passenger.
+  if (p === '/api/supply') {
+    const driver = String(q.get('driver') || '').slice(0, 40) || null;
+    const now = simNow(), nowMin = now.getHours() * 60 + now.getMinutes(), t = now.getTime();
+    const live = [...COMMITS.values()].filter(x => !x.outcome && !commit.over(x, nowMin));
+    const by = new Map();
+    for (const c of live) {
+      const key = c.at + '|' + c.window;
+      let e = by.get(key);
+      if (!e) { e = { at: c.at, window: c.window, said: 0, mine: false,
+        rungs: { 'said-yes': 0, 'moving-toward': 0, nearby: 0, available: 0, served: 0 } }; by.set(key, e); }
+      e.said++;
+      e.rungs[commit.rungOf(c, { now: t, holding: holdingA(c.driver), served: servedFrom(c) }).rung]++;
+      if (driver && c.driver === driver) { e.mine = true; e.mineId = c.id; e.sharing = c.share; }
+    }
+    return send(res, 200, { today: TODAY(), minute: nowMin, windows: [...by.values()],
+      // khaali counted statements. Whether the people who made them are there
+      // is a different question, and reliability.mjs is where it gets answered.
+      quality: 'exact', simulated: true,
+      says: by.size ? 'Drivers who have said they expect to be at these places.'
+        : 'Nobody has said they will be anywhere in the next hour and a half.' });
   }
 
   // The board. Every live offer, to anybody looking - because until somebody

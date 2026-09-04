@@ -227,7 +227,7 @@ export function explain(rec, fastest, cheapest, ref = {}) {
     fastestSeat: (fastest.seat || {}).word || 'unknown',
     crowdingDifference: crowdDiff > 0.08 ? 'lower' : crowdDiff < -0.08 ? 'higher' : 'similar',
     networkPressure: pr.value, fastestPressure: pf.value,
-    capacityConfidence: pr.word,
+    capacityConfidence: pr.certainty,
     simulated: !!rec.simulated,
     modes: rec.modes,
     hiredKm: rideKm(rec),
@@ -308,7 +308,7 @@ export function trace(chains) {
   return chains.map(c => ({
     kind: c.kind, dep: c.depText, arr: c.arrText, min: c.totalMin, fare: c.fare,
     seat: (c.seat || {}).word, passengerCost: c.alloc.passengerCost, networkCost: c.alloc.networkCost,
-    total: c.alloc.total, pressure: c.alloc.pressure.value, confidence: c.alloc.pressure.word,
+    total: c.alloc.total, pressure: c.alloc.pressure.value, confidence: c.alloc.pressure.certainty,
     candidate: c.alloc.candidate, overLimit: c.alloc.overLimit, broken: c.alloc.broken,
     labels: c.alloc.labels, parts: c.alloc.passenger,
     legs: c.legs.filter(l => l.mode !== 'walk').map(l => ({ leg: l.name || l.line, occupancy: l.cap && l.cap.occupancy, quality: l.cap && l.cap.quality })),

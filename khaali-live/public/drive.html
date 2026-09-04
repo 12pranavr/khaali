@@ -53,6 +53,10 @@
   button.ok{background:#1f6f45}
   button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
   button:disabled{opacity:.45;cursor:default}
+  .ask{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 10px 21px}
+  .ask .said{font:600 11.5px/1.5 Manrope,sans-serif;color:#5bd48b;flex:1;min-width:140px}
+  .ask button{margin-top:0;width:auto;flex:1;min-width:180px}
+  .ask button.yes{background:#1c2333;color:#b9bfcc;border:1px solid #2a3040;text-align:left}
   .note{font:500 11.5px/1.7 Manrope,sans-serif;color:#7c828f;margin-top:16px}
   .note b{color:#b9bfcc;font-weight:700}
   @keyframes flash{0%{transform:scale(.98)}40%{transform:scale(1.02)}100%{transform:scale(1)}}
@@ -87,7 +91,12 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&
 const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const mins = (ms) => Math.max(0, Math.round(ms / 60000));
 
-let spots = [], offers = [], head = null, busy = false, saidAt = 0, here = null;
+let spots = [], offers = [], windows = [], head = null, busy = false, saidAt = 0, here = null;
+
+/* Whether this driver has agreed to khaali using a rounded position while a
+   window they said yes to is on. A separate answer from saying yes, kept on
+   this phone, and off unless they turned it on. */
+let sharing = (() => { try { return !!localStorage.getItem('khaali-drive-share'); } catch (e) { return false; } })();
 
 function setState(cls, word, sub, quiet) {
   if (!quiet) saidAt = Date.now();
@@ -166,17 +175,53 @@ function render() {
     card.appendChild($('<div class="says">' + esc(head ? head.says : 'Loading…') + '</div>'));
   }
   for (const s of spots) {
-    card.appendChild($('<div class="spot">' +
-      '<span class="dot" style="background:' + tone(s.word) + '"></span>' +
+    const sup = supplyFor(s);
+    const row = $('<div class="spot">' +
+      '<span class="dot" style="background:' + tone(s.size) + '"></span>' +
       '<div class="who"><div class="place">' + esc(s.at) +
         (s.seed ? '<span class="chip">demo</span>' : s.partSeed ? '<span class="chip">part demo</span>' : '') +
         '</div><div class="when">' + esc(s.windowText) +
-        (s.away != null ? ' &middot; ' + esc(s.away) + ' km away' : '') + '</div></div>' +
+        (s.away != null ? ' &middot; ' + esc(s.away) + ' km away' : '') +
+        (sup.said ? ' &middot; ' + sup.said + ' said yes' : '') + '</div></div>' +
       '<div class="num"><div class="big">' + (s.floor > 0 ? esc(s.floor) + '–' + esc(s.ceiling) : esc(s.ceiling)) +
         '</div><div class="of">' + (s.floor > 0 ? 'no bus at all' : 'a bus exists') + '</div></div>' +
-      '</div>'));
+      '</div>');
+    card.appendChild(row);
+
+    /* The question, asked where the number is. A driver should not have to go
+       looking for the place to answer it. */
+    const ask = $('<div class="ask"></div>');
+    if (sup.mine) {
+      ask.appendChild($('<span class="said">You said yes to this one' +
+        (sup.sharing ? ', and you are sharing roughly where you are' : '') + '.</span>'));
+      const no = $('<button class="ghost">Change my mind</button>');
+      no.onclick = () => unsay(sup.mineId);
+      ask.appendChild(no);
+    } else {
+      const yes = $('<button class="ghost yes">Will you be around ' + esc(s.at) + ', ' + esc(s.windowText) + '?</button>');
+      yes.disabled = busy;
+      yes.onclick = () => sayYes(s);
+      ask.appendChild(yes);
+    }
+    card.appendChild(ask);
   }
   db.appendChild(card);
+
+  /* Sharing a position is a SECOND question, asked once and separately, and it
+     costs nothing to refuse. That last clause is not a courtesy: a driver who
+     shares nothing is recorded as "khaali could not see", never as a miss, so
+     saying no genuinely does not count against anybody. */
+  const shareBox = $('<div class="card"><div class="lbl"><span>Roughly where you are</span></div></div>');
+  const on = myWindows().some(w => w.sharing);
+  shareBox.appendChild($('<div class="says">' +
+    'Only while a half hour you said yes to is on. khaali rounds it to about 100 metres, keeps only the ' +
+    'latest one, uses it to say whether you are near the place and to sort this list, and deletes it when ' +
+    'the window ends. It is never shown to a passenger, never written down, and saying no costs you ' +
+    'nothing &mdash; you still count as having said yes.</div>'));
+  const btn = $('<button class="ghost">' + (on ? 'Sharing &middot; tap to stop' : 'Share roughly where I am') + '</button>');
+  btn.onclick = () => setSharing(!on);      // read at tap time, not at render time
+  shareBox.appendChild(btn);
+  if (myWindows().length) db.appendChild(shareBox);
 
   document.getElementById('foot').innerHTML =
     '<b>What this page is.</b> A stand-in for the screen a driver&rsquo;s own app would show. ' +
@@ -187,10 +232,77 @@ function render() {
     '<b>What khaali does not know.</b> Whether any of them turn up. It has never measured that, so it does ' +
     'not say. Places with fewer than ' + (head ? head.floor : 3) + ' people booked are not shown at all &mdash; ' +
     'that is not a hotspot, it is those people.<br><br>' +
+    '<b>Saying yes.</b> It is a statement, not a booking. Nobody is holding you to it, khaali will not stop ' +
+    'you taking a ride somewhere else, and there is no score attached to your name &mdash; khaali counts how ' +
+    'often a yes turns out to be true by place and by time of day, never by person. You can take it back at ' +
+    'any point before the half hour ends.<br><br>' +
     '<b>What has not happened.</b> No driver has been dispatched to anybody. No fare has moved. khaali owns ' +
     'no vehicle, employs no driver, and has not checked that anyone reading this drives anything. Rows marked ' +
     'demo are seeded so the map is not blank; they are real questions asked of the real BMTC timetable, but ' +
     'nobody booked them.';
+}
+
+/* ---- the other side: saying you will be somewhere ---------------------- */
+
+const myWindows = () => windows.filter(w => w.mine);
+const supplyFor = (s) => windows.find(w => w.at === s.at && w.window === s.window)
+  || { said: 0, mine: false, rungs: {} };
+
+async function sayYes(spot) {
+  if (busy) return; busy = true; render();
+  try {
+    const r = await fetch('/api/commit', { method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ driver: ME, at: spot.at, window: spot.window,
+        share: sharing, lat: here ? here.lat : null, lng: here ? here.lng : null }) });
+    const j = await r.json();
+    busy = false; await pull();
+    if (!j.ok) return setState('bad', j.reason === 'already-said' ? 'You already said yes' : 'No',
+      j.error || 'khaali could not record that.');
+    setState('good', 'Noted',
+      'You said you expect to be around ' + esc(spot.at) + ', ' + esc(spot.windowText) +
+      '. Nobody is holding you to it &mdash; you can still take a ride anywhere.');
+  } catch (e) { busy = false; render(); setState('bad', 'No signal', 'Could not reach khaali.'); }
+}
+
+async function unsay(id) {
+  if (busy) return; busy = true; render();
+  try {
+    await fetch('/api/commit/' + encodeURIComponent(id) + '?driver=' + encodeURIComponent(ME),
+      { method: 'DELETE' });
+    busy = false; await pull();
+    setState('off', 'Taken back', 'khaali will not count you for that half hour.');
+  } catch (e) { busy = false; render(); }
+}
+
+async function setSharing(on) {
+  sharing = on;
+  try { localStorage.setItem('khaali-drive-share', on ? '1' : ''); } catch (e) {}
+  for (const w of myWindows()) {
+    try {
+      await fetch('/api/commit/' + encodeURIComponent(w.mineId), { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ driver: ME, share: on }) });
+    } catch (e) {}
+  }
+  if (on) await sendHere();
+  await pull();
+  setState(on ? 'good' : 'off', on ? 'Sharing' : 'Not sharing',
+    on ? 'Rounded to about 100 metres, only while a window you said yes to is on.'
+       : 'khaali has dropped it. You still count as having said yes.');
+}
+
+/** One rounded position, to each live commitment. Never a stream, never stored
+    on this phone, and nothing at all if the driver has not said yes to it. */
+async function sendHere() {
+  if (!sharing || !here || !myWindows().length) return;
+  for (const w of myWindows()) {
+    try {
+      await fetch('/api/commit/' + encodeURIComponent(w.mineId) + '/here', { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ driver: ME, lat: here.lat, lng: here.lng }) });
+    } catch (e) {}
+  }
 }
 
 async function act(id, what) {
@@ -227,25 +339,29 @@ async function pull() {
   if (busy) return;
   try {
     const near = here ? '?lat=' + here.lat + '&lng=' + here.lng : '';
-    const [d, o] = await Promise.all([
+    const [d, o, s] = await Promise.all([
       fetch('/api/demand' + near).then(r => r.json()),
       fetch('/api/offers?driver=' + encodeURIComponent(ME)).then(r => r.json()),
+      fetch('/api/supply?driver=' + encodeURIComponent(ME)).then(r => r.json()),
     ]);
-    head = d; spots = d.hotspots || []; offers = o.offers || [];
+    head = d; spots = d.hotspots || []; offers = o.offers || []; windows = s.windows || [];
     render();
   } catch (e) { /* a poll that fails leaves the last true answer on screen */ }
 }
 
-// Where the driver is, if they say so - it only sorts the list by distance and
-// is never sent anywhere else.
+// Where the driver is, if they say so. Used to sort the list by distance, and
+// - only if they turned sharing on, and only for a window they said yes to -
+// sent once per poll so khaali can say whether they are near the place. Four
+// decimals here; the server rounds it to three before it stores anything.
 try {
   navigator.geolocation && navigator.geolocation.getCurrentPosition(
-    p => { here = { lat: +p.coords.latitude.toFixed(4), lng: +p.coords.longitude.toFixed(4) }; pull(); },
+    p => { here = { lat: +p.coords.latitude.toFixed(4), lng: +p.coords.longitude.toFixed(4) };
+      pull().then(sendHere); },
     () => {}, { timeout: 6000, maximumAge: 300000 });
 } catch (e) { /* no location, and the list is still ordered by time */ }
 
 pull();
-setInterval(pull, 5000);
+setInterval(() => { pull().then(sendHere); }, 5000);
 </script>
 </body>
 </html>

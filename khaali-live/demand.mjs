@@ -104,11 +104,17 @@ const km = (a, b) => {
  * past are dropped - a driver cannot serve them - and windows further out than
  * KEEP_MIN are not shown either, because a driver cannot act on them yet and
  * a count that far ahead has had no chance to be wrong.
+ *
+ * `today` is the day being asked about, and it matters: a journey booked for
+ * next Tuesday is not somebody standing at Whitefield this morning. A record
+ * with no date is day-agnostic on purpose - that is what the seeds are, a
+ * typical day rather than a dated one - and it counts on every day.
  */
-export function hotspots(records, { nowMin = 0, near = null, floor = FLOOR, limit = 20 } = {}) {
+export function hotspots(records, { nowMin = 0, today = null, near = null, floor = FLOOR, limit = 20 } = {}) {
   const bucket = new Map();
   for (const r of records || []) {
     if (!r || !NEED.includes(r.need)) continue;
+    if (today && r.date && r.date !== today) continue;   // another day, not this one
     const ahead = ((r.window - windowOf(nowMin)) % 1440 + 1440) % 1440;
     if (ahead > KEEP_MIN) continue;                 // too far out to act on
     const key = r.at + '|' + r.window;
@@ -139,7 +145,10 @@ export function hotspots(records, { nowMin = 0, near = null, floor = FLOOR, limi
       // number. capacity.mjs's ladder, same words.
       quality: 'exact',
       turnout: 'unknown',
-      word: b.ceiling >= 20 ? 'HIGH' : b.ceiling >= 8 ? 'MEDIUM' : 'LOW',
+      // `size`, not `word`. capacity.pressure() bands how SURE khaali is into
+      // the same three strings; this bands HOW MANY PEOPLE. Two meanings under
+      // one name would have misled on the first page that showed both.
+      size: b.ceiling >= 20 ? 'HIGH' : b.ceiling >= 8 ? 'MEDIUM' : 'LOW',
       says: b.floor === b.ceiling
         ? (b.ceiling + ' booked, none of them with a bus to take')
         : (b.ceiling + ' booked, ' + b.floor + ' of them with no bus at all'),
@@ -152,9 +161,25 @@ export function hotspots(records, { nowMin = 0, near = null, floor = FLOOR, limi
   return out.slice(0, Math.max(1, limit));
 }
 
-/** Drop what is too old to matter, so the log a page reads stays small. */
-export function prune(records, nowMin = 0) {
+/**
+ * Drop what is over, so the log a page reads stays small.
+ *
+ * Two things are deliberately NOT dropped, and both were bugs the first time
+ * this was written. A record for a later date is not old, it is early - it
+ * belongs to a morning that has not happened. And a dateless record is the
+ * seed, a typical day rather than a dated one; pruning it at nine in the
+ * morning would empty the afternoon and never fill it again, because nothing
+ * reloads the file until a restart.
+ *
+ * So what goes is exactly what is finished: a dated record for a day gone by,
+ * or one for today whose half hour has passed.
+ */
+export function prune(records, nowMin = 0, today = null) {
   return (records || []).filter(r => {
+    if (!r) return false;
+    if (!r.date) return true;                       // the seed: a typical day, always kept
+    if (today && r.date > today) return true;       // early, not old
+    if (today && r.date < today) return false;      // a morning that has been and gone
     const ahead = ((r.window - windowOf(nowMin)) % 1440 + 1440) % 1440;
     return ahead <= KEEP_MIN;
   });
