@@ -1368,20 +1368,31 @@ async function api(req, res, url) {
     return send(res, 200, { plans: arrivals.map(a => journey.plan({ arriveAt: a, needs, from, to })) });
   }
 
-  // Issue a day pass. It is hers, it costs the metro fare, and it is scanned,
-  // not consumed.
+  // Issue a pass. A day pass is hers for the day, scanned and never consumed;
+  // a trip pass is this journey's bus and metro legs, priced here and spent
+  // when they have been ridden.
   if (p === '/api/pass' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);
     if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to hold a pass.' });
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
     const id = crypto.randomBytes(6).toString('hex');
-    const r = journey.newPass({ id, who, date, holder: b.holder ? String(b.holder).slice(0, 60) : null,
-      covers: Array.isArray(b.covers) ? b.covers : undefined }, simNow().getTime());
+    const holder = b.holder ? String(b.holder).slice(0, 60) : null;
+    let r, skipped = [];
+    if (String(b.kind || '') === 'trip') {
+      const priced = journey.priceTripLegs(b.legs);
+      if (!priced.ok) return send(res, 400, { ok: false, error: priced.error });
+      skipped = priced.skipped || [];
+      r = journey.newTripPass({ id, who, date, holder, legs: priced.legs }, simNow().getTime());
+    } else {
+      r = journey.newPass({ id, who, date, holder,
+        covers: Array.isArray(b.covers) ? b.covers : undefined }, simNow().getTime());
+    }
     if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
     PASSES.set(id, r.pass);
     journal.append({ t: 'pass', pass: r.pass });
     return send(res, 200, { ok: true, pass: journey.publicOf(r.pass),
+      skipped: skipped.length ? skipped : null,
       scanUrl: '/scan/' + id, qr: '/api/qr?d=' + encodeURIComponent(lanBase(req) + '/scan/' + id) });
   }
   if (p === '/api/pass') {

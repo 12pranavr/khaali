@@ -244,8 +244,79 @@ export function newPass({ id, who, date, holder, covers = PASS_MODES }, now = Da
   const modes = covers.filter(m => PASS_MODES.includes(m));
   if (!modes.length) return { ok: false, reason: 'no-modes' };
   return { ok: true, pass: {
-    id, who, date, holder: holder || null, covers: modes,
+    id, who, date, holder: holder || null, covers: modes, kind: 'day',
     fare: FARE.qr, status: 'valid', issuedAt: now, rides: [],
+  } };
+}
+
+/**
+ * What the bus and metro legs of a trip pass cost. The phone says which legs it
+ * is asking for; every fare comes from khaali's own tables and khaali's own
+ * coordinates, never from the caller - the same posture the berth hold takes.
+ * A leg khaali cannot find is refused, not estimated.
+ *
+ * A bus khaali knows is not BMTC is not refused either: it is left OFF the
+ * pass and reported, because a KSRTC seat is bought at the counter and no gate
+ * on that bus will ever scan this.
+ */
+export function priceTripLegs(legs) {
+  if (!Array.isArray(legs) || !legs.length) return { ok: false, error: 'A trip pass needs at least one bus or metro leg.' };
+  if (legs.length > 6) return { ok: false, error: 'That is more legs than one trip has.' };
+  const out = [], skipped = [];
+  for (const l of legs) {
+    const mode = l && l.mode;
+    const from = String((l && l.from) || '').slice(0, 80), to = String((l && l.to) || '').slice(0, 80);
+    if (mode === 'metro') {
+      const i = stopIdx(String((l && l.fromId) || '')), j = stopIdx(String((l && l.toId) || ''));
+      if (i < 0 || j < 0 || i === j) return { ok: false, error: 'khaali does not know that metro leg.' };
+      out.push({ mode: 'metro', name: LINE.name, from: STOPS[i].n, to: STOPS[j].n, fare: FARE.qr });
+    } else if (mode === 'bus') {
+      const known = BUSES.find(b => b.id === String((l && l.id) || ''));
+      if (known && known.op !== 'BMTC') {
+        skipped.push({ mode: 'bus', name: known.op + ' ' + known.id, from: known.from, to: known.to, why: 'not-bmtc' });
+        continue;
+      }
+      const a = known ? { name: known.from, lat: known.fromLat, lng: known.fromLng }
+        : (_bmtc ? _bmtc.stopNamed(from) : null);
+      const b2 = known ? { name: known.to, lat: known.toLat, lng: known.toLng }
+        : (_bmtc ? _bmtc.stopNamed(to) : null);
+      if (!a || !b2) return { ok: false, error: 'khaali does not know that bus stop, so it will not price the ride.' };
+      out.push({ mode: 'bus', name: String((l && l.name) || 'BMTC').slice(0, 40),
+        from: a.name, to: b2.name, fare: busFare({ fromLat: a.lat, fromLng: a.lng, toLat: b2.lat, toLng: b2.lng }) });
+    } else return { ok: false, error: 'A trip pass covers the bus and the metro. The train is on the ticket.' };
+  }
+  if (!out.length) return { ok: false,
+    error: 'Nothing on this journey is a BMTC bus or a metro ride, so there is no pass to sell. Buy the '
+      + (skipped[0] ? skipped[0].name : 'other') + ' seat at the counter.' };
+  return { ok: true, legs: out, skipped };
+}
+
+/**
+ * A ticket for ONE trip, not a day. It covers exactly the bus and metro legs of
+ * the journey she chose, it costs what those legs cost, and it is spent when
+ * they have been ridden - one ride per mode it covers. That is the difference a
+ * person can hold in their head: a day pass is a right to ride, a trip pass is
+ * this trip and no other.
+ *
+ * `legs` must already be priced by the caller from khaali's own tables. This
+ * function does not price anything, because it cannot check a fare it is told.
+ */
+export function newTripPass({ id, who, date, holder, legs }, now = Date.now()) {
+  if (!id || !who || !date) return { ok: false, reason: 'incomplete' };
+  if (!Array.isArray(legs) || !legs.length) return { ok: false, reason: 'no-legs' };
+  const MODE_COVER = { bus: 'bmtc', metro: 'metro' };
+  const covers = [];
+  for (const l of legs) {
+    const c = MODE_COVER[l && l.mode];
+    if (!c) return { ok: false, reason: 'bad-leg' };
+    if (!(l.fare >= 0)) return { ok: false, reason: 'unpriced-leg' };
+    if (!covers.includes(c)) covers.push(c);
+  }
+  const fare = legs.reduce((n, l) => n + l.fare, 0);
+  return { ok: true, pass: {
+    id, who, date, holder: holder || null, covers, kind: 'trip',
+    legs: legs.map(l => ({ mode: l.mode, name: l.name || null, from: l.from, to: l.to, fare: l.fare })),
+    fare, status: 'valid', issuedAt: now, rides: [],
   } };
 }
 
@@ -266,7 +337,10 @@ export function scan(p, { by, mode, where } = {}, now = Date.now()) {
     return { ok: true, ride: last, repeat: true };
   const ride = { n: p.rides.length + 1, mode, by: by || null, where: where || null, at: now };
   p.rides.push(ride);
-  return { ok: true, ride };
+  // A trip pass is spent by the trip: one ride on each mode it covers, and then
+  // it is done. A day pass is never used up - that is what makes it a day pass.
+  if (p.kind === 'trip' && p.rides.length >= p.covers.length) p.status = 'used';
+  return { ok: true, ride, spent: p.status === 'used' };
 }
 
 export function cancelPass(p, now = Date.now()) {
@@ -279,7 +353,9 @@ export function cancelPass(p, now = Date.now()) {
 export function publicOf(p) {
   if (!p) return null;
   return { id: p.id, date: p.date, holder: p.holder, covers: p.covers, fare: p.fare,
+    kind: p.kind || 'day', legs: p.legs || null,
     status: p.status, issuedAt: p.issuedAt, rides: p.rides.length,
+    ridesLeft: p.kind === 'trip' ? Math.max(0, p.covers.length - p.rides.length) : null,
     last: p.rides.length ? p.rides[p.rides.length - 1] : null };
 }
 

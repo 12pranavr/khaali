@@ -1916,6 +1916,109 @@ t('a pass refuses the wrong day, a mode it never covered, and a cancelled one', 
   assert.strictEqual(JY.newPass({ id: 'x', who: 'h', date: '2026-09-10', covers: ['auto'] }).reason, 'no-modes');
 });
 
+t('a trip pass covers this trip: the modes on it, and no others', () => {
+  const p = JY.newTripPass({ id: 't1', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', name: 'BMTC 500D', from: 'Hope Farm', to: 'Kempegowda Bus Station', fare: 35 }] }, at).pass;
+  assert.strictEqual(p.kind, 'trip');
+  assert.deepStrictEqual(p.covers, ['bmtc']);
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'not-covered',
+    'no metro leg on this journey, so no metro on this pass');
+});
+
+t('a trip pass costs what its legs cost, not a flat day', () => {
+  const p = JY.newTripPass({ id: 't2', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', from: 'a', to: 'b', fare: 35 },
+      { mode: 'metro', from: 'Whitefield (Kadugodi)', to: 'Majestic', fare: 80 }] }, at).pass;
+  assert.strictEqual(p.fare, 115);
+  assert.notStrictEqual(p.fare, JY.newPass({ id: 'd', who: 'h', date: '2026-09-10' }, at).pass.fare,
+    'the day pass price is not the trip price');
+  assert.deepStrictEqual(p.covers, ['bmtc', 'metro']);
+  assert.strictEqual(JY.publicOf(p).ridesLeft, 2);
+});
+
+t('a trip pass is spent by the trip: one ride a mode, then it is done', () => {
+  const p = JY.newTripPass({ id: 't3', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', from: 'a', to: 'b', fare: 35 },
+      { mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  const one = JY.scan(p, { by: 'conductor', mode: 'bmtc', where: '500D' }, day);
+  assert.ok(one.ok); assert.strictEqual(one.spent, false, 'the metro is still ahead of her');
+  assert.strictEqual(p.status, 'valid');
+  const two = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day + 3600000);
+  assert.ok(two.ok); assert.strictEqual(two.spent, true);
+  assert.strictEqual(p.status, 'used');
+  assert.strictEqual(JY.scan(p, { mode: 'bmtc' }, day + 7200000).reason, 'used',
+    'the trip has been travelled; the ticket is over');
+  assert.strictEqual(JY.publicOf(p).ridesLeft, 0);
+});
+
+t('a double tap at one gate does not burn a leg of the trip', () => {
+  const p = JY.newTripPass({ id: 't4', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', from: 'a', to: 'b', fare: 35 },
+      { mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day);
+  const again = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day + 20000);
+  assert.strictEqual(again.repeat, true);
+  assert.strictEqual(p.rides.length, 1);
+  assert.strictEqual(p.status, 'valid', 'the bus is still to come');
+});
+
+t('the fare on a trip pass is khaali’s, not the phone’s', () => {
+  const r = JY.priceTripLegs([
+    { mode: 'metro', fromId: 'KDGD', toId: 'KGWA', from: 'lies', to: 'more lies', fare: 1 },
+    { mode: 'bus', id: 'V-335E', name: 'BMTC V-335E', from: 'Hope Farm', to: 'Kempegowda Bus Station', fare: 1 },
+  ]);
+  assert.ok(r.ok);
+  assert.strictEqual(r.legs[0].fare, 80, 'the metro fare is the published one');
+  assert.ok(r.legs[0].from.includes('Kadugodi'), 'the stop names come from the line, not the body');
+  assert.ok(r.legs[1].fare > 1, 'a bus fare of one rupee was not believed');
+  assert.strictEqual(r.legs.reduce((n, l) => n + l.fare, 0), JY.newTripPass({ id: 'q', who: 'h', date: '2026-09-10', legs: r.legs }).pass.fare);
+});
+
+t('a bus khaali does not run is left off the pass, and said so', () => {
+  const r = JY.priceTripLegs([
+    { mode: 'bus', id: 'KSRTC BNG-BLR', name: 'KSRTC', from: 'Bangarpet Bus Stand', to: 'Whitefield / Hope Farm' },
+    { mode: 'metro', fromId: 'KDGD', toId: 'KGWA' },
+  ]);
+  assert.ok(r.ok);
+  assert.strictEqual(r.legs.length, 1, 'only the metro is on the pass');
+  assert.strictEqual(r.skipped.length, 1);
+  assert.strictEqual(r.skipped[0].why, 'not-bmtc');
+  // and a journey that is ONLY that bus has no pass to sell at all
+  const only = JY.priceTripLegs([{ mode: 'bus', id: 'KSRTC BNG-BLR', from: 'a', to: 'b' }]);
+  assert.strictEqual(only.ok, false);
+  assert.ok(/counter/.test(only.error));
+});
+
+t('a leg khaali cannot place is refused, never guessed at', () => {
+  assert.strictEqual(JY.priceTripLegs([{ mode: 'metro', fromId: 'NOPE', toId: 'KGWA' }]).ok, false);
+  assert.strictEqual(JY.priceTripLegs([{ mode: 'metro', fromId: 'KGWA', toId: 'KGWA' }]).ok, false);
+  assert.strictEqual(JY.priceTripLegs([{ mode: 'bus', from: 'Nowhere At All Road', to: 'Also Nowhere' }]).ok, false);
+  assert.strictEqual(JY.priceTripLegs([{ mode: 'train', from: 'a', to: 'b' }]).ok, false);
+  assert.strictEqual(JY.priceTripLegs([]).ok, false);
+});
+
+t('a trip pass refuses a leg it cannot price, and a train it does not sell', () => {
+  assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10', legs: [] }).reason, 'no-legs');
+  assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'train', from: 'a', to: 'b', fare: 110 }] }).reason, 'bad-leg');
+  assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', from: 'a', to: 'b' }] }).reason, 'unpriced-leg');
+  assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'walk', from: 'a', to: 'b', fare: 0 }] }).reason, 'bad-leg');
+});
+
+t('the wrong day and a cancelled pass still refuse a trip pass', () => {
+  const p = JY.newTripPass({ id: 't5', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
+  const day = new Date('2026-09-10T09:00:00+05:30').getTime();
+  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day + 86400000).reason, 'wrong-day');
+  JY.cancelPass(p, day);
+  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'cancelled');
+});
+
 console.log('\nallocation: which way, and why - on a network that does not exist');
 
 // A -> B -> C -> D. A direct train A->D, a bus A->B, a train B->D. Every

@@ -594,7 +594,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <h1 style="margin:0;font:700 24px/1.2 Manrope,sans-serif;letter-spacing:-.02em">{{ pHeadFrom }} &rarr; {{ pHeadTo }}</h1>
     <div style="font-size:13.5px;color:var(--k-fg-8a8a84)">{{ pHeadSub }}</div>
   </div>
-  <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">The whole way, in one place: the train, the walk nobody mentions, the metro, and a day pass for the city. Book the train here; the pass is waiting on your ticket.</div>
+  <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">The whole way, in one place: the train, the walk nobody mentions, the bus, the metro. Book the journey here &#8212; the train, and a trip pass for the bus and the metro on it, spent when the trip is.</div>
 
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px">
     <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:8px">Or just say it</div>
@@ -751,7 +751,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
   <div style="{{ pRowsStyle }}">
     <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
-      <div class="k-resrow" style="{{ r.rowStyle }}">
+      <div class="k-resrow" onClick="{{ r.onSelect }}" style="{{ r.rowStyle }}">
         <div style="{{ r.headStyle }}">
           <span style="font:800 10.5px/1 Manrope,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--k-d8385a);padding:6px 9px;border-radius:5px">{{ r.headText }}</span>
           <span style="font:600 11.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ r.headSub }}</span>
@@ -777,6 +777,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2">
             <span style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.07em;text-transform:uppercase;padding:5px 7px;border-radius:4px;{{ g.style }}">{{ g.t }}</span>
           </sc-for>
+          <span style="{{ r.onMapNoteStyle }}">{{ r.onMapNote }}</span>
           <div onClick="{{ r.onToggle }}" style="margin-left:auto;cursor:pointer;font:700 12px/1 Manrope,sans-serif;color:var(--k-fg-1f3f8f);text-decoration:underline">{{ r.toggleLabel }}</div>
         </div>
         <div style="{{ r.whyStyle }}">{{ r.whyText }}</div>
@@ -796,6 +797,14 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </div>
     </sc-for>
     <div style="{{ pNoteStyle }}">{{ pNoteText }}</div>
+  </div>
+  <div style="{{ pTripWrap }}">
+    <img src="{{ pTripQr }}" alt="" style="{{ pTripQrStyle }}">
+    <div style="flex:1;min-width:200px">
+      <div style="{{ pTripHeadStyle }}">{{ pTripHead }}</div>
+      <div style="{{ pTripSubStyle }}">{{ pTripSub }}</div>
+      <a href="{{ pTripOpen }}" target="_blank" style="{{ pTripOpenStyle }}">Open the pass &#8599;</a>
+    </div>
   </div>
 </div>
 </sc-if>
@@ -4775,7 +4784,12 @@ class Component extends DCLogic {
     return rec.pnr+'|'+this.jnArrival(rec)+'|'+(need||'');}
   /** The plan for this ticket, fetched once per arrival minute and cached. */
   jnFor(rec){
-    if(!rec||rec.status==='refunded'||rec.to!==1)return null;   // only a ticket that ends at Whitefield
+    if(!rec||rec.status==='refunded')return null;
+    // A ticket booked from a planned journey already knows the rest of the way -
+    // it was chosen on the plan page. Only a ticket without one falls back to
+    // the Whitefield-to-Majestic plan the server works out on its own.
+    if(rec.journey&&rec.journey.legs&&rec.journey.legs.length)return null;
+    if(rec.to!==1)return null;
     const arrive=this.jnArrival(rec);if(arrive==null)return null;
     const key=this.jnKey(rec);this._jn=this._jn||{};
     if(this._jn[key])return this._jn[key];
@@ -4789,14 +4803,19 @@ class Component extends DCLogic {
   passes(){try{return JSON.parse(localStorage.getItem('khaali-pass')||'{}');}catch(e){return {};}}
   passSet(pnr,p){const m=this.passes();if(p)m[pnr]=p;else delete m[pnr];
     try{localStorage.setItem('khaali-pass',JSON.stringify(m));}catch(e){}this.setState({passTick:Date.now()});}
-  /** One tap. A day's right to ride, in her name, for the day she travels. */
+  /** One tap. For a planned journey it is a TRIP pass - the bus and the metro
+      on this ticket, priced by the server and spent when they are ridden.
+      Otherwise it is the day pass the city page has always offered. */
   async getPass(rec){
     if(this._passBusy)return;this._passBusy=true;this.setState({passErr:''});
     const holder=((rec.travellers||[])[0]||{}).name||(rec.names||[])[0]||null;
+    const J=(rec.journey&&rec.journey.legs&&rec.journey.legs.length)?rec.journey:null;
+    const body=J?{kind:'trip',legs:J.legs,holder,date:this.dateIsoFor(rec.dayIdx||0)}
+      :{holder,date:this.dateIsoFor(rec.dayIdx||0)};
     try{const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({holder,date:this.dateIsoFor(rec.dayIdx||0)})},9000);
+        body:JSON.stringify(body)},9000);
       const j=await r.json().catch(()=>({}));
-      if(j&&j.ok)this.passSet(rec.pnr,{...j.pass,qr:j.qr,scanUrl:j.scanUrl});
+      if(j&&j.ok)this.passSet(rec.pnr,{...j.pass,qr:j.qr,scanUrl:j.scanUrl,skipped:j.skipped||null});
       else this.setState({passErr:(j&&j.error)||'khaali could not issue the pass. Nothing was charged.'});
     }catch(e){this.setState({passErr:'khaali could not issue the pass. Nothing was charged.'});}
     this._passBusy=false;
@@ -4810,10 +4829,25 @@ class Component extends DCLogic {
     const S=this.state,gone={display:'none'};
     const P=this.jnFor(rec);
     const pass=rec?this.passes()[rec.pnr]:null;
-    const show=!!(rec&&rec.to===1&&rec.status!=='refunded');
+    // the journey she actually chose on the plan page, if this ticket came from one
+    const J=(rec&&rec.journey&&rec.journey.legs&&rec.journey.legs.length)?rec.journey:null;
+    const show=!!(rec&&rec.status!=='refunded'&&(J||rec.to===1));
     const purple='#8C2877';
     const crowdTone=w=>w==='crush'?{bg:'var(--k-fdf3f5)',fg:'var(--k-fg-d8385a)'}:w==='busy'?{bg:'var(--k-fdf0e3)',fg:'var(--k-fg-8a4a12)'}:{bg:'var(--k-e6f4ec)',fg:'var(--k-fg-14663a)'};
     const steps=[];
+    // The legs of the journey she booked, in the order she rides them. This is
+    // the same chain the map drew - nothing is planned a second time.
+    if(J)J.legs.forEach(l=>{
+      const isBus=l.mode==='bus';
+      steps.push({dotStyle:{background:isBus?'#1f6fd0':purple},
+        title:l.name+(l.every?(' · every '+l.every+' min'):''),
+        sub:l.from+' → '+l.to+((l.dep&&l.arr)?('  '+l.dep+' → '+l.arr):''),
+        note:'',noteStyle:gone,
+        chip:l.source==='simulated'?'simulated':(l.source||''),
+        chipStyle:{display:l.source?'inline-block':'none',
+          background:l.source==='simulated'?'var(--k-fdf0e3)':'var(--k-f1f1ee)',
+          color:l.source==='simulated'?'var(--k-fg-8a4a12)':'var(--k-fg-6a6d75)'}});
+    });
     if(P&&P.ok){
       const w=P.legs[0],m=P.legs[1],ca=m.crowdAlight;
       steps.push({dotStyle:{background:'var(--k-8a8a84)'},
@@ -4836,13 +4870,14 @@ class Component extends DCLogic {
       jnWrap:{display:show?'block':'none',padding:'16px 16px 14px',borderRadius:10,marginBottom:12,
         background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
         maxWidth:'calc(100vw - 96px)',boxSizing:'border-box',overflowWrap:'anywhere'},
-      jnLabel:'After the train',
-      jnBadge:'Purple Line \u00b7 BMRCL',
+      jnLabel:J?'The rest of the journey':'After the train',
+      jnBadge:J?(J.modes.length===2?'BMTC \u00b7 BMRCL':J.modes[0]==='bus'?'BMTC':'Purple Line \u00b7 BMRCL')
+        :'Purple Line \u00b7 BMRCL',
       jnBadgeStyle:{marginLeft:'auto',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
-        color:'#fff',background:purple,padding:'6px 8px',borderRadius:4},
-      jnLoading:{display:(show&&!P)?'block':'none',font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:10},
+        color:'#fff',background:(J&&J.modes.length===1&&J.modes[0]==='bus')?'#1f6fd0':purple,padding:'6px 8px',borderRadius:4},
+      jnLoading:{display:(show&&!J&&!P)?'block':'none',font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:10},
       jnSteps:steps,
-      jnStepsWrap:{display:(P&&P.ok)?'block':'none',marginTop:12},
+      jnStepsWrap:{display:(J||(P&&P.ok))?'block':'none',marginTop:12},
       jnLateStyle:{display:late?'block':'none',marginTop:10,font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a4a12)'},
       jnLateText:late?(P.line+' Kempegowda Bus Station runs through the night; the pass covers any BMTC bus.'):'',
       jnFare:(P&&P.ok)?('\u20b9'+P.fare.qr+' by QR \u00b7 \u20b9'+P.fare.smartcard+' by smart card'+(P.fare.peak?' (peak)':'')):'',
@@ -4851,17 +4886,27 @@ class Component extends DCLogic {
       jnPassBtn:()=>rec&&this.getPass(rec),
       jnPassBtnStyle:{display:(show&&!pass)?'block':'none',marginTop:12,border:'none',width:'100%',
         background:purple,color:'#fff',font:'700 14px/1 Manrope,sans-serif',padding:'15px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
-      jnPassBtnLabel:'Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus'+((P&&P.ok)?'':' (for the day you travel)'),
+      jnPassBtnLabel:J
+        ?('Trip pass \u2014 covers the '+(J.modes.length===2?'bus and the metro':J.modes[0]==='bus'?'bus':'metro')
+          +' on this journey')
+        :('Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus'+((P&&P.ok)?'':' (for the day you travel)')),
       jnPassErr:S.passErr||'',
       jnPassErrStyle:{display:S.passErr?'block':'none',marginTop:8,font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
       jnPassWrap:{display:(show&&pass)?'flex':'none',gap:14,alignItems:'center',marginTop:12,padding:14,
         borderRadius:10,background:'var(--k-fbfbfa)',border:'1px solid var(--k-e6e5e0)'},
       jnPassQr:pass?pass.qr:'',
       jnPassQrStyle:{flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
-      jnPassHead:pass?('Day pass \u00b7 '+(pass.holder||'you')):'',
+      jnPassHead:pass?(((pass.kind==='trip')?'Trip pass':'Day pass')+' \u00b7 \u20b9'+pass.fare+' \u00b7 '+(pass.holder||'you')):'',
       jnPassSub:pass?('Good on '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
-        +' \u00b7 metro and BMTC \u00b7 '+(pass.status==='valid'?'never used up':pass.status)):'',
-      jnPassNote:'Show this at the gate or to the conductor. Each tap is a ride, not a deduction.',
+        +' \u00b7 '+(pass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')
+        +' \u00b7 '+(pass.status!=='valid'?pass.status
+          :(pass.kind==='trip'?((pass.ridesLeft===1?'one ride left':pass.ridesLeft+' rides left')):'never used up'))):'',
+      jnPassNote:(pass&&pass.kind==='trip')
+        ?('Show this at the gate or to the conductor. One ride on each leg \u2014 the pass expires when the trip is done.'
+          +((pass.skipped&&pass.skipped.length)
+            ?(' The '+pass.skipped.map(x=>x.name).join(' and ')+' seat is not khaali\u2019s to sell; buy it at the counter.')
+            :''))
+        :'Show this at the gate or to the conductor. Each tap is a ride, not a deduction.',
       jnPassCancel:()=>rec&&this.dropPass(rec),
       jnPassCancelStyle:{font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',marginTop:8,textDecoration:'underline'},
       jnPassOpen:pass?(pass.scanUrl||'#'):'#',
@@ -5091,7 +5136,8 @@ class Component extends DCLogic {
     if(F.k===T.k&&F.id===T.id)return this.setState({pRes:{err:'Pick two different places.'}});
     const after=this.planAfterMin();
     const by=this.planByMin();
-    this.setState({pBusy:true,pRes:null,pOpenIdx:null});
+    // a new question: the old answer's route comes off the map with it
+    this.setState({pBusy:true,pRes:null,pOpenIdx:null,pSelIdx:null,pMapChain:null,pBookChain:null});
     // the whole journey, from the one route that knows about all three modes
     try{
       const qs='fromKind='+F.k+'&fromId='+encodeURIComponent(F.id)+(F.k==='place'?'&fromName='+encodeURIComponent(F.n):'')
@@ -5117,6 +5163,10 @@ class Component extends DCLogic {
           recommended:j.recommended,reason:j.reason,explanation:j.explanation,
           err:j.chains.length?null:this.planEmptyText(after,by)};
         this.setState({pBusy:false,pRes:res,pAskAns:'',pAskTxt:''});
+        // the answer is drawn before she asks for it: the recommended way is on
+        // the map the moment the results land
+        const ri=(j.recommended!=null)?j.recommended:0;
+        if(j.chains[ri])this.planSelect(j.chains[ri],ri);
         if(j.recommended!=null)this.planPhrase(res);
         return;
       }
@@ -5185,9 +5235,40 @@ class Component extends DCLogic {
   /** One journey, drawn alone. Every other train, route and line is left off:
       the question on this screen is how SHE gets there, and a map answering
       twelve other questions at the same time answers none of them. */
-  planShowOnMap(c){
-    this.setState({pMapChain:c});
+  planSelect(c,ci){
+    if(!c)return;
+    this.planBoot();                                   // the map needs the coordinates
+    this.setState({pMapChain:c,pSelIdx:ci});
     this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),80);});
+  }
+  /** What the map is showing right now, in a form two renders can compare. */
+  planMapSig(c){return c?(c.kind+'|'+c.dep+'|'+c.arr+'|'+c.fare):'';}
+
+  /** The rest of the way, kept small enough to live on a ticket: the bus and
+      metro legs she chose, and nothing about capacity or road geometry. */
+  planTripOf(c){
+    const legs=((c&&c.legs)||[]).filter(l=>l.mode==='bus'||l.mode==='metro').map(l=>({
+      mode:l.mode,id:l.id||null,name:l.mode==='metro'?(l.line||'Metro'):(l.name||'BMTC'),
+      from:l.from,to:l.to,fromId:l.fromId||null,toId:l.toId||null,
+      dep:l.dep||l.board||null,arr:l.arr||l.alight||null,every:l.every||null,source:l.source||null}));
+    return {legs,depText:c?c.depText:'',arrText:c?c.arrText:'',
+      modes:[...new Set(legs.map(l=>l.mode))],fare:c?c.fare:0};
+  }
+  /** A journey with no train on it is still a journey. The trip pass IS the
+      booking: there is no PNR to hang it on, so it is kept under its own id. */
+  async planTripPass(c){
+    const trip=this.planTripOf(c);
+    if(!trip.legs.length)return;
+    if(this._passBusy)return;this._passBusy=true;this.setState({passErr:'',pTripErr:''});
+    try{
+      const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({kind:'trip',legs:trip.legs,date:this.dateIsoFor(this.state.dayIdx||0)})},9000);
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok){const p={...j.pass,qr:j.qr,scanUrl:j.scanUrl,skipped:j.skipped||null,trip};
+        this.passSet('trip:'+j.pass.id,p);this.setState({pTripPass:p});}
+      else this.setState({pTripErr:(j&&j.error)||'khaali could not issue the pass. Nothing was charged.'});
+    }catch(e){this.setState({pTripErr:'khaali could not issue the pass. Nothing was charged.'});}
+    this._passBusy=false;
   }
   planPaintMap(){
     const c=this.state.pMapChain,el=document.getElementById('k-planmap');
@@ -5207,7 +5288,11 @@ class Component extends DCLogic {
     const add=l=>{this._plane.push(l);return l.addTo(map);};
     const COL={train:'#d8385a',metro:'#8C2877',bus:'#1f6fd0',walk:'#8a8a84'};
     const G=this.state.pGeo||[];
-    if(!G.length)return;
+    // The coordinates land after the plan does. Painting without them draws
+    // nothing and used to leave the map blank for good; now it waits and
+    // componentDidUpdate paints the moment they arrive.
+    if(!G.length){this._pmapSig=null;return;}
+    this._pmapSig=this.planMapSig(c);
     const pts=[],marks=[];
     const railPt=nm=>{const i=this.ST.findIndex(x=>x.n===nm);return i<0?null:[G[i].lat,G[i].lng];};
     const metroPt=nm=>{const m=(this.state.pMetro||[]).find(x=>x.n===nm||x.n.replace(/^.*, /,'')===nm);return m?[m.lat,m.lng]:null;};
@@ -5274,8 +5359,15 @@ class Component extends DCLogic {
           +'box-shadow:0 2px 8px rgba(0,0,0,.35)">'+(i+1)+'</div>'})}))
         .bindTooltip((i+1)+'. '+m.n+(KIND[m.n]?' \u00b7 '+KIND[m.n]:''),{permanent:false});
     });
-    if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(0.18));
-    setTimeout(()=>{try{map.invalidateSize();}catch(e){}},80);
+    // The map box is display:none until a journey is picked, so Leaflet has
+    // measured it at nothing wide. Tell it its real size BEFORE fitting - a fit
+    // to a zero-width box picks a zoom that draws every line as a dot - and
+    // again after, because the box only gets its width on the next layout.
+    if(pts.length){
+      const b=L.latLngBounds(pts).pad(0.18);
+      const fit=()=>{try{map.invalidateSize(false);map.fitBounds(b,{animate:false});}catch(e){}};
+      fit();setTimeout(fit,80);setTimeout(fit,320);
+    }else setTimeout(()=>{try{map.invalidateSize();}catch(e){}},80);
   }
 
   planBindings(){
@@ -5360,13 +5452,21 @@ class Component extends DCLogic {
         seated:['You sit','var(--k-e6f4ec)','var(--k-fg-14663a)']};
       const labels=(c.alloc&&c.alloc.labels)||[];
       const isRec=R&&R.recommended===ci;
+      const isSel=S.pSelIdx===ci;
       const tags=labels.filter(k=>LBL[k]).map(k=>({t:LBL[k][0],style:{background:LBL[k][1],color:LBL[k][2]}}));
       if(c.simulated)tags.push({t:'Has a simulated leg',style:{background:'var(--k-f1f1ee)',color:'var(--k-fg-8a8a84)'}});
       const CAPQ={exact:'counted',estimated:'estimated',predicted:'predicted',unknown:'unknown'};
       return {
         isRec,
-        rowStyle:{background:'var(--k-fff)',border:(isRec?'2px solid var(--k-d8385a)':'1px solid var(--k-e6e5e0)'),
-          borderRadius:11,padding:'18px 20px',marginBottom:12,position:'relative'},
+        rowStyle:{background:isSel?'var(--k-fdf3f5)':'var(--k-fff)',
+          border:(isRec?'2px solid var(--k-d8385a)':'1px solid '+(isSel?'var(--k-d8385a)':'var(--k-e6e5e0)')),
+          boxShadow:isSel?'0 0 0 3px rgba(216,56,90,.16)':'none',
+          borderRadius:11,padding:'18px 20px',marginBottom:12,position:'relative',cursor:'pointer'},
+        onSelect:()=>this.planSelect(c,ci),
+        onMapNote:isSel?'On the map':'',
+        onMapNoteStyle:{display:isSel?'inline-block':'none',
+          font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.09em',textTransform:'uppercase',
+          padding:'5px 7px',borderRadius:4,background:'var(--k-fdf3f5)',color:'var(--k-fg-d8385a)'},
         headStyle:{display:isRec?'flex':'none',alignItems:'center',gap:10,marginBottom:12},
         headText:'Recommended for you',
         headSub:isRec&&R.reason?('confidence '+(R.reason.facts.capacityConfidence||'').toLowerCase()):'',
@@ -5413,17 +5513,19 @@ class Component extends DCLogic {
         openStyle:{display:open?'block':'none',marginTop:12,paddingTop:12,
           borderTop:'1px dashed var(--k-dedcd6)'},
         toggleLabel:open?'Hide the legs':'See every leg',
-        onToggle:()=>this.setState({pOpenIdx:open?null:ci}),
+        onToggle:()=>{this.planSelect(c,ci);this.setState({pOpenIdx:open?null:ci});},
         onChoose:()=>{
-          this.setState({pOpenIdx:ci});
-          this.planShowOnMap(c);
+          this.planSelect(c,ci);
+          // what the ticket will need to remember about the rest of the way
+          this.setState({pOpenIdx:ci,pBookChain:this.planTripOf(c)});
           if(tl){const fi=this.ST.findIndex(x=>x.n===tl.from),ti=this.ST.findIndex(x=>x.n===tl.to);
             if(fi>=0&&ti>=0){this._c={};
               this.setState({from:fi,to:ti,train:tl.id,allCls:true,picks:[],pax:1,
-                classModal:true,onlyThis:true,hov:null});}}},
-        chooseLabel:tl?'Book the train':'Show me on the map',
+                classModal:true,onlyThis:true,hov:null});}}
+          else this.planTripPass(c);},
+        chooseLabel:tl?'Book the journey':(this.planTripOf(c).legs.length?'Book the trip pass':'Show me on the map'),
         chooseStyle:{flex:'none',border:'none',
-          background:tl?'var(--k-d8385a)':'var(--k-1f3f8f)',color:'#fff',
+          background:tl?'var(--k-d8385a)':(this.planTripOf(c).legs.length?'#8C2877':'var(--k-1f3f8f)'),color:'#fff',
           font:'700 13px/1 Manrope,sans-serif',padding:'13px 18px',borderRadius:7,
           cursor:'pointer',minHeight:44},
       };
@@ -5537,8 +5639,26 @@ class Component extends DCLogic {
       pMapStyle:{display:S.pMapChain?'block':'none',height:340,borderRadius:11,
         position:'relative',zIndex:0,
         overflow:'hidden',border:'1px solid var(--k-e6e5e0)',marginTop:14},
-      pMapNote:S.pMapChain?('Only this journey is drawn. '
+      pMapNote:S.pMapChain?('Only the selected journey is drawn. Tap another way to draw that one instead. '
         +(S.pMapChain.simulated?'The dashed bus leg has no published timetable and is simulated.':'')):'',
+      // a journey with no train on it: the trip pass is the whole booking
+      pTripWrap:{display:(S.pTripPass||S.pTripErr)?'flex':'none',gap:14,alignItems:'center',marginTop:14,padding:14,
+        borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',flexWrap:'wrap'},
+      pTripQr:S.pTripPass?S.pTripPass.qr:'',
+      pTripQrStyle:{display:S.pTripPass?'block':'none',flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
+      pTripHead:S.pTripPass?('Trip pass · ₹'+S.pTripPass.fare+' · '
+        +(S.pTripPass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')):(S.pTripErr||''),
+      pTripHeadStyle:{font:'700 14px/1.4 Manrope,sans-serif',
+        color:S.pTripPass?'var(--k-fg-14161a)':'var(--k-fg-d8385a)'},
+      pTripSub:S.pTripPass?('Good on '+new Date(S.pTripPass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+        +' · one ride on each leg · the pass expires when the trip is done'
+        +((S.pTripPass.skipped&&S.pTripPass.skipped.length)
+          ?(' · the '+S.pTripPass.skipped.map(x=>x.name).join(' and ')+' seat is bought at the counter')
+          :'')):'',
+      pTripSubStyle:{display:S.pTripPass?'block':'none',marginTop:4,font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      pTripOpen:S.pTripPass?(S.pTripPass.scanUrl||'#'):'#',
+      pTripOpenStyle:{display:S.pTripPass?'inline-block':'none',marginTop:6,
+        font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
       pMapNoteStyle:{display:S.pMapChain?'block':'none',marginTop:7,
         font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
       pStepOn:!!S.pStep,
@@ -6344,16 +6464,25 @@ class Component extends DCLogic {
     const rec={from:S.from,to:S.to,train:S.train,cls:S.cls,quota:S.quota,pax:S.pax,dayIdx:S.dayIdx,
       picks:picks,pnr:String(pnr),total:total,
       mode:hm,assigned:hm!=='any',berths:hm==='any'?[]:hb.map(b=>b.coach+'/'+b.no),
-      names:this.paxNamesFor(S.pax),travellers:this.travellersFor(S.pax,this.srvDate()),lower:null};
+      names:this.paxNamesFor(S.pax),travellers:this.travellersFor(S.pax,this.srvDate()),lower:null,
+      // the rest of the way, if this booking came from a planned journey
+      journey:(S.pBookChain&&S.pBookChain.legs&&S.pBookChain.legs.length)?S.pBookChain:null};
     const dupOf=S.bookings.find(b=>b.status!=='refunded'&&!b.dupOk&&b.train===rec.train
       &&b.dayIdx===rec.dayIdx&&b.from===rec.from&&b.to===rec.to&&b.cls===rec.cls);
     if(dupOf)setTimeout(()=>this.setState({dupAsk:{a:dupOf.pnr,b:rec.pnr,total:rec.total,
       what:this.TRAINS.find(t=>t.no===rec.train).name+' \u00b7 '+this.ST[rec.from].n+' \u2192 '+this.ST[rec.to].n}}),700);
+    // the journey is spent on this booking; the next one starts without it
     this.setState({bookings:[rec].concat(S.bookings),page:'ticket',picks:picks,viewPnr:rec.pnr,holdId:null,hold:null,holdErr:null,
-      classModal:false,countModal:false,hov:null});
+      classModal:false,countModal:false,hov:null,pBookChain:null});
     window.scrollTo(0,0);this.syncAv();}
   componentDidUpdate(){
     this.syncUrl();
+    // the map is whatever journey is selected, and it repaints when that
+    // changes - or when the coordinates it was waiting for finally land
+    {const S0=this.state;
+      if(S0.page==='plan'&&S0.pMapChain&&this._pmapSig!==this.planMapSig(S0.pMapChain))
+        this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
+      if(S0.page!=='plan')this._pmapSig=null;}
     {const S0=this.state;
       if(S0.page==='bookings'&&this._ordPage!==true){this._ordPage=true;this.loadOrders();}
       if(S0.page!=='bookings')this._ordPage=false;
