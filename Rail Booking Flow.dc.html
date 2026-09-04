@@ -7518,13 +7518,25 @@ class Component extends DCLogic {
         fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.readAsDataURL(blob);});
       this.setState({chatBusy:true});
       try{
-        const j=await this.tfetch('/api/stt',{method:'POST',headers:{'content-type':'application/json'},
-          body:JSON.stringify({audio:b64,mime:blob.type})},40000).then(r=>r.json());
+        const res=await this.tfetch('/api/stt',{method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({audio:b64,mime:blob.type})},40000);
+        const j=await res.json().catch(()=>({}));
         this.setState({chatBusy:false});
         if(j.text){
           this.setState({chatVoiceLang:j.lang||null});
           this.speakAck(j.lang||'hi-IN');              // instant 'checking...' voice
           this.sendChat(true,j.text);                  // text passed directly
+        }
+        // khaali's EAR failed, not her voice. Telling someone who spoke
+        // perfectly clearly to "speak closer" sends them hunting for a fault in
+        // their microphone that is on this side of the wire. Say which it was.
+        else if(!res.ok||j.error){
+          const msgs=(this.state.chatMsgs||[]).concat([{role:'assistant',
+            content:res.status===429
+              ?'Ek minute ruko \u2014 abhi bahut saare sawaal aa gaye hain. Phir bolo.'
+              :'Meri sunne wali service abhi jawab nahi de rahi \u2014 aap likh kar bhejo, '
+                +'main wahi kaam kar dunga.'}]);
+          this.setState({chatMsgs:msgs});
         }
         else{
           const msgs=(this.state.chatMsgs||[]).concat([{role:'assistant',
@@ -7568,14 +7580,25 @@ class Component extends DCLogic {
         // first 350ms calibrates this room's noise floor
         if(now-t0<350){floorSum+=rms;floorN++;}
         const nf=floorN?floorSum/floorN:1.5;
-        const speakTh=Math.max(nf*1.9,nf+2.5,3.2);
+        // The bar a sound must clear to count as HER, not as the room.
+        //
+        // It used to bottom out at 3.2, which in a quiet room IS the room. So
+        // eighty milliseconds of nothing armed the recorder, and if she paused
+        // to think before speaking, the two-second rule fired and sent two
+        // seconds of silence. Sarvam heard nothing, khaali said "speak closer",
+        // and it was never her that was too quiet.
+        const speakTh=Math.max(nf*2.6,nf+6,9);
         if(now-t0>=350&&rms>speakTh){
           loudRun++;
-          if(loudRun>=5){this._spoke=true;this._lastLoud=now;}  // ~80ms sustained: a click can't arm it
+          // a fifth of a second sustained: a click, a door, or the tail of
+          // khaali's own voice through the speaker cannot arm it
+          if(loudRun>=12){this._spoke=true;this._lastLoud=now;}
           else if(this._spoke)this._lastLoud=now;
         }else loudRun=0;
-        // finished: 2s of quiet after speech -> process (thinking pauses survive)
-        if(this._spoke&&now-this._lastLoud>2000&&now-t0>1800&&mr.state==='recording'){
+        // finished: 2s of quiet AFTER she has actually spoken. Never before
+        // three seconds, so a breath before the first word is not the end of
+        // the sentence.
+        if(this._spoke&&now-this._lastLoud>2000&&now-t0>3000&&mr.state==='recording'){
           try{mr.stop();}catch(e){}
           return;
         }

@@ -2107,25 +2107,46 @@ async function api(req, res, url) {
     if (!b.audio || typeof b.audio !== 'string' || b.audio.length > 900000) {
       return send(res, 400, { error: 'bad audio' });
     }
-    try {
-      const buf = Buffer.from(b.audio, 'base64');
+    const buf = Buffer.from(b.audio, 'base64');
+    // The container the phone actually recorded in. Chrome gives webm/opus,
+    // Safari gives mp4 — and the name has to match the bytes, or the far end
+    // sniffs a webm header on a file called voice.mp4 and gives up.
+    const EXT = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4',
+      'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/aac': 'aac' };
+    // Sarvam rejects parameterized content types, so forward the bare container.
+    const mime = String(b.mime || 'audio/webm').split(';')[0].trim().toLowerCase();
+    const name = 'voice.' + (EXT[mime] || 'webm');
+    /** Saaras v3, asked the way the voice-assistant guide asks it. */
+    const askSarvam = async (withMode) => {
       const fd = new FormData();
-      // Chrome records 'audio/webm;codecs=opus' — Sarvam rejects parameterized
-      // content types, so forward only the bare container type.
-      fd.append('file', new Blob([buf], { type: String(b.mime || 'audio/webm').split(';')[0] }), 'voice.webm');
+      fd.append('file', new Blob([buf], { type: mime }), name);
       fd.append('model', 'saaras:v3');
+      // 23 languages, detected - khaali never assumes which one she speaks
       fd.append('language_code', 'unknown');
+      // 'transcribe' is what a voice assistant wants: her words, in her own
+      // language. Without it Saaras may translate, and khaali would answer a
+      // sentence she did not say.
+      if (withMode) fd.append('mode', 'transcribe');
       const ac = new AbortController();
       const t = setTimeout(() => ac.abort(), 25000);
-      const r = await fetch('https://api.sarvam.ai/speech-to-text', {
+      return fetch('https://api.sarvam.ai/speech-to-text', {
         method: 'POST', signal: ac.signal,
         headers: { 'api-subscription-key': SARVAM_KEY }, body: fd,
       }).finally(() => clearTimeout(t));
-      if (!r.ok) throw new Error('stt http ' + r.status);
+    };
+    try {
+      let r = await askSarvam(true);
+      // an older deployment of the model may not take the mode at all
+      if (r.status === 400 || r.status === 422) r = await askSarvam(false);
+      if (!r.ok) {
+        // 401/402/429 is khaali's problem, not hers, and the phone is told so
+        return send(res, r.status === 429 ? 429 : 502,
+          { text: '', error: 'stt failed', upstream: r.status, said: false });
+      }
       const j = await r.json();
       return send(res, 200, { text: (j.transcript || '').trim(), lang: j.language_code || null });
     } catch (e) {
-      return send(res, 502, { text: '', error: 'stt failed' });
+      return send(res, 502, { text: '', error: 'stt failed', upstream: 0, said: false });
     }
   }
 
