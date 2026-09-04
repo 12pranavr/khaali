@@ -137,6 +137,8 @@ The route result never waits for a model.
 | `POST /api/ask` | `{question, chain, reason, alternatives}` → answer from the facts |
 | `GET /api/simulate` | n, start, end, profile → baseline vs allocated |
 | `GET /api/metro`, `/api/geo` | the line and the coordinates the map draws from |
+| `GET /api/place` | at=lat,lng → what that point is called and what khaali can plan through near it. Named from khaali's own data; no reverse geocoder |
+| `POST /api/pass` | a day pass, or `kind:'trip'` + the journey's bus/metro legs. A trip pass is priced here from BMTC's coordinates and the published metro fare, and is spent after one ride on each mode it covers |
 
 ## Tests
 

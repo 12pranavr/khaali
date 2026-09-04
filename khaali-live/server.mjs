@@ -1237,6 +1237,24 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true, found: true, place: { ...g, id: g.lat.toFixed(5) + ',' + g.lng.toFixed(5) }, near });
   }
 
+  // A point she put her finger on, or the one her phone reports. khaali names
+  // it from its OWN data - the stop it is standing next to, or a bearing and a
+  // distance from Majestic - and says how far the nearest thing it can plan
+  // through is. No reverse geocoder: a pin does not need a street address, it
+  // needs to know whether anything runs near it.
+  if (p === '/api/place') {
+    const pt = pointOf(q.get('at'));
+    if (!pt) return send(res, 400, { ok: false, error: 'That point is outside the part of Karnataka khaali knows.' });
+    const stop = (bmtc.stopsNear(pt.lat, pt.lng, 0.35) || [])[0] || null;
+    const near = journey.nearestNode(pt.lat, pt.lng);
+    const name = stop ? stop.n : ('A point ' + bmtc.whereabouts(pt.lat, pt.lng));
+    return send(res, 200, { ok: true,
+      place: { lat: pt.lat, lng: pt.lng, id: pt.lat.toFixed(5) + ',' + pt.lng.toFixed(5), name,
+        kind: stop ? 'bus stop' : 'a point on the map',
+        source: stop ? 'BMTC GTFS' : 'measured' },
+      near, reach: !!near });
+  }
+
   // ---- the intelligence layer: sentences in, sentences out, facts untouched ----
   if (p === '/api/intent' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }

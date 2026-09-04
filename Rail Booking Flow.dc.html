@@ -654,6 +654,16 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
   <div style="margin-top:16px;display:grid;gap:12px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Anywhere</span>
+      <sc-for list="{{ pHereChips }}" as="t" hint-placeholder-count="2">
+        <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9678; {{ t.l }}</div>
+      </sc-for>
+      <sc-for list="{{ pAnyChips }}" as="t" hint-placeholder-count="2">
+        <div onClick="{{ t.onClick }}" style="{{ t.style }}">&#9679; {{ t.l }}</div>
+      </sc-for>
+    </div>
+    <div style="{{ pPickNoteStyle }}">{{ pPickNote }}</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">How</span>
       <div onClick="{{ pAllModes }}" style="{{ pAllStyle }}">All</div>
       <sc-for list="{{ pModeChips }}" as="m" hint-placeholder-count="3">
@@ -4962,6 +4972,55 @@ class Component extends DCLogic {
         :{pToK:'place',pToId:p.id,pTxtT:null,pOpen:null,pGeoBusy:null,pGeoNote:''});
     }catch(e){this.setState({pGeoBusy:null,pGeoNote:'The map did not answer. Try again.'});}
   }
+  /** A point, named from khaali's own data, put into From or To. */
+  async planUsePoint(which,lat,lng,label){
+    this.setState({pGeoNote:''});
+    try{
+      const r=await this.tfetch('/api/place?at='+lat.toFixed(5)+','+lng.toFixed(5),null,9000);
+      const j=await r.json();
+      if(!j||!j.ok){this.setState({pPick:null,pGeoBusy:null,
+        pGeoNote:(j&&j.error)||'khaali cannot plan from there.'});return;}
+      const p={...j.place,near:j.near||null};
+      if(label)p.name=label;
+      this.planAddPlace(p);
+      this.setState(which==='from'
+        ?{pFromK:'place',pFromId:p.id,pTxtF:null,pOpen:null,pPick:null,pGeoBusy:null}
+        :{pToK:'place',pToId:p.id,pTxtT:null,pOpen:null,pPick:null,pGeoBusy:null});
+      // nothing khaali can plan through is anywhere near: say it now, not after
+      // a search that was always going to come back empty
+      this.setState({pGeoNote:j.near
+        ?('Set the '+(which==='from'?'start':'destination')+' to '+p.name
+          +'. Nearest khaali can plan through: '+j.near.name+', '+j.near.km+' km. Press Search.')
+        :'Nothing khaali can plan through is within reach of that point. Try somewhere closer to the city.'});
+    }catch(e){this.setState({pPick:null,pGeoBusy:null,pGeoNote:'The map did not answer. Try again.'});}
+  }
+  /** Where the phone says she is. Refused politely when it is off khaali's map
+      rather than sent to a planner that would only shrug at it. */
+  planLocate(which){
+    if(!navigator.geolocation)return this.setState({pGeoNote:'This browser will not share a location.'});
+    this.setState({pGeoBusy:which,pGeoNote:'',pPick:null});
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        const {latitude:lat,longitude:lng}=pos.coords;
+        if(!(lat>11&&lat<14.5&&lng>76.5&&lng<79))
+          return this.setState({pGeoBusy:null,
+            pGeoNote:'You are outside the part of Karnataka khaali knows, so it will not pretend to plan from there.'});
+        this.planUsePoint(which,lat,lng,'Where you are');
+      },
+      err=>this.setState({pGeoBusy:null,
+        pGeoNote:err&&err.code===1?'khaali was not given permission to read your location.'
+          :'Your location did not come back in time.'}),
+      {enableHighAccuracy:true,timeout:9000,maximumAge:60000});
+  }
+  /** Arm the map for a pin. The route stays drawn if one is; the difference is
+      that a click on the map now means something. */
+  planPick(which){
+    if(this.state.pPick===which)return this.setState({pPick:null});
+    this.setState({pPick:which,pGeoNote:'',pOpen:null});
+    this.planBoot();
+    this.planLeaflet().then(ok=>{if(!ok)return;
+      setTimeout(()=>{if(this.state.pMapChain)this.planPaintMap();else this.planPaintPick();},80);});
+  }
   planPlace(k,id){return this.planPlaces().find(p=>p.k===k&&p.id===id)||null;}
   /** The metro is fetched once; until it lands the page plans trains only. */
   planBoot(){
@@ -5270,9 +5329,11 @@ class Component extends DCLogic {
     }catch(e){this.setState({pTripErr:'khaali could not issue the pass. Nothing was charged.'});}
     this._passBusy=false;
   }
-  planPaintMap(){
-    const c=this.state.pMapChain,el=document.getElementById('k-planmap');
-    if(!c||!el||!window.L)return;
+  /** The map itself, made once. It exists before any journey does, because a
+      pin has to be droppable on something. */
+  planMapEl(){
+    const el=document.getElementById('k-planmap');
+    if(!el||!window.L)return null;
     const L=window.L;
     if(this._pmap&&this._pmapEl!==el){try{this._pmap.remove();}catch(e){}this._pmap=null;}
     if(!this._pmap){
@@ -5281,8 +5342,36 @@ class Component extends DCLogic {
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
         {maxZoom:16,attribution:'\u00a9 Esri'}).addTo(this._pmap);
       this._pmapEl=el;
+      // one click handler for the life of the map; it does nothing at all
+      // unless she has said which end she is placing
+      this._pmap.on('click',e=>{
+        const w=this.state.pPick;
+        if(!w||!e||!e.latlng)return;
+        this.planUsePoint(w,e.latlng.lat,e.latlng.lng);
+      });
     }
-    const map=this._pmap;
+    return this._pmap;
+  }
+  /** Pick-a-point mode: the map is shown with nothing on it but the city. */
+  planPaintPick(){
+    const map=this.planMapEl();if(!map)return;
+    if(this._plane)this._plane.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    this._plane=[];this._pmapSig=null;
+    const fit=()=>{try{map.invalidateSize(false);map.setView([12.9767,77.5713],11);}catch(e){}};
+    if(!this._pickView){this._pickView=true;fit();setTimeout(fit,80);setTimeout(fit,320);
+      // the map lives below the results; with none it is off the bottom of the
+      // screen, and a map she cannot see is not a map she can tap
+      setTimeout(()=>{const e=document.getElementById('k-planmap');
+        if(e)try{e.scrollIntoView({block:'center',behavior:'smooth'});}catch(x){}},160);}
+    else setTimeout(()=>{try{map.invalidateSize(false);}catch(e){}},80);
+  }
+  planPaintMap(){
+    const c=this.state.pMapChain,el=document.getElementById('k-planmap');
+    if(!c||!el||!window.L)return;
+    const L=window.L;
+    const map=this.planMapEl();
+    if(!map)return;
+    this._pickView=false;
     if(this._plane)this._plane.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
     this._plane=[];
     const add=l=>{this._plane.push(l);return l.addTo(map);};
@@ -5636,7 +5725,29 @@ class Component extends DCLogic {
             border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),
             background:on?'var(--k-14161a)':'var(--k-fff)',
             color:on?'#fff':'var(--k-fg-40434a)'}};}),
-      pMapStyle:{display:S.pMapChain?'block':'none',height:340,borderRadius:11,
+      // ---- anywhere on the map, or wherever she is standing ----
+      pAnyChips:[['from','start'],['to','destination']].map(([k,l])=>({
+        l:(S.pPick===k?'Tap the map for the '+l:'Pin the '+l+' on the map'),
+        onClick:()=>this.planPick(k),
+        style:{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,
+          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Manrope,sans-serif',minHeight:36,
+          border:'1px solid '+(S.pPick===k?'var(--k-d8385a)':'var(--k-dedcd6)'),
+          background:S.pPick===k?'var(--k-d8385a)':'var(--k-fff)',
+          color:S.pPick===k?'#fff':'var(--k-fg-40434a)'}})),
+      pHereChips:[['from','I am starting here'],['to','I am going to where I am']].map(([k,l])=>({
+        l:(S.pGeoBusy===k?'Finding you…':l),
+        onClick:()=>this.planLocate(k),
+        style:{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,
+          padding:'8px 13px',borderRadius:999,font:'700 12.5px/1 Manrope,sans-serif',minHeight:36,
+          border:'1px solid var(--k-dedcd6)',background:'var(--k-fff)',color:'var(--k-fg-40434a)',
+          opacity:S.pGeoBusy===k?.6:1}})),
+      pPickNote:S.pPick?('Tap anywhere on the map below to set the '
+        +(S.pPick==='from'?'start':'destination')
+        +'. khaali names the point from its own data and says what it can plan through near it.'):'',
+      pPickNoteStyle:{display:S.pPick?'block':'none',marginTop:9,padding:'10px 12px',borderRadius:8,
+        background:'var(--k-fdf3f5)',font:'600 12.5px/1.55 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      pMapStyle:{display:(S.pMapChain||S.pPick)?'block':'none',height:340,borderRadius:11,
+        cursor:S.pPick?'crosshair':'grab',
         position:'relative',zIndex:0,
         overflow:'hidden',border:'1px solid var(--k-e6e5e0)',marginTop:14},
       pMapNote:S.pMapChain?('Only the selected journey is drawn. Tap another way to draw that one instead. '
@@ -5673,7 +5784,8 @@ class Component extends DCLogic {
       // the head
       pHeadFrom:F?F.n:'',pHeadTo:T?T.n:'',
       pGeoNote:S.pGeoNote||'',
-      pGeoNoteStyle:{display:S.pGeoNote?'block':'none',marginTop:6,font:'600 12px/1.4 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+      pGeoNoteStyle:{display:S.pGeoNote?'block':'none',marginTop:6,font:'600 12px/1.4 Manrope,sans-serif',
+        color:/^Set the /.test(S.pGeoNote||'')?'var(--k-fg-14663a)':'var(--k-fg-a71f3d)'},
       pHeadSub:(F&&T)?(({rail:'Railway',metro:'Metro',place:'Anywhere'})[F.k]+' to '+({rail:'railway',metro:'metro',place:'anywhere on the map'})[T.k]
         +((R&&R.rows&&R.rows.length)?' \u00b7 '+R.rows.length+(R.rows.length===1?' way to go':' ways to go')
           :(R&&R.kind==='metro')?' \u00b7 one ride, no train':'')):'',
@@ -6482,6 +6594,8 @@ class Component extends DCLogic {
     {const S0=this.state;
       if(S0.page==='plan'&&S0.pMapChain&&this._pmapSig!==this.planMapSig(S0.pMapChain))
         this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
+      else if(S0.page==='plan'&&!S0.pMapChain&&S0.pPick&&!this._pickView)
+        this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintPick(),60);});
       if(S0.page!=='plan')this._pmapSig=null;}
     {const S0=this.state;
       if(S0.page==='bookings'&&this._ordPage!==true){this._ordPage=true;this.loadOrders();}
