@@ -7468,19 +7468,44 @@ class Component extends DCLogic {
     if(!L||!map||!j)return;
     this.planClearTraffic();
     if(!this.state.pTraffic)return;
-    const COL={green:'#1f9d55',yellow:'#e0a516',orange:'#e07b16',red:'#d8385a',unknown:'#9a9a94'};
+    const COL=(j.colours)||{green:'#1f9d55',yellow:'#e0a516',orange:'#e07b16',red:'#d8385a',unknown:'#9a9a94'};
     const half=j.cell/2;
-    this._ptrafficLayers=j.cells.map(c=>{
+    const out=[];
+
+    /* The grey first, and underneath everything.
+       khaali has bus times for 518 squares of Bengaluru and none at all for the
+       rest, and until now the rest simply was not drawn - so a road nobody has
+       ever measured looked exactly like a road measured and found clear. This
+       is the shape of what khaali does not know, and the cells are painted on
+       top of it. It costs four numbers instead of six hundred empty squares. */
+    if(j.bbox){
+      const g=L.rectangle([[j.bbox.south,j.bbox.west],[j.bbox.north,j.bbox.east]],
+        {stroke:false,fillColor:COL.unknown,fillOpacity:0.10,interactive:false});
+      g.addTo(map);try{g.bringToBack();}catch(e){}
+      out.push(g);
+    }
+
+    j.cells.forEach(c=>{
+      /* Every cell in this layer shares one quality - measured for WHERE the
+         road is slow, declared for WHEN - so the disclosure belongs once, on
+         the legend, rather than as texture on five hundred rectangles. Texture
+         per segment is for the layers where the qualities are genuinely mixed:
+         a bus khaali counted beside a bus it modelled, a rail leg somebody
+         booked beside one that was there when the day started. */
+      const soft=c.quality==='simulated';
       const r=L.rectangle([[c.lat-half,c.lng-half],[c.lat+half,c.lng+half]],
-        {stroke:false,fillColor:COL[c.band]||COL.unknown,fillOpacity:c.band==='green'?0.16:0.30,
+        {stroke:false,fillColor:COL[c.band]||COL.unknown,
+         fillOpacity:c.band==='green'?0.16:(soft?0.22:0.30),
          interactive:true});
       r.bindTooltip(c.kmh+' km/h · '+c.band+' · normally '+c.freeKmh
-        +' · '+c.samples+' timed bus segments here');
+        +' · '+c.samples+' timed bus segments here'
+        +(soft?' · the hour is a declared curve, not a measurement':''));
       r.addTo(map);
       // roads go UNDER the journey: the route is still the thing she came for
       try{r.bringToBack();}catch(e){}
-      return r;
+      out.push(r);
     });
+    this._ptrafficLayers=out;
     if(this._ptile)try{this._ptile.bringToBack();}catch(e){}
   }
   /** Take the drawn journey off the map, leaving the city and her two pins. */

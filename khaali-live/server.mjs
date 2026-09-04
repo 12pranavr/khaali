@@ -55,6 +55,7 @@ journey.useBmtc(bmtc);
 import * as metro from './metro.mjs';
 import * as hire from './hire.mjs';
 import * as road from './road.mjs';
+import * as load from './load.mjs';
 import * as traffic from './traffic.mjs';
 import crypto from 'node:crypto';
 
@@ -1743,13 +1744,27 @@ async function api(req, res, url) {
     const at = parseInt(q.get('at'), 10);
     const minute = (at >= 0 && at < 1440) ? at : (simNow().getHours() * 60 + simNow().getMinutes());
     const f = traffic.factorAt(minute);
+    const free = road.freeFlowKmh();
+    // The quality is the CELL's, not a constant. It used to be hard-coded
+    // 'estimated' here, which meant stateOf's grey branch - the one its own
+    // header calls the most dangerous thing this feature could do - could never
+    // reach a screen. And the hour on top of it is a declared citywide curve,
+    // so anything the factor has touched is simulated, not measured.
     const cells = road.cells().map(c => {
       const now = Math.round(c.kmh * f.factor * 10) / 10;
-      const st = road.stateOf({ kmh: now, quality: 'estimated' });
-      return { lat: c.lat, lng: c.lng, kmh: now, freeKmh: c.kmh, samples: c.samples, band: st.band, ratio: st.ratio };
+      const quality = f.quality === 'simulated' ? 'simulated' : 'estimated';
+      const st = load.fromSpeed(now, free, quality);
+      return { lat: c.lat, lng: c.lng, kmh: now, freeKmh: c.kmh, samples: c.samples,
+        band: st.band, load: st.load, quality: st.quality, texture: st.texture,
+        ratio: Math.round(now / free * 100) / 100 };
     });
     return send(res, 200, { ok: true, minute, cell: road.CELL,
-      cells, bands: road.BANDS, freeFlowKmh: road.freeFlowKmh(),
+      cells, bands: road.BANDS, loadBands: load.BANDS, freeFlowKmh: free,
+      // Everything inside this box that is not a cell above is somewhere khaali
+      // has no bus times for. The client draws it grey, underneath, so that the
+      // map's silence reads as silence rather than as clear road.
+      bbox: road.bbox(), unmeasured: 'grey',
+      colours: load.COLOUR, legend: load.legend('road'),
       factor: f.factor, factorQuality: f.quality,
       stats: road.stats(),
       note: 'Where a road is slow is measured from BMTC run times. When it is slow is a declared curve, not a measurement.' });

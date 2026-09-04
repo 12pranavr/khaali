@@ -170,6 +170,9 @@ export function speedBetween(fromLat, fromLng, toLat, toLng, steps = 6) {
  * Configurable, like every other threshold in khaali: per mode, per corridor,
  * per experiment. Nothing else decides a colour.
  */
+// On a speed RATIO, descending: higher is better. load.mjs holds the same
+// three cuts the other way up (load = 1 - ratio), and every mode on the map
+// reads them from there - so these two must agree, and a test asserts they do.
 export const BANDS = { green: 0.80, yellow: 0.55, orange: 0.40 };
 export const OVERRIDES = {};
 
@@ -196,6 +199,27 @@ export function stateOf({ kmh, quality = 'estimated' }, key = null) {
     : ratio >= b.yellow ? 'yellow'
       : ratio >= b.orange ? 'orange' : 'red';
   return { band, ratio };
+}
+
+/**
+ * The rectangle every measured cell sits inside.
+ *
+ * The map needs it to draw the GREY: everything in this box that is not a cell
+ * below is somewhere khaali has no bus times for, and it has to look different
+ * from somewhere khaali measured and found clear. Four numbers rather than the
+ * six hundred and seventy empty cells it would otherwise take to say that.
+ */
+export function bbox() {
+  const F = field();
+  let n = -Infinity, s2 = Infinity, e = -Infinity, w = Infinity;
+  for (const k of F.cells.keys()) {
+    const [a, b] = k.split(':').map(Number);
+    const lat = a * CELL, lng = b * CELL;
+    if (lat > n) n = lat; if (lat < s2) s2 = lat;
+    if (lng > e) e = lng; if (lng < w) w = lng;
+  }
+  if (!F.cells.size) return null;
+  return { north: n + CELL, south: s2 - CELL, east: e + CELL, west: w - CELL };
 }
 
 /** Every cell, for the map overlay. Read-only. */

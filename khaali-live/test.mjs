@@ -23,10 +23,11 @@ import * as RL from './reliability.mjs';
 import * as GP from './gap.mjs';
 import * as PL from './pool.mjs';
 import * as PV from './providers.mjs';
+import * as LD from './load.mjs';
+import * as RD from './road.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
-import * as RD from './road.mjs';
 import * as TR from './traffic.mjs';
 import * as SA from './saarthi.mjs';
 import os from 'os';
@@ -2920,6 +2921,88 @@ t('a provider that answers wrongly is a provider khaali did not hear from', asyn
     PV.forget('g');
   } finally { PV.forget('b'); PV.forget('g'); }
   assert.deepStrictEqual(PV.PROVIDERS, []);
+});
+
+console.log('\none ladder, and the difference between grey and green');
+
+t('a number khaali did not measure cannot colour anything', () => {
+  // road.mjs's own header calls a road drawn green because nobody has driven it
+  // the most dangerous thing this feature could do, and then /api/road passed a
+  // hard-coded quality and made that branch unreachable. This is the guard.
+  for (let x = 0; x <= 1.0001; x += 0.01) {
+    const b = LD.bandOf(x, 'unknown');
+    assert.strictEqual(b.band, 'unknown', 'load ' + x.toFixed(2) + ' coloured itself');
+    assert.strictEqual(b.load, null, 'and it did not keep the number either');
+    assert.strictEqual(b.colour, LD.COLOUR.unknown);
+  }
+  assert.strictEqual(LD.bandOf(null).band, 'unknown');
+  assert.strictEqual(LD.bandOf(undefined).band, 'unknown');
+  assert.strictEqual(LD.bandOf(NaN).band, 'unknown');
+});
+
+t('the ladder reproduces the road bands exactly, so no colour moved', () => {
+  // The refactor is only allowed if nothing anybody has already seen changes.
+  // road bands are on a speed RATIO descending; load is 1 - ratio ascending.
+  const b = LD.BANDS, r = RD.BANDS;
+  assert.strictEqual(Math.round((1 - r.green) * 100) / 100, b.green);
+  assert.strictEqual(Math.round((1 - r.yellow) * 100) / 100, b.yellow);
+  assert.strictEqual(Math.round((1 - r.orange) * 100) / 100, b.orange);
+  // and end to end: the same speed lands on the same band both ways
+  const free = 22.7;
+  for (const kmh of [22, 20, 17, 14, 11, 8]) {
+    const viaRoad = RD.stateOf({ kmh, quality: 'estimated' }).band;
+    const viaLoad = LD.fromSpeed(kmh, free, 'estimated').band;
+    assert.strictEqual(viaLoad, viaRoad, kmh + ' km/h moved from ' + viaRoad + ' to ' + viaLoad);
+  }
+});
+
+t('grey is not a fifth kind of good', () => {
+  assert.strictEqual(LD.fromSpeed(null, 22.7).band, 'unknown');
+  assert.strictEqual(LD.fromSpeed(14, 22.7, 'unknown').band, 'unknown');
+  assert.strictEqual(LD.fromSpeed(14, 0).band, 'unknown', 'and a free-flow of nothing is not a ratio');
+  assert.match(LD.legend().says, /Grey is not green/);
+  assert.strictEqual(LD.WORD.unknown, 'not known');
+});
+
+t('the same colour, drawn two ways, for measured and made up', () => {
+  const counted = LD.bandOf(0.8, 'exact');
+  const guessed = LD.bandOf(0.8, 'simulated');
+  assert.strictEqual(counted.band, guessed.band, 'the congestion is real either way');
+  assert.strictEqual(counted.colour, guessed.colour, 'so the hue is the same');
+  assert.notStrictEqual(counted.texture, guessed.texture, 'and they are never the same object');
+  assert.strictEqual(counted.texture, 'solid');
+  assert.strictEqual(guessed.texture, 'hatch');
+  assert.strictEqual(LD.bandOf(0.8, 'unknown').texture, 'void');
+});
+
+t('a count may raise a band and may never lower one', () => {
+  // Somebody counted people boarding. That says the load is AT LEAST this much;
+  // it says nothing about who was already aboard, so the arithmetic runs one
+  // way. A tap can turn grey red. It can never turn red green.
+  const nothing = LD.bandOf(null, 'unknown');
+  const red = LD.bandOf(0.9, 'simulated');
+  assert.strictEqual(LD.bandAtLeast(nothing, 0.8, 'counted').band, 'red');
+  assert.strictEqual(LD.bandAtLeast(nothing, 0.8, 'counted').atLeast, true);
+  assert.strictEqual(LD.bandAtLeast(red, 0.05, 'counted').band, 'red', 'a small count does not cool it');
+  assert.strictEqual(LD.bandAtLeast(red, 0.05, 'counted').atLeast, false, 'and does not claim to be a bound');
+  assert.strictEqual(LD.bandAtLeast(nothing, 0.02, 'counted').band, 'unknown', 'too few to say anything');
+});
+
+t('metro keeps its own words rather than being renamed', () => {
+  // BMRCL's quiet/busy/crush break at 0.40 and 0.75. Through the road ladder a
+  // station at 0.30 would go yellow and half the line would be renamed.
+  assert.strictEqual(LD.bandOf(0.30, 'predicted', 'metro').band, 'green');
+  assert.strictEqual(LD.bandOf(0.30, 'predicted').band, 'yellow', 'which is what the road ladder would say');
+  assert.strictEqual(LD.bandOf(0.80, 'predicted', 'metro').band, 'red');
+  assert.strictEqual(LD.bandsFor('metro').green, 0.40);
+  assert.strictEqual(LD.bandsFor('road').green, LD.BANDS.green, 'and road takes the default');
+});
+
+t('a journey is as crowded as its worst leg, not its average', () => {
+  const legs = [LD.bandOf(0.1, 'exact'), LD.bandOf(0.9, 'exact'), LD.bandOf(0.2, 'exact')];
+  assert.strictEqual(LD.worstOf(legs).band, 'red', 'an hour sitting does not undo twenty minutes crushed');
+  assert.strictEqual(LD.worstOf([LD.bandOf(null, 'unknown')]), null, 'and nothing known is not a worst');
+  assert.strictEqual(LD.worstOf([]), null);
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');
