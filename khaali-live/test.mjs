@@ -2569,14 +2569,17 @@ t('no profile hands out a free taxi where a bus runs - not even the fastest', ()
   const r = plan(REACHED, ['train', 'metro', 'bus', 'car', 'bike']);
   assert.ok(r.ok);
   CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
-  ['balanced', 'cheapest', 'network', 'comfortable'].forEach(profile => {
+  // `fastest` and `comfortable` are ALLOWED to hire - one asked for speed, the
+  // other asked for comfort, and a car is the comfortable thing in this city.
+  // The three that exist to fill the network must not.
+  ['balanced', 'cheapest', 'network'].forEach(profile => {
     const a = AL.allocate(r.chains, { profile, after: 480 });
     assert.ok(!anyHire(r.chains[a.recommended]),
       profile + ' recommended a hired ride where a bus reaches');
   });
-  // fastest is allowed to, because that is what the passenger asked for - but
-  // it must still be paying the hire penalty, not getting it for nothing
-  assert.ok(AL.WEIGHTS.fastest.hire > 0, 'fastest hires for free');
+  // and whoever does hire is still paying for it, not getting it for nothing
+  assert.ok(AL.hireWeight(AL.WEIGHTS.fastest, 'car') > 0, 'fastest hires a car for free');
+  assert.ok(AL.hireWeight(AL.WEIGHTS.fastest, 'bike') > 0, 'fastest hires a bike for free');
 });
 
 t('a hired ride is charged for, and a long one is refused outright', () => {
@@ -2594,6 +2597,21 @@ t('a hired ride is charged for, and a long one is refused outright', () => {
     assert.ok(a.reason.reasons.some(x => /^RIDE_/.test(x)), a.reason.reasons.join(','));
     assert.ok(/estimate|quote/.test(AL.sentence(a.reason)), AL.sentence(a.reason));
   }
+});
+
+t('Comfortable means a car, and Cheapest means a bike', () => {
+  // A car is the most comfortable thing in the city; a bike is a helmet in
+  // traffic. The two are not one offer, so they are not one penalty.
+  const W = AL.WEIGHTS;
+  assert.ok(AL.hireWeight(W.comfortable, 'car') < AL.hireWeight(W.comfortable, 'bike'),
+    'Comfortable should prefer a car to a bike');
+  assert.ok(AL.hireWeight(W.cheapest, 'bike') < AL.hireWeight(W.cheapest, 'car'),
+    'Cheapest should prefer a bike to a car');
+  // and Comfortable should be willing to hire at all, which it is not if the
+  // penalty is above what a seat is worth to it
+  assert.ok(AL.hireWeight(W.comfortable, 'car') < W.comfortable.seat);
+  // network stays reluctant about both: neither carries anybody else
+  assert.ok(AL.hireWeight(W.network, 'car') > AL.hireWeight(W.balanced, 'car'));
 });
 
 t('khaali does not claim no bus runs there when a bus runs there', () => {

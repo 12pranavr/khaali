@@ -19,25 +19,31 @@ import { pressure, impact } from './capacity.mjs';
 /** Everything in minutes-equivalent: what a rupee, a change, a minute of
     walking, and standing for the ride are worth against a minute of travel. */
 export const WEIGHTS = {
-  balanced:    { time: 1.0, fare: 0.08, change: 8, walk: 1.5, seat: 14, crowd: 24, hire: 18 },
-  fastest:     { time: 1.0, fare: 0.00, change: 2, walk: 1.0, seat: 0,  crowd: 0,  hire: 6  },
-  cheapest:    { time: 0.3, fare: 0.60, change: 3, walk: 0.5, seat: 4,  crowd: 4,  hire: 40 },
-  comfortable: { time: 0.8, fare: 0.04, change: 16, walk: 3.0, seat: 30, crowd: 30, hire: 26 },
-  network:     { time: 1.0, fare: 0.06, change: 8, walk: 1.5, seat: 10, crowd: 48, hire: 30 },
+  balanced:    { time: 1.0, fare: 0.08, change: 8, walk: 1.5, seat: 14, crowd: 24, hire: { car: 20, bike: 20 } },
+  fastest:     { time: 1.0, fare: 0.00, change: 2, walk: 1.0, seat: 0,  crowd: 0,  hire: { car: 6,  bike: 5  } },
+  cheapest:    { time: 0.3, fare: 0.60, change: 3, walk: 0.5, seat: 4,  crowd: 4,  hire: { car: 46, bike: 24 } },
+  comfortable: { time: 0.8, fare: 0.04, change: 16, walk: 3.0, seat: 30, crowd: 30, hire: { car: 7,  bike: 34 } },
+  network:     { time: 1.0, fare: 0.06, change: 8, walk: 1.5, seat: 10, crowd: 48, hire: { car: 34, bike: 34 } },
 };
 
-/** A hired ride is a last resort she opted into, not a convenience the
-    allocator reaches for. It costs nothing to the network and everything to
-    the point of the product, so it carries its own standing penalty - without
-    which `fastest` (fare weight 0.00) would hand out a free taxi every time.
-
-    `comfortable` is among the MOST reluctant, which looks backwards until you
-    remember what it is weighing: a hired vehicle guarantees a seat, so the
-    seat weight of 30 pulls hard toward it - and the comfort of that seat is
-    the one thing khaali cannot check. A bike in Bengaluru traffic is not what
-    somebody choosing Comfortable meant. */
+/**
+ * A hired ride is a last resort she opted into, not a convenience the allocator
+ * reaches for, so it carries a standing penalty - without which `fastest` (fare
+ * weight 0.00) would hand out a free taxi every time.
+ *
+ * The penalty is PER VEHICLE, because a car and a bike are not the same offer:
+ *
+ *   comfortable  a car is the most comfortable thing in the city and is barely
+ *                penalised. A bike is a helmet in traffic in the rain and is
+ *                penalised hard. Choosing Comfortable should get you a car.
+ *   cheapest     the other way round entirely: a bike undercuts a car by half.
+ *   network      both are reluctant. Neither carries anybody else.
+ */
 export const HIRE_MODES = ['car', 'bike'];
 export const isHire = m => HIRE_MODES.includes(m);
+/** The penalty for hiring THIS vehicle on this profile. */
+export const hireWeight = (w, mode) =>
+  (w && w.hire && typeof w.hire === 'object') ? (w.hire[mode] || 0) : (w && w.hire) || 0;
 export const PROFILES = Object.keys(WEIGHTS);
 
 /** The lines the network may never cross on a passenger's behalf. A profile
@@ -78,7 +84,6 @@ const SEAT_COST = { yes: 0, likely: 2, maybe: 6, standing: 14, unknown: 4 };
 const walkKm = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.km || 0), 0);
 const walkMin = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.min || 0), 0);
 export const rideKm = c => c.legs.filter(l => isHire(l.mode)).reduce((s, l) => s + (l.km || 0), 0);
-const rideLegs = c => c.legs.filter(l => isHire(l.mode)).length;
 const seatRank = c => (c.seat && c.seat.rank != null) ? c.seat.rank : -1;
 
 /**
@@ -94,10 +99,11 @@ export function score(c, w, ref) {
     walk: walkMin(c) * w.walk,
     seat: seatW,
   };
-  // hiring is charged per ride and again per kilometre: one short hop to a
-  // station is a different thing from being driven most of the way
-  const nHire = rideLegs(c);
-  if (nHire) passenger.hire = (w.hire || 0) * nHire + rideKm(c) * (w.hire || 0) * 0.25;
+  // charged per ride and again per kilometre, at that vehicle's own rate: one
+  // short hop to a station is a different thing from being driven most of the way
+  const hired = c.legs.filter(l => isHire(l.mode));
+  if (hired.length) passenger.hire = hired.reduce((n, l) =>
+    n + hireWeight(w, l.mode) * (1 + (l.km || 0) * 0.25), 0);
   const network = { crowd: p.value * w.crowd };
   const pCost = Object.values(passenger).reduce((a, b) => a + b, 0);
   const nCost = network.crowd;

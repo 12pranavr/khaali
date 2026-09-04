@@ -682,7 +682,7 @@ export function mile(from, to, after, kmv, opts = {}) {
       return { legs: o.legs, min: o.arrive - after, fare: o.fare, bus: o.legs.find(l => l.mode === 'bus') };
     }
   }
-  const kind = hire.pick(opts.hire || [], { pax: opts.pax || 1, needs: opts.needs || [] });
+  const kind = opts.only || hire.pick(opts.hire || [], { pax: opts.pax || 1, needs: opts.needs || [] });
   if (!kind || kmv > hire.HIRE_MAX_KM) return null;
   // A hired ride is a LAST MILE. Riding thirty-seven kilometres out of the city
   // because that station happened to be on a convenient train is not a last
@@ -692,6 +692,23 @@ export function mile(from, to, after, kmv, opts = {}) {
   if (opts.maxHireKm != null && kmv > opts.maxHireKm) return null;
   const l = hire.leg(kind, from, to, after, kmv, hhmm, dayMin);
   return { legs: [l], min: l.min, fare: l.fare, ride: l };
+}
+
+/**
+ * EVERY way one end can be closed, not just the first.
+ *
+ * A walk is a walk and a named bus is a named bus - one answer each. But when
+ * the answer is a hired vehicle and she has turned on both, a car and a bike
+ * are two different journeys with different fares, speeds and comfort, and the
+ * ranking profile is the thing entitled to choose between them. Handing the
+ * allocator only the cheaper one is deciding on her behalf.
+ */
+export function milesFor(from, to, after, kmv, opts = {}) {
+  const one = mile(from, to, after, kmv, opts);
+  if (!one || !one.ride) return one ? [one] : [];
+  const kinds = hire.allowed(opts.hire || [], { pax: opts.pax || 1, needs: opts.needs || [] });
+  if (kinds.length < 2) return [one];
+  return kinds.map(k => mile(from, to, after, kmv, { ...opts, only: k })).filter(Boolean);
 }
 
 /**
@@ -728,9 +745,10 @@ export function journeysAnywhere(req) {
   const toOpts = { ...mileOpts, maxHireKm: capOf(Ts) };
   const out = []; const tried = { from: [], to: [] }; let anyMile = false;
   Fs.forEach(F => {
-    const first = F ? mile(fromPt, F, req.after || 0, F.km, fromOpts) : null;
-    if (F) tried.from.push({ ...F, reached: !!first, by: byOf(first) });
-    if (F && !first) return;
+    const firsts = F ? milesFor(fromPt, F, req.after || 0, F.km, fromOpts) : [null];
+    if (F) tried.from.push({ ...F, reached: !!firsts.length, by: byOf(firsts[0]) });
+    if (F && !firsts.length) return;
+    firsts.forEach(first => {
     Ts.forEach(T => {
       // a rough allowance for the last mile, so reach-by is honest before the
       // bus - or the car - is known. A hired ride is quicker than a bus, so
@@ -748,21 +766,29 @@ export function journeysAnywhere(req) {
         const legs = c.legs.slice();
         let dep = c.dep, arr = c.arr, fare = c.fare;
         if (first) { legs.unshift(...first.legs); dep = req.after || 0; fare += first.fare; }
-        if (T) {
-          const last = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km, toOpts);
-          if (!last) return;
-          legs.push(...last.legs); arr = c.arr + last.min; fare += last.fare;
-          if (req.by != null && arr > req.by) return;
-        }
-        anyMile = true;
-        const modes = legs.filter(l => l.mode !== 'walk').map(l => l.mode);
-        out.push({ ...c, legs, dep, arr, fare, modes,
-          kind: c.kind + (F ? '|' + F.id : '') + (T ? '|' + T.id : ''),
-          totalMin: ((arr - dep) + 1440) % 1440,
-          depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr)),
-          changes: Math.max(0, modes.length - 1),
-          via: { from: F ? { kind: F.kind, id: F.id, name: F.name, km: F.km } : null, to: T ? { kind: T.kind, id: T.id, name: T.name, km: T.km } : null } });
+        const lasts = T ? milesFor({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km, toOpts) : [null];
+        if (T && !lasts.length) return;
+        lasts.forEach(last => {
+          const legs2 = legs.slice();
+          let arr2 = arr, fare2 = fare;
+          if (last) {
+            legs2.push(...last.legs); arr2 = c.arr + last.min; fare2 = fare + last.fare;
+            if (req.by != null && arr2 > req.by) return;
+          }
+          anyMile = true;
+          const modes = legs2.filter(l => l.mode !== 'walk').map(l => l.mode);
+          // the vehicle is part of the identity: a car and a bike over the same
+          // ground are two choices, and must not collapse into one
+          const ride = [first, last].filter(x => x && x.ride).map(x => x.ride.mode).join('+');
+          out.push({ ...c, legs: legs2, dep, arr: arr2, fare: fare2, modes,
+            kind: c.kind + (F ? '|' + F.id : '') + (T ? '|' + T.id : '') + (ride ? '|' + ride : ''),
+            totalMin: ((arr2 - dep) + 1440) % 1440,
+            depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr2)),
+            changes: Math.max(0, modes.length - 1),
+            via: { from: F ? { kind: F.kind, id: F.id, name: F.name, km: F.km } : null, to: T ? { kind: T.kind, id: T.id, name: T.name, km: T.km } : null } });
+        });
       });
+    });
     });
   });
   Ts.forEach(T => { if (T) { const m = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, req.after || 0, T.km, toOpts); tried.to.push({ ...T, reached: !!m, by: byOf(m) }); } });
@@ -771,7 +797,17 @@ export function journeysAnywhere(req) {
   if (!out.length && (Fs[0] || Ts[0])) return { ok: false, reason: hireKinds.length ? 'no-way' : 'no-bus', tried };
   // the same shape through the same stations at the same times is one choice
   const seen = new Set();
-  const chains = out.filter(c => { const k = c.kind + '|' + c.dep + '|' + c.arr; if (seen.has(k)) return false; seen.add(k); return true; })
-    .sort((a, b) => a.arr - b.arr).slice(0, 14);
+  const uniq = out.filter(c => { const k = c.kind + '|' + c.dep + '|' + c.arr; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.arr - b.arr);
+  const chains = uniq.slice(0, 14);
+  // Offering a car AND a bike doubles the hired journeys, and they are quick,
+  // so they can fill the whole list and push the bus off the bottom of it. The
+  // way there without hiring anything is the one khaali exists to show: if it
+  // did not survive the trim, it takes the last place.
+  const hired = c => c.legs.some(l => hire.isHire(l.mode));
+  if (chains.length === 14 && chains.every(hired)) {
+    const bestNet = uniq.find(c => !hired(c));
+    if (bestNet) chains[13] = bestNet;
+  }
   return { ok: true, chains, tried };
 }

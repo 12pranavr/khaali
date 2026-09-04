@@ -70,15 +70,25 @@ export function minutesFor(kind, km) {
  * quicker through traffic, so it wins when it is allowed; a car is the answer
  * when she is not travelling alone, needs a ramp, or the bike is not offered.
  */
-export function pick(kinds = [], { pax = 1, needs = [] } = {}) {
+export function allowed(kinds = [], { pax = 1, needs = [] } = {}) {
   const stepFree = (needs || []).includes('step-free');
-  const ok = (kinds || []).filter(k => {
+  return (kinds || []).filter(k => {
     const h = HIRE[k];
     if (!h) return false;
     if (pax > h.seats) return false;              // a bike carries one person
     if (stepFree && !h.stepFree) return false;    // and it is never step-free
     return true;
   });
+}
+
+/**
+ * One of them, when only one is wanted. Prefer the bike because it is cheaper -
+ * but note that the planner offers BOTH where both are allowed, and lets the
+ * ranking profile choose: somebody who picked Comfortable wants the car, and
+ * an allocator that never sees a car cannot give her one.
+ */
+export function pick(kinds = [], opts = {}) {
+  const ok = allowed(kinds, opts);
   if (!ok.length) return null;
   return ok.includes('bike') ? 'bike' : ok[0];
 }
