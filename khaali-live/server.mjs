@@ -453,6 +453,12 @@ async function geocode(q, attempt = 0) {
   }
 }
 const geocodeOnce = geocode;
+/** A bus stop or station that is what she said comes before the map. */
+async function findPlace(q) {
+  const st = bmtc.stopNamed(q);
+  if (st) return { lat: st.lat, lng: st.lng, name: st.name, kind: 'bus stop', source: 'BMTC GTFS' };
+  return geocodeRetry(q);
+}
 async function geocodeRetry(q) {
   const a = await geocodeOnce(q, 0);
   if (a) return a;
@@ -1218,6 +1224,10 @@ async function api(req, res, url) {
   // Every sensible way from A to B, with what each costs in time, in money and
   // in standing up. The berth counts come from the real inventory, so the seat
   // a train promises is the same seat the booking page will sell.
+  if (p === '/api/stops') {
+    const qq = String(q.get('q') || '').slice(0, 60);
+    return send(res, 200, { ok: true, stops: bmtc.searchStops(qq, 8) });
+  }
   if (p === '/api/geocode') {
     const qq = String(q.get('q') || '').slice(0, 80);
     if (!qq.trim()) return send(res, 400, { ok: false, error: 'q is required' });
@@ -1232,7 +1242,7 @@ async function api(req, res, url) {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const text = String(b.text || '').slice(0, 400);
     if (!text.trim()) return send(res, 400, { ok: false, error: 'text is required' });
-    const r = await intel.parseIntent(text, { llm: llmFor('intent'), geocode: geocodeRetry });
+    const r = await intel.parseIntent(text, { llm: llmFor('intent'), geocode: findPlace });
     return send(res, 200, r);
   }
   if (p === '/api/explain' && req.method === 'POST') {

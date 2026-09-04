@@ -209,6 +209,9 @@ export async function parseIntent(text, { llm = null, geocode = null } = {}) {
   if (local.timeConstraint) merged.timeConstraint = local.timeConstraint;
   if (local.leaveAfter) merged.leaveAfter = local.leaveAfter;
   if (local.modes) merged.modes = local.modes;
+  // "Shivajinagar bus station" names a place, not a preference: a model that
+  // reads it as "bus only" is overruled when the grammar found no restriction
+  else if (/(bus|metro|railway|train) (station|stand|stop)/i.test(raw)) delete merged.modes;
   merged.preferences = { ...(merged.preferences || {}), ...local.preferences };
   if (local.maxTransfers != null) merged.maxTransfers = local.maxTransfers;
   if (local.accessibility.stepFree) merged.accessibility = { stepFree: true };

@@ -4889,8 +4889,21 @@ class Component extends DCLogic {
   planAddPlace(p){
     const cur=(this.state.pCustom||[]).filter(x=>x.id!==p.id);
     const near=p.near?('nearest: '+p.near.name+', '+p.near.km+' km'):'';
-    cur.unshift({k:'place',id:p.id,n:p.name,sub:'On the map'+(near?' \u00b7 '+near:''),c:'MAP',lat:p.lat,lng:p.lng,near:p.near||null});
+    cur.unshift({k:'place',id:p.id,n:p.name,sub:p.stop?'BMTC bus stop':('On the map'+(near?' \u00b7 '+near:'')),c:p.stop?'BUS':'MAP',lat:p.lat,lng:p.lng,near:p.near||null,stop:!!p.stop});
     this.setState({pCustom:cur.slice(0,12)});
+  }
+  /** BMTC's 9,875 stops, searched by name as she types. */
+  planStopSearch(which,q){
+    q=String(q||'').trim();
+    clearTimeout(this._stopT);
+    if(q.length<2){this.setState({pStops:{...(this.state.pStops||{}),[which]:[]}});return;}
+    this._stopT=setTimeout(async()=>{
+      try{
+        const r=await this.tfetch('/api/stops?q='+encodeURIComponent(q),null,8000);
+        const j=await r.json();
+        if(j&&j.ok)this.setState({pStops:{...(this.state.pStops||{}),[which]:j.stops||[]}});
+      }catch(e){}
+    },220);
   }
   async planGeocode(which,q){
     this.setState({pGeoBusy:which});
@@ -5278,6 +5291,17 @@ class Component extends DCLogic {
           onPick:()=>{this.setState(which==='from'
             ?{pFromK:p.k,pFromId:p.id,pTxtF:null,pOpen:null}
             :{pToK:p.k,pToId:p.id,pTxtT:null,pOpen:null});}}))
+        // bus stops and bus stations, from BMTC's own list
+        .concat(((S.pStops||{})[which]||[]).slice(0,5).map(st=>({n:st.name+(st.hint?' · '+st.hint:''),c:st.station?'BUS STATION':'BUS STOP',km:'bus',
+          row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
+            borderBottom:'1px solid var(--k-f4f3ef)'},
+          nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'#1f6fd0'},
+          kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
+          onPick:()=>{
+            this.planAddPlace({id:st.id,name:st.name,lat:st.lat,lng:st.lng,near:null,stop:true});
+            this.setState(which==='from'?{pFromK:'place',pFromId:st.id,pTxtF:null,pOpen:null}
+              :{pToK:'place',pToId:st.id,pTxtT:null,pOpen:null});}})))
         // anywhere else: ask the map
         .concat(q.length>=3?[{n:(S.pGeoBusy===which?'Looking for ':'Search the map for ')+'\u201c'+txt.trim()+'\u201d',c:'MAP',km:'',
           row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
@@ -5397,8 +5421,8 @@ class Component extends DCLogic {
       // the form
       pFromTxt:S.pTxtF!=null?S.pTxtF:(F?F.n:''),
       pToTxt:S.pTxtT!=null?S.pTxtT:(T?T.n:''),
-      setPFromTxt:e=>this.setState({pTxtF:e.target.value,pOpen:'from'}),
-      setPToTxt:e=>this.setState({pTxtT:e.target.value,pOpen:'to'}),
+      setPFromTxt:e=>{this.setState({pTxtF:e.target.value,pOpen:'from'});this.planStopSearch('from',e.target.value);},
+      setPToTxt:e=>{this.setState({pTxtT:e.target.value,pOpen:'to'});this.planStopSearch('to',e.target.value);},
       openPFrom:()=>{this.planBoot();this.setState({pOpen:'from'});},
       openPTo:()=>{this.planBoot();this.setState({pOpen:'to'});},
       pFromSuggs:suggs('from'),pToSuggs:suggs('to'),

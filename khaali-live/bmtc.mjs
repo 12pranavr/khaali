@@ -116,3 +116,59 @@ export function directBus({ fromLat, fromLng, toLat, toLng, after = 0, within = 
 
 /** How many stops and routes are loaded - for /api/meta and the tests. */
 export function stats() { const D = data(); return { stops: D.stops.length, routes: D.routes.length, patterns: D.routes.reduce((n, r) => n + r.p.length, 0), source: D.source }; }
+
+/** Stops by name, for the pickers. Platform variants of one station collapse
+    to one entry; the many stops sharing a name collapse to the first. */
+const base = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// Kannada transliteration keeps or drops a final a - per word ("Shivajinagara
+// Bus Station") or only at the end ("Indira Nagar" for "Indiranagara"). Both
+// forms of both sides are compared, with spaces removed.
+const forms = t => { const b = base(t); return [b.replace(/a$/, ''), b.replace(/a\b/g, '')].map(x => x.replace(/ /g, '')); };
+const normName = t => base(t).replace(/a$/, '');
+export function searchStops(q, limit = 8) {
+  const D = data();
+  const needle = normName(q); const nf = forms(q);
+  if (needle.length < 2) return [];
+  const seen = new Map();
+  const score = (n, name) => {
+    const f = forms(name);
+    if (f.some(x => nf.some(y => x.startsWith(y)))) return 0;
+    if (n.split(' ').some(w => w.startsWith(needle))) return 1;
+    if (f.some(x => nf.some(y => x.includes(y)))) return 2;
+    return -1;
+  };
+  D.stops.forEach((s, si) => {
+    const name = s[1].replace(/\s*-\s*platform.*$/i, '').trim();
+    const n = normName(name);
+    const sc = score(n, name);
+    if (sc < 0) return;
+    const isStation = /bus station|bus stand|ttmc|depot/i.test(name) ? 0 : 1;
+    // two stops with one name a street apart are one place; ten kilometres
+    // apart they are two places, and both are kept - Bengaluru has twins
+    const key = n + '|' + Math.round(s[2] / 0.02) + ':' + Math.round(s[3] / 0.02);
+    const cur = seen.get(key);
+    if (!cur) seen.set(key, { n: name, lat: s[2], lng: s[3], sc, isStation, routes: (D.at.get(si) || []).length });
+    else cur.routes += (D.at.get(si) || []).length;
+  });
+  return [...seen.values()].sort((a, b) => a.sc - b.sc || a.isStation - b.isStation || b.routes - a.routes || a.n.length - b.n.length).slice(0, limit)
+    .map(x => ({ kind: 'stop', id: x.lat.toFixed(5) + ',' + x.lng.toFixed(5), name: x.n, lat: x.lat, lng: x.lng, station: x.isStation === 0,
+      routes: x.routes, hint: whereabouts(x.lat, x.lng) }));
+}
+/** "6 km E of Majestic" - enough to tell twins apart. */
+const MAJESTIC = { lat: 12.97567, lng: 77.57281 };
+export function whereabouts(lat, lng) {
+  const d = km(MAJESTIC, { lat, lng });
+  if (d < 0.8) return 'at Majestic';
+  const ang = Math.atan2(lat - MAJESTIC.lat, (lng - MAJESTIC.lng) * Math.cos(lat * Math.PI / 180)) * 180 / Math.PI;
+  const dirs = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
+  const dir = dirs[Math.round(((ang + 360) % 360) / 45) % 8];
+  return Math.round(d) + ' km ' + dir + ' of Majestic';
+}
+/** A stop that IS what she said - "Kempegowda Bus Station", "Depot-06
+    Indiranagara", "Shivajinagar bus station" - or null. */
+export function stopNamed(q) {
+  const nf = forms(q);
+  if (!nf[0]) return null;
+  const hits = searchStops(q, 5);
+  return hits.find(x => { const f = forms(x.name); return f.some(a => nf.some(b => a === b || a === b + 'busstation' || a === b + 'busstand')); }) || null;
+}

@@ -1375,6 +1375,12 @@ the page says so and names the stations it tried. It never says "take an
 auto": a planner that has the whole bus timetable and answers with an auto
 has not done its job.
 
+The pickers offer BMTC's bus stops and bus stations beside the railway
+stations and metro stops, searched by name as you type, with "7 km E of
+Majestic" beside each so that the two stops Bengaluru calls Indiranagara -
+one east, one ten kilometres north-west - are never confused. A stop named in
+a sentence ("from Kempegowda Bus Station") is found the same way.
+
 **Leave after** and **Reach by** are two separate things, and both count:
 the clock starts at one, the search is cut off at the other, and each has
 its chips and a custom time. The sentence reads both ("after 8 by 10").
