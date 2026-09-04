@@ -99,6 +99,20 @@ h1.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-wei
 .ki-go{border:0;background:#fff;color:#0A0A0A;font:700 13px/1 Archivo,sans-serif;
   padding:11px 16px;border-radius:10px;cursor:pointer;flex:none;white-space:nowrap}
 .ki-go:hover,.ki-go:focus-visible{background:#CFE9E1;outline:none}
+/* Folded away: a bar at the edge, still carrying its colour. The box around
+   it is a thumb's worth of target; the bar itself is the only thing seen. */
+.ki-handle{pointer-events:auto;cursor:grab;background:none;border:0;padding:8px 10px;
+  display:flex;align-items:center;justify-content:center;line-height:0}
+.ki-handle i{display:block;width:6px;height:46px;border-radius:999px;background:#6E6E73;
+  box-shadow:0 2px 8px rgba(10,10,10,.28);transition:background .18s,height .18s}
+.ki-handle:hover i,.ki-handle:focus-visible i{height:54px}
+.ki-handle:focus-visible{outline:none}
+.ki-grab{cursor:grab;touch-action:none}
+.ki-grab:active,.ki-handle:active{cursor:grabbing}
+.ki-dragging{user-select:none}
+.ki-fold{margin-left:2px;border:0;background:transparent;padding:4px 2px;cursor:pointer;
+  display:flex;align-items:center;opacity:.55;transition:opacity .18s}
+.ki-fold:hover,.ki-fold:focus-visible{opacity:1;outline:none}
 @media (max-width:640px){.ki-wrap{top:var(--ki-top,150px)}.ki-card{border-radius:20px;padding:16px}}
 /* The plan page: the question on the left, and it stays there. */
 .k-planshell{display:grid;grid-template-columns:396px minmax(0,1fr);gap:18px;align-items:start}
@@ -625,14 +639,21 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
 <div class="ki-wrap" style="{{ isleWrap }}">
 
-  <div class="ki-pill" onClick="{{ isleOpenIt }}" onKeyDown="{{ isleKey }}" tabindex="0" role="button" aria-label="Open the update" style="{{ islePill }}">
+  <div class="ki-handle ki-grab" onClick="{{ isleUnfold }}" onKeyDown="{{ isleKey }}" onPointerDown="{{ isleGrab }}" tabindex="0" role="button" aria-label="Show the update" style="{{ isleHandle }}">
+    <i style="{{ isleHandleBar }}"></i>
+  </div>
+
+  <div class="ki-pill ki-grab" onClick="{{ isleOpenIt }}" onKeyDown="{{ isleKey }}" onPointerDown="{{ isleGrab }}" tabindex="0" role="button" aria-label="Open the update" style="{{ islePill }}">
     <span class="ki-dot"><i style="{{ isleHue }}"></i><b style="{{ isleHue }}"></b></span>
     <span class="ki-title">{{ isleTitle }}</span>
     <span class="ki-right">{{ isleRight }}</span>
+    <span class="ki-fold" onClick="{{ isleFoldIt }}" onKeyDown="{{ isleKey }}" tabindex="0" role="button" aria-label="Fold away">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 2 4 7l5 5" stroke="#9AA6BC" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </span>
   </div>
 
   <div class="ki-card" role="dialog" aria-modal="false" aria-label="khaali update" style="{{ isleCard }}">
-    <div style="display:flex;align-items:center;gap:12px">
+    <div class="ki-grab" onPointerDown="{{ isleGrab }}" style="display:flex;align-items:center;gap:12px">
       <span class="ki-dot"><i style="{{ isleHue }}"></i><b style="{{ isleHue }}"></b></span>
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
         <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">{{ isleTitle }}</span>
@@ -3681,8 +3702,13 @@ class Component extends DCLogic {
         this.setState({stnOpen:null,fromTxt:null,toTxt:null});};
     document.addEventListener('mousedown',this._sd);
     // the island must clear the header rather than assume its height
+    try{const at=JSON.parse(localStorage.getItem('khaali-island')||'null');
+      if(at&&typeof at.x==='number')this.setState({isleAt:{x:at.x,y:at.y},isleFold:!!at.fold});}catch(e){}
     this._isleFit=()=>{const h=document.querySelector('.k-topbar');
-      if(h)document.documentElement.style.setProperty('--ki-top',(h.offsetHeight+12)+'px');};
+      if(h)document.documentElement.style.setProperty('--ki-top',(h.offsetHeight+12)+'px');
+      const at=this.state.isleAt;
+      if(at){const c=this.islandClamp(at.x,at.y);
+        if(c.x!==at.x||c.y!==at.y){this.setState({isleAt:c});this.islandRemember(c);}}};
     this._isleFit();
     window.addEventListener('resize',this._isleFit);
     setTimeout(this._isleFit,400);
@@ -3901,9 +3927,12 @@ class Component extends DCLogic {
     if(!sig)return {isleWrap:gone,islePill:gone,isleCard:gone,isleDots:[],isleFields:[],
       isleTitle:'',isleRight:'',isleSub:'',isleLine:'',isleStatus:'',isleStatusStyle:gone,
       islePlabel:'',islePctText:'',isleGoLabel:'',isleGridStyle:gone,isleHue:{},
-      isleOpenIt:()=>{},isleCloseIt:()=>{},isleGo:()=>{},isleKey:()=>{}};
+      isleHandle:gone,isleHandleBar:{},
+      isleOpenIt:()=>{},isleCloseIt:()=>{},isleGo:()=>{},isleKey:()=>{},
+      isleGrab:()=>{},isleFoldIt:()=>{},isleUnfold:()=>{}};
 
-    const open=!!S.isleOpen;
+    const open=!!S.isleOpen, folded=!!S.isleFold&&!open;
+    const at=S.isleAt||null;
     const HUE={warn:'#F0C96B',ok:'#7FE0AE',info:'#7FB2FF'}[sig.tone]||'#7FB2FF';
     const TONE={warn:{bg:'#F7EDD8',fg:'#7A5210'},ok:{bg:'#DDF0E6',fg:'#14603B'},
       info:{bg:'#E9EEF6',fg:'#1B3A6B'}}[sig.statusTone||'info']||{bg:'#E9EEF6',fg:'#1B3A6B'};
@@ -3913,8 +3942,11 @@ class Component extends DCLogic {
       pass:'Show the pass',alert:'See your stars'}[sig.kind]||'Show me';
 
     return {
-      isleWrap:{},
-      islePill:{display:open?'none':'flex'},
+      // where she left it, if she has moved it; otherwise centred under the header
+      isleWrap:at?{left:at.x+'px',top:at.y+'px',right:'auto',padding:0,justifyContent:'flex-start'}:{},
+      isleHandle:{display:folded?'flex':'none'},
+      isleHandleBar:{background:HUE},
+      islePill:{display:(open||folded)?'none':'flex'},
       isleCard:{display:open?'flex':'none'},
       isleHue:{background:HUE},
       isleTitle:sig.title,isleRight:sig.right,isleSub:sig.sub,
@@ -3934,16 +3966,84 @@ class Component extends DCLogic {
         padding:'6px 10px',borderRadius:6,whiteSpace:'nowrap',
         background:TONE.bg,color:TONE.fg},
       isleGoLabel:label,
-      isleOpenIt:()=>this.islandOpen(),
+      isleOpenIt:()=>{if(this._isleMoved)return;this.islandOpen();},
       isleCloseIt:()=>this.islandClose(),
+      isleFoldIt:e=>{if(e&&e.stopPropagation)e.stopPropagation();
+        this.setState({isleFold:true,isleOpen:false});this.islandRemember(null,true);},
+      isleUnfold:()=>{if(this._isleMoved)return;
+        this.setState({isleFold:false});this.islandRemember(null,false);},
+      isleGrab:e=>this.islandGrab(e),
       isleGo:()=>{this.islandClose();try{sig.go();}catch(e){}},
       // a pill you can reach with a keyboard is a pill you can reach at all
       isleKey:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();
+        if(this.state.isleFold)return this.setState({isleFold:false});
         this.setState({isleOpen:!this.state.isleOpen});}},
     };
   }
+  /**
+   * Pick the island up.
+   *
+   * A drag and a tap start identically, so the two are told apart by distance:
+   * under four pixels it was a tap and the click that follows is allowed
+   * through, over four it was a drag and the click is swallowed. The element
+   * is moved directly while the finger is down - going through setState for
+   * every pointermove would be sixty renders a second for a position nothing
+   * else reads.
+   */
+  islandGrab(e){
+    if(!e||e.button===1||e.button===2)return;
+    const wrap=document.querySelector('.ki-wrap');if(!wrap)return;
+    const box=wrap.getBoundingClientRect();
+    const ox=e.clientX-box.left, oy=e.clientY-box.top;
+    const x0=e.clientX, y0=e.clientY;
+    this._isleMoved=false;
+    document.body.classList.add('ki-dragging');
+    const put=(x,y)=>{const c=this.islandClamp(x,y,wrap);
+      wrap.style.left=c.x+'px';wrap.style.top=c.y+'px';
+      wrap.style.right='auto';wrap.style.padding='0';wrap.style.justifyContent='flex-start';
+      return c;};
+    let last=null;
+    const move=ev=>{
+      if(!this._isleMoved&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<4)return;
+      this._isleMoved=true;
+      last=put(ev.clientX-ox,ev.clientY-oy);
+    };
+    const up=()=>{
+      window.removeEventListener('pointermove',move);
+      window.removeEventListener('pointerup',up);
+      window.removeEventListener('pointercancel',up);
+      document.body.classList.remove('ki-dragging');
+      if(last){this.setState({isleAt:last});this.islandRemember(last);}
+      // let the click that ends a real drag pass by without opening anything
+      setTimeout(()=>{this._isleMoved=false;},0);
+    };
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',up);
+    window.addEventListener('pointercancel',up);
+  }
+  /** Where she left it, and how she left it. */
+  islandRemember(at,fold){
+    const a=at||this.state.isleAt;if(!a)return;
+    const f=fold==null?!!this.state.isleFold:fold;
+    try{localStorage.setItem('khaali-island',JSON.stringify({x:a.x,y:a.y,fold:f}));}catch(e){}
+  }
+  /** Never off the edge, whatever the window does next. */
+  islandClamp(x,y,wrap){
+    const el=wrap||document.querySelector('.ki-wrap');
+    const w=(el&&el.firstElementChild)?Math.max(...[...el.children]
+      .filter(c=>c.offsetParent!==null).map(c=>c.offsetWidth).concat([40])):40;
+    const h=(el&&el.firstElementChild)?Math.max(...[...el.children]
+      .filter(c=>c.offsetParent!==null).map(c=>c.offsetHeight).concat([40])):40;
+    return {x:Math.max(4,Math.min(x,innerWidth-w-4)),
+      y:Math.max(4,Math.min(y,innerHeight-h-4))};
+  }
   islandOpen(){
-    this.setState({isleOpen:true});
+    this.setState({isleOpen:true,isleFold:false});
+    // the card is a good deal taller than the pill: opening one left near the
+    // bottom of the window would put half of it off the screen
+    if(this.state.isleAt)setTimeout(()=>{const at=this.state.isleAt;if(!at)return;
+      const c=this.islandClamp(at.x,at.y);
+      if(c.x!==at.x||c.y!==at.y)this.setState({isleAt:c});},40);
     if(!this._isleEsc){
       this._isleEsc=e=>{if(e.key==='Escape'&&this.state.isleOpen)this.islandClose();};
       document.addEventListener('keydown',this._isleEsc);
