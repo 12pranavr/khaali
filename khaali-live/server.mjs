@@ -329,6 +329,12 @@ const narrCache = new Map();
 // token; we ask Supabase whose it is. A verified token is remembered for ten
 // minutes so this costs one round trip per session, not per tap.
 const SUPA_URL = process.env.SUPABASE_URL || 'https://bqzbdajkrtbuovhjimvp.supabase.co';
+// The basemap key, the same way every other key is read here: the environment
+// first (Railway: Variables), then a gitignored file for a laptop. An unset key
+// is not an error - it is OpenStreetMap's own tiles instead, which have names
+// on them too and want nothing from anybody.
+const CARTO_KEY = (process.env.CARTO_KEY || '').trim()
+  || (() => { try { return fs.readFileSync(path.join(DIR, '.carto-key'), 'utf8').trim(); } catch { return ''; } })();
 const SUPA_ANON = process.env.SUPABASE_ANON_KEY || 'sb_publishable_RGMBcLx0VUY1-5vfm___-Q_5ryOV-y0';
 const tokenCache = new Map();                       // token -> { email, at }
 
@@ -846,6 +852,14 @@ async function api(req, res, url) {
         lat: GEO[i].lat, lng: GEO[i].lng,
       })),
       corridorKm: ST[ST.length - 1].km,
+      // The basemap key travels with the coordinates because they are wanted at
+      // the same moment. A raster basemap key is read by the browser out of a
+      // tile URL and is public by construction - it is domain-scoped at CARTO,
+      // not secret - but it is still an account's key, so it lives in the
+      // environment and never in the repository. Without one the tiles come
+      // back stamped API KEY REQUIRED, so khaali falls back to a basemap that
+      // needs none rather than showing a watermark.
+      basemap: CARTO_KEY ? { provider: 'carto', key: CARTO_KEY } : { provider: 'osm' },
     });
   }
 
