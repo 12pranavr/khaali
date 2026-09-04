@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · drive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* A driver reads this at a junction with the engine running. Big numbers,
+     one thumb, and never a wall of text. */
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0f13;color:#e8e9ee;font-family:Manrope,system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 18px 40px}
+  .brand{font:800 18px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .brand span{color:#d8385a}
+  .brand small{display:block;font:600 9.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c828f;margin-top:4px}
+  .state{margin-top:18px;border-radius:16px;padding:22px;text-align:center;
+    border:1px solid #222836;background:#151922}
+  .state.good{background:#0f2b1b;border-color:#1f5a38}
+  .state.bad{background:#2c1219;border-color:#5a1f2e}
+  .state.off{background:#2a2413;border-color:#5a4a1f}
+  .word{font:800 30px/1.05 Manrope,sans-serif;letter-spacing:-.02em}
+  .good .word{color:#5bd48b}.bad .word{color:#f2a6b6}.off .word{color:#e0a419}
+  .sub{font:600 13.5px/1.5 Manrope,sans-serif;color:#b9bfcc;margin-top:8px}
+  .card{background:#151922;border:1px solid #222836;border-radius:12px;padding:16px;margin-top:12px}
+  .card.live{border-color:#5a1f2e;background:#191219}
+  .card.mine{border-color:#1f5a38;background:#101a15}
+  .lbl{font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;
+    color:#7c828f;margin-bottom:8px;display:flex;justify-content:space-between;gap:10px}
+  .row{display:flex;gap:12px;align-items:baseline;padding:8px 0;border-top:1px solid #1c202a}
+  .row:first-of-type{border-top:none}
+  .k{flex:none;width:98px;font:600 12px/1.5 Manrope,sans-serif;color:#7c828f}
+  .v{flex:1;font:600 13.5px/1.5 Manrope,sans-serif}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .spot{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #1c202a}
+  .spot:first-of-type{border-top:none}
+  .dot{width:9px;height:9px;border-radius:99px;flex:none}
+  .spot .who{flex:1;min-width:0}
+  .spot .place{font:700 14.5px/1.3 Manrope,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spot .when{font:600 11px/1.5 'IBM Plex Mono',monospace;color:#7c828f;letter-spacing:.06em;margin-top:2px}
+  .spot .num{flex:none;text-align:right}
+  .spot .big{font:800 21px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .spot .of{font:600 10px/1.5 'IBM Plex Mono',monospace;color:#7c828f;margin-top:3px;letter-spacing:.06em}
+  .says{font:500 11.5px/1.6 Manrope,sans-serif;color:#8d94a3;padding:2px 0 10px}
+  .chip{display:inline-block;font:700 8.5px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;
+    text-transform:uppercase;padding:4px 6px;border-radius:5px;background:#232838;color:#8d94a3;margin-left:6px}
+  button{border:none;border-radius:12px;padding:18px 12px;cursor:pointer;width:100%;
+    font:800 15px/1.2 Manrope,sans-serif;color:#fff;min-height:58px;margin-top:12px;background:#d8385a}
+  button.ok{background:#1f6f45}
+  button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
+  button:disabled{opacity:.45;cursor:default}
+  .note{font:500 11.5px/1.7 Manrope,sans-serif;color:#7c828f;margin-top:16px}
+  .note b{color:#b9bfcc;font-weight:700}
+  @keyframes flash{0%{transform:scale(.98)}40%{transform:scale(1.02)}100%{transform:scale(1)}}
+  .state.pop{animation:flash .28s ease-out}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">khaali<span>.</span><small>last-mile demand &middot; simulated</small></div>
+  <div id="state" class="state"><div class="word">Opening&hellip;</div></div>
+  <div id="offers"></div>
+  <div id="demand"></div>
+  <div class="note" id="foot"></div>
+</div>
+
+<script>
+/* Who this driver is, as far as khaali is concerned: an id this phone made up
+   for itself, the same way the passenger app mints khaali-who. khaali holds no
+   driver account, has not checked that anybody here drives anything, and has
+   never seen a licence. The id is a handle so a ride you took stays yours - it
+   is not an identity and it is not a verification. */
+const ME = (() => {
+  try {
+    let v = localStorage.getItem('khaali-drive');
+    if (!v) { v = 'd' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4); localStorage.setItem('khaali-drive', v); }
+    return v;
+  } catch (e) { return 'd' + Math.random().toString(16).slice(2, 10); }
+})();
+
+const $ = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild || d; };
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const mins = (ms) => Math.max(0, Math.round(ms / 60000));
+
+let spots = [], offers = [], head = null, busy = false, saidAt = 0, here = null;
+
+function setState(cls, word, sub, quiet) {
+  if (!quiet) saidAt = Date.now();
+  const el = document.getElementById('state');
+  el.className = 'state ' + cls + ' pop';
+  el.innerHTML = '<div class="word">' + esc(word) + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '');
+  setTimeout(() => el.classList.remove('pop'), 300);
+}
+
+const tone = (w) => w === 'HIGH' ? '#5bd48b' : w === 'MEDIUM' ? '#e0a419' : '#f2a6b6';
+
+function render() {
+  /* The five-second poll must never wipe something this driver was just told.
+     A ride lost to somebody else that flickers back into "Accept", or a
+     confirmation that vanishes while they are still reading it, is worse than
+     a page that says nothing. Same rule the conductor's page runs on. */
+  const say = (Date.now() - saidAt > 6000) ? setState : (() => {});
+
+  const mine = offers.filter(o => o.mine && o.status !== 'done');
+  const open = offers.filter(o => o.status === 'offered');
+  if (mine.length) {
+    const o = mine[0];
+    say('good', o.status === 'arrived' ? 'You are there' : 'Yours',
+      esc(o.holder || 'A passenger') + ' &middot; ' + esc(o.from) + ' &rarr; ' + esc(o.to));
+  } else if (open.length) {
+    say('bad', open.length === 1 ? 'One ride waiting' : open.length + ' rides waiting',
+      'First to accept gets it.');
+  } else if (spots.length) {
+    const s = spots[0];
+    say('off', s.floor > 0 ? s.floor + '–' + s.ceiling + ' at ' + esc(s.at) : 'Nothing waiting yet',
+      s.floor > 0 ? esc(s.windowText) + ' &middot; nobody has booked a ride yet' : 'Demand below, no ride asked for.');
+  } else {
+    say('off', 'Quiet', 'Nobody has booked a journey that ends off the network in the next hour and a half.');
+  }
+
+  // ---- the offers, which are people, not counts ----
+  const ob = document.getElementById('offers');
+  ob.innerHTML = '';
+  for (const o of offers.slice(0, 6)) {
+    const done = o.status === 'done' || o.status === 'cancelled';
+    const c = $('<div class="card ' + (o.mine ? 'mine' : 'live') + '"></div>');
+    c.appendChild($('<div class="lbl"><span>' +
+      (o.mine ? (o.status === 'cancelled' ? 'Cancelled by the passenger'
+        : o.status === 'done' ? 'Finished' : o.status === 'arrived' ? 'You are at the pickup' : 'Yours')
+        : 'Ride waiting') +
+      '</span><span>' + (o.status === 'offered' ? mins(o.msLeft) + ' min left' : esc(o.code)) + '</span></div>'));
+    c.appendChild($('<div class="row"><div class="k">Passenger</div><div class="v">' + esc(o.holder || 'A passenger') + '</div></div>'));
+    c.appendChild($('<div class="row"><div class="k">Pick up</div><div class="v">' + esc(o.from) + '</div></div>'));
+    c.appendChild($('<div class="row"><div class="k">Drop</div><div class="v">' + esc(o.to) + '</div></div>'));
+    c.appendChild($('<div class="row"><div class="k">Distance</div><div class="v">' + esc(o.km) + ' km' +
+      (o.pax > 1 ? ' &middot; ' + o.pax + ' people' : '') + '</div></div>'));
+    c.appendChild($('<div class="row"><div class="k">Fare</div><div class="v">&#8377;' + esc(o.fareMin) +
+      '&ndash;&#8377;' + esc(o.fareMax) + '<span class="chip">bike to car</span></div></div>'));
+    if (o.mine && o.status === 'accepted') {
+      const b = $('<button class="ok">I am at the pickup</button>');
+      b.onclick = () => act(o.id, 'arrived'); c.appendChild(b);
+    } else if (o.mine && o.status === 'arrived') {
+      const b = $('<button class="ok">Dropped them</button>');
+      b.onclick = () => act(o.id, 'done'); c.appendChild(b);
+    } else if (!done && o.status === 'offered') {
+      const b = $('<button>Accept this ride</button>');
+      b.disabled = busy;
+      b.onclick = () => act(o.id, 'accept'); c.appendChild(b);
+    }
+    ob.appendChild(c);
+  }
+
+  // ---- the map: where demand is, not who is going ----
+  const db = document.getElementById('demand');
+  db.innerHTML = '';
+  const card = $('<div class="card"></div>');
+  card.appendChild($('<div class="lbl"><span>Where the buses stop</span><span>' +
+    (head ? 'next 90 min' : '') + '</span></div>'));
+  card.appendChild($('<div class="says">khaali is not assigning anyone. This is where demand is, not who is going.</div>'));
+  if (!spots.length) {
+    card.appendChild($('<div class="says">' + esc(head ? head.says : 'Loading…') + '</div>'));
+  }
+  for (const s of spots) {
+    card.appendChild($('<div class="spot">' +
+      '<span class="dot" style="background:' + tone(s.word) + '"></span>' +
+      '<div class="who"><div class="place">' + esc(s.at) +
+        (s.seed ? '<span class="chip">demo</span>' : s.partSeed ? '<span class="chip">part demo</span>' : '') +
+        '</div><div class="when">' + esc(s.windowText) +
+        (s.away != null ? ' &middot; ' + esc(s.away) + ' km away' : '') + '</div></div>' +
+      '<div class="num"><div class="big">' + (s.floor > 0 ? esc(s.floor) + '–' + esc(s.ceiling) : esc(s.ceiling)) +
+        '</div><div class="of">' + (s.floor > 0 ? 'no bus at all' : 'a bus exists') + '</div></div>' +
+      '</div>'));
+  }
+  db.appendChild(card);
+
+  document.getElementById('foot').innerHTML =
+    '<b>What this page is.</b> A stand-in for the screen a driver&rsquo;s own app would show. ' +
+    'The counts are journeys people actually planned and booked in khaali, bucketed by the place the last ' +
+    'stretch starts from and the half hour it starts in. The lower number is the people with no bus at all; ' +
+    'the higher one adds the people who could take a slower bus and might not. Neither is a guess and neither ' +
+    'is a percentage.<br><br>' +
+    '<b>What khaali does not know.</b> Whether any of them turn up. It has never measured that, so it does ' +
+    'not say. Places with fewer than ' + (head ? head.floor : 3) + ' people booked are not shown at all &mdash; ' +
+    'that is not a hotspot, it is those people.<br><br>' +
+    '<b>What has not happened.</b> No driver has been dispatched to anybody. No fare has moved. khaali owns ' +
+    'no vehicle, employs no driver, and has not checked that anyone reading this drives anything. Rows marked ' +
+    'demo are seeded so the map is not blank; they are real questions asked of the real BMTC timetable, but ' +
+    'nobody booked them.';
+}
+
+async function act(id, what) {
+  if (busy) return; busy = true; render();
+  try {
+    const r = await fetch('/api/offers/' + encodeURIComponent(id) + '/' + what, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ driver: ME }) });
+    const j = await r.json();
+    busy = false;
+    if (j.offer) offers = offers.map(o => o.id === id ? j.offer : o);
+    if (!j.ok) {
+      render();
+      setState('bad', j.reason === 'taken' ? 'Somebody else took it'
+        : j.reason === 'expired' ? 'That one lapsed'
+        : j.reason === 'already-holding' ? 'Finish your ride first'
+        : 'No',
+        j.reason === 'taken' ? 'It went to another driver a moment ago. Nothing you did wrong.'
+        : j.reason === 'expired' ? 'Nobody took it in five minutes, so it is off the board.'
+        : esc(j.error || j.reason));
+      return;
+    }
+    render();
+    setState('good', what === 'accept' ? 'It is yours' : what === 'arrived' ? 'Marked as there' : 'Done',
+      what === 'accept' ? 'The passenger can see that somebody is coming.'
+      : what === 'done' ? 'Nothing was charged. khaali moved no money for this.'
+      : 'They know you are waiting.');
+  } catch (e) {
+    busy = false; render();
+    setState('bad', 'No signal', 'Could not reach khaali. Try again in a moment.');
+  }
+}
+
+async function pull() {
+  if (busy) return;
+  try {
+    const near = here ? '?lat=' + here.lat + '&lng=' + here.lng : '';
+    const [d, o] = await Promise.all([
+      fetch('/api/demand' + near).then(r => r.json()),
+      fetch('/api/offers?driver=' + encodeURIComponent(ME)).then(r => r.json()),
+    ]);
+    head = d; spots = d.hotspots || []; offers = o.offers || [];
+    render();
+  } catch (e) { /* a poll that fails leaves the last true answer on screen */ }
+}
+
+// Where the driver is, if they say so - it only sorts the list by distance and
+// is never sent anywhere else.
+try {
+  navigator.geolocation && navigator.geolocation.getCurrentPosition(
+    p => { here = { lat: +p.coords.latitude.toFixed(4), lng: +p.coords.longitude.toFixed(4) }; pull(); },
+    () => {}, { timeout: 6000, maximumAge: 300000 });
+} catch (e) { /* no location, and the list is still ordered by time */ }
+
+pull();
+setInterval(pull, 5000);
+</script>
+</body>
+</html>

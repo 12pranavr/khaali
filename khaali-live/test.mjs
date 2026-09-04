@@ -16,6 +16,8 @@ import * as AL from './allocate.mjs';
 import * as IN from './intel.mjs';
 import * as SIM from './sim.mjs';
 import * as JY from './journey.mjs';
+import * as DM from './demand.mjs';
+import * as DP from './dispatch.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
@@ -2186,6 +2188,147 @@ t('a lapsed trip pass and a cancelled one both refuse, and say which', () => {
   assert.strictEqual(JY.scan(fresh(), { mode: 'metro' }, at + 86400000).reason, 'expired');
   JY.cancelPass(p, day);
   assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'cancelled');
+});
+
+console.log('\nthe last mile: counting it, and handing it to somebody');
+
+// A declaration is one booked journey whose last stretch is private. The rules
+// worth pinning: the range is two counts and never a percentage, a place below
+// the floor is not published at all, and the count is exact while the turn-up
+// is unknown and says so.
+
+const dec = (need, extra) => DM.declare({ id: 'd' + (dec.n = (dec.n || 0) + 1),
+  who: 'someone', at: 'Whitefield', lat: 12.9698, lng: 77.7500,
+  when: 8 * 60 + 40, km: 4.2, need, ...(extra || {}) }).record;
+
+t('a declaration lands in the half hour it belongs to', () => {
+  assert.strictEqual(DM.windowOf(8 * 60 + 40), 8 * 60 + 30);
+  assert.strictEqual(DM.windowOf(9 * 60), 9 * 60);
+  assert.strictEqual(DM.windowOf(9 * 60 + 29), 9 * 60);
+  assert.strictEqual(DM.windowText(8 * 60 + 30), '08:30–09:00');
+  const r = dec('no-bus');
+  assert.strictEqual(r.window, 8 * 60 + 30);
+});
+
+t('a declaration khaali cannot place is refused, never guessed at', () => {
+  assert.strictEqual(DM.declare({ id: 'x', at: 'A', when: 10, need: 'flying' }).reason, 'incomplete');
+  assert.strictEqual(DM.declare({ id: 'x', at: 'A', when: 9999, need: 'no-bus' }).reason, 'bad-window');
+  assert.strictEqual(DM.declare({ at: 'A', when: 10, need: 'no-bus' }).reason, 'incomplete');
+});
+
+t('the floor is the people with no bus; the ceiling adds the ones who might', () => {
+  const recs = [dec('no-bus'), dec('no-bus'), dec('no-bus'),
+                dec('slower-bus'), dec('slower-bus')];
+  const [h] = DM.hotspots(recs, { nowMin: 8 * 60 + 20 });
+  assert.strictEqual(h.floor, 3, 'three have nothing else to take');
+  assert.strictEqual(h.ceiling, 5, 'five booked in all');
+  assert.match(h.says, /5 booked, 3 of them with no bus at all/);
+});
+
+t('the count is exact and the turn-up is not pretended to be', () => {
+  const [h] = DM.hotspots([dec('no-bus'), dec('no-bus'), dec('no-bus')],
+    { nowMin: 8 * 60 + 20 });
+  assert.strictEqual(h.quality, 'exact', 'these are counted bookings');
+  assert.strictEqual(h.turnout, 'unknown', 'khaali has no history of who travelled');
+  assert.ok(!('dropout' in h), 'no invented percentage anywhere on it');
+});
+
+t('a place with too few people in it is not a place, it is those people', () => {
+  const two = [dec('no-bus'), dec('no-bus')];
+  assert.strictEqual(DM.hotspots(two, { nowMin: 8 * 60 + 20 }).length, 0, 'two is below the floor');
+  assert.strictEqual(DM.hotspots(two.concat([dec('no-bus')]), { nowMin: 8 * 60 + 20 }).length, 1);
+});
+
+t('a window that has gone, or is too far off to act on, is not demand', () => {
+  const recs = [dec('no-bus'), dec('no-bus'), dec('no-bus')];
+  assert.strictEqual(DM.hotspots(recs, { nowMin: 8 * 60 + 20 }).length, 1, 'twenty minutes out');
+  assert.strictEqual(DM.hotspots(recs, { nowMin: 6 * 60 }).length, 0, 'two and a half hours out');
+  assert.strictEqual(DM.prune(recs, 6 * 60).length, 0);
+  assert.strictEqual(DM.prune(recs, 8 * 60 + 20).length, 3);
+});
+
+t('a seeded row says it is seeded, all the way to the page', () => {
+  const seeded = [dec('no-bus', { seed: true }), dec('no-bus', { seed: true }),
+                  dec('no-bus', { seed: true })];
+  const [h] = DM.hotspots(seeded, { nowMin: 8 * 60 + 20 });
+  assert.strictEqual(h.seed, true);
+  const mixed = DM.hotspots(seeded.concat([dec('no-bus')]), { nowMin: 8 * 60 + 20 })[0];
+  assert.strictEqual(mixed.seed, false);
+  assert.strictEqual(mixed.partSeed, true, 'part real, and it does not claim to be all real');
+});
+
+t('which side of the count a journey falls on is the server\'s to decide', () => {
+  const ends = { lat: 12.97, lng: 77.75, toLat: 12.99, toLng: 77.78 };
+  assert.strictEqual(DM.needFor(ends, () => [{ route: '500D' }]), 'slower-bus');
+  assert.strictEqual(DM.needFor(ends, () => []), 'no-bus');
+  // a bus lookup that throws is not a bus
+  assert.strictEqual(DM.needFor(ends, () => { throw new Error('bmtc down'); }), 'no-bus');
+  assert.strictEqual(DM.needFor({}, () => [{}]), 'no-bus', 'no coordinates, no claim of a bus');
+});
+
+// ---- the offer ----
+
+const offerFor = (id, at) => DP.newOffer({ id, who: 'her@x', holder: 'Achina',
+  from: 'Whitefield', to: 'Kodigehalli Gate', fromLat: 12.9698, fromLng: 77.75,
+  toLat: 13.06, toLng: 77.59, km: 4.2, fareMin: 65, fareMax: 120 }, at || 1000).offer;
+
+t('an offer goes out to nobody in particular', () => {
+  const o = offerFor('o1');
+  assert.strictEqual(o.status, 'offered');
+  assert.strictEqual(o.driver, null, 'until somebody takes it, there is no driver');
+  assert.deepStrictEqual(o.kinds, ['bike', 'auto', 'car'], 'khaali does not pick the vehicle');
+  assert.strictEqual(DP.newOffer({ id: 'x', who: 'w', from: 'a', to: 'b', km: 0 }).reason, 'no-distance');
+});
+
+t('two drivers reach for the same ride: the first gets it, the second is told why', () => {
+  const o = offerFor('o2');
+  const first = DP.accept(o, 'driver-aaa', 2000);
+  assert.ok(first.ok);
+  assert.strictEqual(o.driver, 'driver-aaa');
+  const second = DP.accept(o, 'driver-bbb', 2001);
+  assert.ok(!second.ok);
+  assert.strictEqual(second.reason, 'taken');
+  assert.strictEqual(second.driver, 'driver-aaa', 'and it says who has it, so they can move on');
+  assert.strictEqual(o.driver, 'driver-aaa', 'the second tap changed nothing');
+});
+
+t('nobody came, so the offer lapses - and a lapsed one cannot be taken', () => {
+  const o = offerFor('o3');
+  assert.strictEqual(DP.expire(o, 2000).reason, 'live', 'not while it still stands');
+  assert.ok(DP.expire(o, 1000 + DP.OFFER_MS).ok);
+  assert.strictEqual(o.status, 'expired');
+  assert.strictEqual(DP.accept(o, 'driver-ccc', 1000 + DP.OFFER_MS + 1).reason, 'expired');
+  assert.strictEqual(o.driver, null);
+});
+
+t('a ride already taken is not lapsed by the clock behind it', () => {
+  const o = offerFor('o4');
+  DP.accept(o, 'driver-aaa', 2000);
+  assert.strictEqual(DP.expire(o, 1000 + DP.OFFER_MS).reason, 'accepted');
+  assert.strictEqual(o.status, 'accepted', 'somebody is on their way; the clock has no say');
+});
+
+t('only the driver who took it can move it along', () => {
+  const o = offerFor('o5');
+  DP.accept(o, 'driver-aaa', 2000);
+  assert.strictEqual(DP.arrived(o, 'driver-bbb', 3000).reason, 'not-yours');
+  assert.ok(DP.arrived(o, 'driver-aaa', 3000).ok);
+  assert.ok(DP.done(o, 'driver-aaa', 4000).ok);
+  assert.strictEqual(o.status, 'done');
+  assert.strictEqual(DP.cancel(o, 'changed mind', 5000).reason, 'done', 'a finished ride is finished');
+});
+
+t('what a driver is shown carries no phone number and admits what it is', () => {
+  const o = offerFor('o6');
+  const v = DP.publicOf(o);
+  assert.strictEqual(v.holder, 'Achina', 'the name, because the owner asked for it');
+  assert.strictEqual(v.to, 'Kodigehalli Gate', 'and where they are going');
+  assert.strictEqual(v.code, 'O6', 'a short code the two of them can say out loud');
+  assert.strictEqual(v.simulated, true, 'khaali runs no vehicles and says so');
+  assert.ok(!('phone' in v) && !('who' in v), 'never a phone number, never the account');
+  assert.strictEqual(DP.publicOf(o, { forDriver: 'driver-aaa' }).mine, false);
+  DP.accept(o, 'driver-aaa', 2000);
+  assert.strictEqual(DP.publicOf(o, { forDriver: 'driver-aaa' }).mine, true);
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');

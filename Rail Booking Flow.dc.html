@@ -5888,6 +5888,31 @@ class Component extends DCLogic {
     }catch(e){this.setState({rideErr:'khaali could not book the ride. Nothing was charged.'});}
     this._rideBusy=false;
   }
+  /**
+   * Say where the network stopped.
+   *
+   * Not a booking and not a request for anything - one line saying that a
+   * journey somebody paid for ends with a stretch no bus covers, at this
+   * place, in this half hour. It is the only thing khaali knows that the
+   * driver two kilometres away does not.
+   *
+   * It fires whether or not she takes the ride, INCLUDING when she dropped it
+   * off the booking, because she still lands there needing one. And the server
+   * decides which side of the count it falls on: this sends the two ends, not
+   * a verdict about them.
+   */
+  async tellLastMile(rec){
+    const J=rec&&rec.journey; const rides=(J&&J.rides)||[];
+    if(!rides.length)return;
+    for(const ride of rides){
+      if(ride.fromLat==null||ride.toLat==null)continue;
+      try{await this.authFetch('/api/lastmile',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({at:ride.from,lat:ride.fromLat,lng:ride.fromLng,
+          toLat:ride.toLat,toLng:ride.toLng,when:ride.depMin,km:ride.km,
+          pax:rec.pax||1,date:this.dateIsoFor(rec.dayIdx||0)})},9000);
+      }catch(e){/* a count that did not land is a count khaali does not have */}
+    }
+  }
   async dropRide(rec){
     const r=this.ridesOf()[rec.pnr];if(!r)return;
     try{await this.authFetch('/api/ride/'+r.id,{method:'DELETE'},9000);}catch(e){}
@@ -9411,6 +9436,8 @@ class Component extends DCLogic {
     const keep=S.cfOff||{};
     if(rec.journey&&(rec.journey.legs||[]).length&&!keep.pass)setTimeout(()=>this.getPass(rec),0);
     if(rec.journey&&(rec.journey.rides||[]).length&&!keep.ride)setTimeout(()=>this.getRide(rec),0);
+    // and the last mile is counted whichever way she went on the ride itself
+    if(rec.journey&&(rec.journey.rides||[]).length)setTimeout(()=>this.tellLastMile(rec),0);
     // the journey is spent on this booking; the next one starts without it
     this.setState({bookings:[rec].concat(S.bookings),page:'ticket',picks:picks,viewPnr:rec.pnr,holdId:null,hold:null,holdErr:null,
       classModal:false,countModal:false,hov:null,pBookChain:null,cfOff:{}});

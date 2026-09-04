@@ -38,6 +38,8 @@ import * as orders from './orders.mjs';
 import * as digilocker from './digilocker.mjs';
 import * as sos from './sos.mjs';
 import * as journey from './journey.mjs';
+import * as demand from './demand.mjs';
+import * as dispatch from './dispatch.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
@@ -237,6 +239,27 @@ let matchT = null;
 const matchSoon = () => { clearTimeout(matchT); matchT = setTimeout(matchOrders, 250); };
 store.subscribe(m => { if (['released', 'booked', 'chart', 'reset'].includes(m.type)) matchSoon(); });
 setInterval(matchOrders, 20000).unref();
+// Where the network stops, and who said they would be there.
+//
+// khaali has always computed the last mile and then thrown it away. These two
+// hold on to it: DEMAND is one line per booked journey that ends in private
+// transport, OFFERS is the ride somebody has actually asked for and a driver
+// can take. Both are rebuilt from the journal below, so a restart does not
+// empty the map or lose a ride a driver is on their way to.
+const DEMAND = [];
+const OFFERS = new Map();
+
+// Six places seeded so a demo map is not blank. They are ordinary records
+// through the ordinary pipeline, carrying seed:true all the way to the page,
+// and deleting the file empties the map - which is the correct behaviour and
+// is what proves the map is made of demand rather than of a hardcoded list.
+try {
+  const seedFile = path.join(DIR, 'seed-demand.json');
+  const rows = JSON.parse(fs.readFileSync(seedFile, 'utf8'));
+  for (const r of rows) if (r && r.id) DEMAND.push({ ...r, seed: true });
+  console.log('demand: ' + DEMAND.length + ' seeded declarations');
+} catch { /* no seed file, and an empty map is an honest one */ }
+
 // orders outlive a restart: rebuild the book and the blocks behind it
 {
   for (const r of JREC) {
@@ -261,6 +284,16 @@ setInterval(matchOrders, 20000).unref();
     if (r.t === 'passblock') { const p = PASSES.get(r.passId); if (p) p.payId = r.id; }
     if (r.t === 'ride' && r.ride && r.ride.id) RIDES.set(r.ride.id, { ...r.ride });
     if (r.t === 'ridegone') { const x = RIDES.get(r.id); if (x) hire.cancelRide(x, r.at); }
+    if (r.t === 'lastmile' && r.rec) DEMAND.push({ ...r.rec });
+    if (r.t === 'offer' && r.offer && r.offer.id) OFFERS.set(r.offer.id, { ...r.offer });
+    if (r.t === 'offeraccept') { const o = OFFERS.get(r.id); if (o) dispatch.accept(o, r.driver, r.at); }
+    if (r.t === 'offerstage') {
+      const o = OFFERS.get(r.id);
+      if (o && r.stage === 'arrived') dispatch.arrived(o, o.driver, r.at);
+      if (o && r.stage === 'done') dispatch.done(o, o.driver, r.at);
+    }
+    if (r.t === 'offergone') { const o = OFFERS.get(r.id); if (o) dispatch.cancel(o, r.why || 'cancelled', r.at); }
+    if (r.t === 'offerexpire') { const o = OFFERS.get(r.id); if (o) { o.status = 'expired'; o.endedWhy = 'nobody took it'; } }
   }
   for (const o of ORDERS.values()) {
     const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
@@ -827,6 +860,18 @@ setInterval(() => {
   }
 }, 60000);
 
+// An offer nobody took is over, and the driver page must stop showing it.
+// Written to the journal once so the record of what happened outlives the
+// process, exactly the way a lapsed pass is.
+setInterval(() => {
+  const now = simNow().getTime();
+  for (const o of OFFERS.values()) {
+    if (!dispatch.expire(o, now).ok) continue;
+    journal.append({ t: 'offerexpire', id: o.id, at: now });
+    sseSend({ type: 'offer', id: o.id, who: o.who, status: 'expired' });
+  }
+}, 30000);
+
 setInterval(() => {
   const line = `data: ${JSON.stringify({ type: 'tick', at: Date.now() })}\n\n`;
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
@@ -836,6 +881,23 @@ setInterval(() => {
 // far more than a person needs and far less than a loop.
 const PAID = new Set(['/api/tts', '/api/stt', '/api/chat', '/api/odds/explain', '/api/tatkal/explain',
   '/api/intent', '/api/explain', '/api/ask']);
+// The demand map and the offer board cost nothing to serve, but they are a
+// map of where people will be, so they are not left open at unlimited rate.
+// A separate bucket from the paid one: a driver polling every five seconds is
+// ordinary use here, and the paid routes' 'Saarthi needs a breather' is the
+// wrong sentence for a page with no Saarthi on it.
+const OPEN = [['/api/demand', 60], ['/api/offers', 120], ['/api/lastmile', 30]];
+function overOpenLimit(req, res, p) {
+  const hit = OPEN.find(([pre]) => p === pre || p.startsWith(pre + '/'));
+  if (!hit) return false;
+  const r = limits.hit(limits.callerOf(req) + '|open', hit[1], 60000);
+  if (r.ok) return false;
+  res.setHeader('retry-after', String(r.retryAfter));
+  send(res, 429, { error: 'rate limited', retryAfter: r.retryAfter,
+    say: 'Too many requests at once. Try again in about ' + r.retryAfter + ' seconds.' });
+  return true;
+}
+
 function overLimit(req, res, p) {
   if (!PAID.has(p)) return false;
   const r = limits.hit(limits.callerOf(req) + '|' + p, 20, 60000);
@@ -851,6 +913,7 @@ async function api(req, res, url) {
   const q = url.searchParams;
   const p = url.pathname;
   if (overLimit(req, res, p)) return;
+  if (overOpenLimit(req, res, p)) return;
   // what this caller looked at, as seen from here: Sentinel reads it later
   activity.note(limits.callerOf(req), p);
 
@@ -1734,6 +1797,100 @@ async function api(req, res, url) {
   // A car or a bike for the miles the network does not cover. Booked, not
   // scanned - and priced HERE, from khaali's own tariff, whatever fare the
   // phone believed. The same posture the berth hold and the trip pass take.
+  // --------------------------------------------------- the last mile ----
+  //
+  // A booked journey whose last stretch is private is the one thing khaali
+  // knows and nobody else does. The phone declares it here; the SERVER decides
+  // which side of the count it falls on, by asking BMTC the same question
+  // mile() asks. A phone cannot inflate its own half of the range.
+  if (p === '/api/lastmile' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true });
+    const lat = +b.lat, lng = +b.lng, toLat = +b.toLat, toLng = +b.toLng;
+    if (!isFinite(lat) || !isFinite(lng) || !isFinite(toLat) || !isFinite(toLng))
+      return send(res, 400, { ok: false, error: 'A last mile has two ends.' });
+    const when = Math.floor(+b.when);
+    // khaali decides this, not the phone
+    const need = demand.needFor({ lat, lng, toLat, toLng, when }, bmtc.directBus);
+    const d = demand.declare({
+      id: crypto.randomBytes(8).toString('hex'), who,
+      at: b.at, lat, lng, when, km: +b.km || null, pax: b.pax, need,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY(),
+    }, simNow().getTime());
+    if (!d.ok) return send(res, 400, { ok: false, error: d.reason });
+    DEMAND.push(d.record);
+    journal.append({ t: 'lastmile', rec: d.record });
+    // the declaring passenger is told the count, not their own line back
+    return send(res, 200, { ok: true, counted: true, need });
+  }
+
+  // The map a driver reads. Counts of booked journeys and nothing else: no
+  // name, no destination, no origin finer than a place people already meet at,
+  // and nothing at all below the privacy floor.
+  if (p === '/api/demand') {
+    const now = simNow();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const lat = parseFloat(q.get('lat')), lng = parseFloat(q.get('lng'));
+    const near = (isFinite(lat) && isFinite(lng)) ? { lat, lng } : null;
+    const rows = demand.hotspots(DEMAND, { nowMin, near });
+    return send(res, 200, {
+      today: TODAY(), minute: nowMin, floor: demand.FLOOR,
+      windowMin: demand.WINDOW_MIN, hotspots: rows,
+      // khaali counted bookings. Whether those people walk out and take a ride
+      // is not something it has ever measured, and it will not say it has.
+      quality: 'exact', turnout: 'unknown',
+      says: rows.length
+        ? 'Journeys people booked in khaali, counted by where the last stretch starts.'
+        : 'Nobody has booked a journey that ends off the network in the next hour and a half.',
+      simulated: true,
+    });
+  }
+
+  // The board. Every live offer, to anybody looking - because until somebody
+  // accepts, khaali does not know which driver it will be, and it does not
+  // choose. `driver` is a device id the page mints for itself; khaali holds no
+  // driver account and has not checked that anyone here drives anything.
+  if (p === '/api/offers') {
+    const driver = String(q.get('driver') || '').slice(0, 40) || null;
+    const now = simNow().getTime();
+    // an offer still standing, plus whatever this driver already took - so a
+    // ride they are on the way to never disappears off their own page
+    const live = [...OFFERS.values()]
+      .filter(o => (o.status === 'offered' && now < o.expiresAt)
+        || (driver && o.driver === driver && o.status !== 'expired'))
+      .sort((a, z) => z.offeredAt - a.offeredAt).slice(0, 20)
+      .map(o => dispatch.publicOf(o, { forDriver: driver }));
+    return send(res, 200, { offers: live, mine: live.filter(o => o.mine).length });
+  }
+
+  const mOffer = p.match(/^\/api\/offers\/([a-f0-9]+)\/(accept|arrived|done)$/);
+  if (mOffer && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { b = {}; }
+    const driver = String(b.driver || '').slice(0, 40);
+    if (!driver) return send(res, 400, { ok: false, error: 'no driver id' });
+    const o = OFFERS.get(mOffer[1]);
+    if (!o) return send(res, 404, { ok: false, error: 'no such offer' });
+    const now = simNow().getTime();
+    const act = mOffer[2];
+    // One driver at a time. A dispatch loop with no reputation behind it is
+    // otherwise trivially hoarded.
+    if (act === 'accept' && [...OFFERS.values()].some(x => x !== o && x.driver === driver
+      && (x.status === 'accepted' || x.status === 'arrived')))
+      return send(res, 409, { ok: false, reason: 'already-holding',
+        error: 'You are already on a ride. Finish it first.' });
+    const r = act === 'accept' ? dispatch.accept(o, driver, now)
+      : act === 'arrived' ? dispatch.arrived(o, driver, now)
+        : dispatch.done(o, driver, now);
+    if (!r.ok) return send(res, 409, { ok: false, reason: r.reason,
+      offer: dispatch.publicOf(o, { forDriver: driver }) });
+    journal.append(act === 'accept'
+      ? { t: 'offeraccept', id: o.id, driver, at: now }
+      : { t: 'offerstage', id: o.id, stage: act, at: now });
+    sseSend({ type: 'offer', id: o.id, who: o.who, status: o.status });
+    return send(res, 200, { ok: true, offer: dispatch.publicOf(o, { forDriver: driver }) });
+  }
+
   if (p === '/api/ride' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);
@@ -1758,6 +1915,18 @@ async function api(req, res, url) {
     if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
     RIDES.set(id, r.ride);
     journal.append({ t: 'ride', ride: r.ride });
+    // and it goes out to whoever is looking at the driver page. Nobody has
+    // been dispatched: this is an offer standing on a board.
+    const of = dispatch.newOffer({ id, who, holder: r.ride.holder,
+      from: r.ride.from, to: r.ride.to,
+      fromLat: a.lat, fromLng: a.lng, toLat: z.lat, toLng: z.lng,
+      km: kmv, fareMin: hire.fareFor('bike', kmv), fareMax: hire.fareFor('car', kmv),
+      pax }, simNow().getTime());
+    if (of.ok) {
+      OFFERS.set(id, of.offer);
+      journal.append({ t: 'offer', offer: of.offer });
+      sseSend({ type: 'offer', id, who, status: 'offered' });
+    }
     return send(res, 200, { ok: true, ride: hire.publicOf(r.ride) });
   }
   if (p === '/api/ride') {
@@ -1778,6 +1947,13 @@ async function api(req, res, url) {
     if (req.method === 'DELETE') {
       hire.cancelRide(rd, simNow().getTime());
       journal.append({ t: 'ridegone', id: rd.id, at: rd.cancelledAt });
+      // A driver who was on their way keeps the record of it. The offer goes
+      // to 'cancelled' and says so; it does not quietly vanish off their page.
+      const off = OFFERS.get(rd.id);
+      if (off && dispatch.cancel(off, 'the passenger cancelled', rd.cancelledAt).ok) {
+        journal.append({ t: 'offergone', id: off.id, why: off.endedWhy, at: rd.cancelledAt });
+        sseSend({ type: 'offer', id: off.id, who: off.who, status: 'cancelled' });
+      }
     }
     const now2 = simNow(), min2 = now2.getHours() * 60 + now2.getMinutes();
     return send(res, 200, { ok: true, ride: hire.publicOf(rd),
@@ -2744,6 +2920,7 @@ function serveStatic(res, urlPath) {
   if (rel === '/digilocker') rel = '/digilocker.html';    // the locker's own page
   if (rel === '/rpf' || rel.startsWith('/rpf/')) rel = '/rpf.html';  // the console, and one report
   if (rel.startsWith('/scan/')) rel = '/scan.html';       // /scan/<pass>, the conductor's tap
+  if (rel === '/drive' || rel.startsWith('/drive/')) rel = '/drive.html';  // the demand map
   if (rel === '/live-map') rel = '/map.html';               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
