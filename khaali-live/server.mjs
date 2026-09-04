@@ -1336,6 +1336,13 @@ async function api(req, res, url) {
       const k = store.countsFor(String(no), date, 'SL', fi, ti);
       return { free: k.free, total: k.free + k.part + k.taken + k.locked };
     } });
+    // every bus follows its road on the map, whichever file it came from
+    r.chains.forEach(c => c.legs.forEach(l => {
+      if (l.mode === 'bus' && !l.path && l.fromLat && l.toLat) {
+        try { l.path = bmtc.pathForRoute(l.id, l.fromLat, l.fromLng, l.toLat, l.toLng); } catch { l.path = null; }
+        if (!l.fromKind) { l.fromKind = bmtc.stopKind(l.from); l.toKind = bmtc.stopKind(l.to); }
+      }
+    }));
     const profile = allocate.PROFILES.includes(q.get('profile')) ? q.get('profile') : 'balanced';
     const maxChanges = q.get('maxChanges') != null && q.get('maxChanges') !== '' ? parseInt(q.get('maxChanges'), 10) : null;
     const maxWalkKm = q.get('maxWalkKm') ? parseFloat(q.get('maxWalkKm')) : null;

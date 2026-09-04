@@ -49,6 +49,60 @@ const WALK_KMH = 4.5;
 const walkMin = k => Math.max(1, Math.round(k / WALK_KMH * 60));
 const hhmm = m => { const x = ((m % 1440) + 1440) % 1440; const h = Math.floor(x / 60), mm = String(x % 60).padStart(2, '0'); return String(h % 12 === 0 ? 12 : h % 12).padStart(2, '0') + ':' + mm + ' ' + (h < 12 ? 'AM' : 'PM'); };
 
+/** A polyline-encoded shape back into [lat, lng] points, cached per pattern. */
+export function decodePolyline(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const which of [0, 1]) {
+      let shift = 0, result = 0, b;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const d = (result & 1) ? ~(result >> 1) : (result >> 1);
+      if (which === 0) lat += d; else lng += d;
+    }
+    out.push([lat / 1e5, lng / 1e5]);
+  }
+  return out;
+}
+function shapeOf(p) {
+  if (!p.sh) return null;
+  if (!p._pts) p._pts = decodePolyline(p.sh);
+  return p._pts;
+}
+/** The road between two stops of a pattern: the shape sliced at the points
+    nearest each stop. A straight line between two ends is a lie; this is the
+    route the bus actually drives. */
+export function pathBetween(p, k, j) {
+  const D = data(); const pts = shapeOf(p);
+  if (!pts || pts.length < 2) return null;
+  const near = si => { const st = D.stops[si]; let bi = 0, bd = Infinity;
+    pts.forEach((q, i) => { const d = (q[0] - st[2]) ** 2 + (q[1] - st[3]) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+  let a = near(p.s[k]), b = near(p.s[j]);
+  if (b < a) [a, b] = [b, a];
+  const seg = pts.slice(a, b + 1);
+  return seg.length >= 2 ? seg.map(q => [Math.round(q[0] * 1e5) / 1e5, Math.round(q[1] * 1e5) / 1e5]) : null;
+}
+/** What a stop is, from its name. */
+export const stopKind = name => /bus station|bus stand|ttmc|depot|bmtc/i.test(name) ? 'bus station' : 'bus stop';
+
+/**
+ * The road for a bus leg that came from elsewhere (buses.mjs's KBS routes):
+ * find the route by its short name, the pattern that runs from near A to
+ * near B, and slice its shape.
+ */
+export function pathForRoute(name, fromLat, fromLng, toLat, toLng) {
+  const D = data();
+  const rs = D.routes.filter(r => r.n === name || r.n.split(' ')[0] === name);
+  if (!rs.length) return null;
+  const A = stopsNear(fromLat, fromLng, 1.0), B = stopsNear(toLat, toLng, 1.0);
+  const aSet = new Set(A.map(x => x.i)), bSet = new Set(B.map(x => x.i));
+  for (const r of rs) for (const p of r.p) {
+    let k = -1, j = -1;
+    p.s.forEach((si, i) => { if (k < 0 && aSet.has(si)) k = i; if (k >= 0 && i > k && j < 0 && bSet.has(si)) j = i; });
+    if (k >= 0 && j > k) return pathBetween(p, k, j);
+  }
+  return null;
+}
+
 /** Stops within `within` km of a point, nearest first. */
 export function stopsNear(lat, lng, within = 0.6) {
   const D = data(); const out = [];
@@ -97,14 +151,15 @@ export function directBus({ fromLat, fromLng, toLat, toLng, after = 0, within = 
       const dist = km(a, b);
       out.push({
         arrive, dep: board, legs: [
-          a.km > 0.05 ? { mode: 'walk', name: 'Walk', from: 'here', to: a.n, km: a.km, min: walk1, depMin: after, arrMin: ready,
+          a.km > 0.05 ? { mode: 'walk', name: 'Walk', from: 'here', to: a.n, toKind: stopKind(a.n), km: a.km, min: walk1, depMin: after, arrMin: ready,
             dep: hhmm(after), arr: hhmm(ready), fare: 0, source: 'measured', fromLat, fromLng, toLat: a.lat, toLng: a.lng, seat: null } : null,
           { mode: 'bus', id: r.n, name: 'BMTC ' + r.n, headsign: r.ln, from: a.n, to: b.n,
+            fromKind: stopKind(a.n), toKind: stopKind(b.n), path: pathBetween(p, k, j),
             dep: hhmm(board), arr: hhmm(alight), depMin: board, arrMin: alight, min: run, every, wait: board - ready,
             boardIdx: k, nStops: p.s.length, stops: j - k, km: Math.round(dist * 10) / 10, fare: fareFor(dist),
             seat: seatOdds({ mode: 'bus', at: k / p.s.length }), source: 'timetable', trips: p.t,
             fromLat: a.lat, fromLng: a.lng, toLat: b.lat, toLng: b.lng },
-          b.km > 0.05 ? { mode: 'walk', name: 'Walk', from: b.n, to: 'there', km: b.km, min: walk2, depMin: alight, arrMin: arrive,
+          b.km > 0.05 ? { mode: 'walk', name: 'Walk', from: b.n, fromKind: stopKind(b.n), to: 'there', km: b.km, min: walk2, depMin: alight, arrMin: arrive,
             dep: hhmm(alight), arr: hhmm(arrive), fare: 0, source: 'measured', fromLat: b.lat, fromLng: b.lng, toLat, toLng, seat: null } : null,
         ].filter(Boolean), fare: fareFor(dist), min: arrive - after,
       });

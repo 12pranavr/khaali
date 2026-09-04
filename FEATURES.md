@@ -1368,9 +1368,20 @@ the station that is merely nearest. The walks to and from the stops are legs
 of their own, in the time and on the map.
 
 `bmtc.mjs` reads `bmtc.json`: BMTC's own published timetable boiled down to
-9,875 stops and 4,358 routes with their stop sequences, median run times and
-headways (GTFS via github.com/Vonter/bmtc-gtfs, ODbL). A search takes
-milliseconds. When no direct bus reaches a place from any nearby station,
+9,875 stops and 4,358 routes with their stop sequences, median run times,
+headways, and **the road each route drives** - every pattern's GTFS shape,
+simplified to about 25 m and polyline-encoded (via github.com/Vonter/bmtc-gtfs,
+ODbL). A search takes milliseconds.
+
+So a bus is drawn along the streets it actually uses, sliced between the stop
+she boards at and the stop she gets off at - solid, not a dashed straight line
+between two dots. On the Hebbal routes the road departs from that straight
+line by up to 1.2 km; a city of one-ways and flyovers is not a ruler. Only a
+route with no published shape falls back to a dashed line, and the tooltip
+says so.
+
+Every pin and every leg says what a place is - bus stop, bus station, railway
+station, metro station - so "Vasantha Nagara" is never a mystery. When no direct bus reaches a place from any nearby station,
 the page says so and names the stations it tried. It never says "take an
 auto": a planner that has the whole bus timetable and answers with an auto
 has not done its job.

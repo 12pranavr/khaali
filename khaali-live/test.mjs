@@ -2277,6 +2277,21 @@ t('a place off the network is reached by a named BMTC bus from a station that ha
   assert.ok(r.chains.some(x => x.via.to.id !== near.id) || r.chains.every(x => x.via.to.id === near.id), 'more than one station was tried');
 });
 
+t('a bus follows its road, not a straight line between its ends', async () => {
+  const B = await import('./bmtc.mjs');
+  const pts = B.decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@');
+  assert.deepStrictEqual(pts.map(p => p.map(x => Math.round(x * 1e5) / 1e5)), [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]);
+  const o = B.directBus({ fromLat: 12.97567, fromLng: 77.57281, toLat: 13.0382, toLng: 77.5919, after: 585 });
+  const bus = o[0].legs.find(l => l.mode === 'bus');
+  assert.ok(Array.isArray(bus.path) && bus.path.length >= 5, 'the road has bends: ' + (bus.path && bus.path.length));
+  const first = bus.path[0], last = bus.path[bus.path.length - 1];
+  assert.ok(Math.abs(first[0] - bus.fromLat) < 0.01 && Math.abs(last[0] - bus.toLat) < 0.01, 'and it runs from the boarding stop to the alighting stop');
+  assert.strictEqual(bus.fromKind, 'bus station');
+  assert.ok(['bus stop', 'bus station'].includes(bus.toKind));
+  const kbs = B.pathForRoute('KBS-1K', 12.98273, 77.75223, 12.97749, 77.57327);
+  assert.ok(kbs && kbs.length > 20, 'the Hope Farm route from buses.mjs finds its road too: ' + (kbs && kbs.length));
+});
+
 t('the bus index answers in milliseconds and knows the city', async () => {
   const B = await import('./bmtc.mjs');
   const st = B.stats();
