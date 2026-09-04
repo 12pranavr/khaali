@@ -3518,7 +3518,8 @@ function serveStatic(res, urlPath) {
   if (rel === '/rpf' || rel.startsWith('/rpf/')) rel = '/rpf.html';  // the console, and one report
   if (rel.startsWith('/scan/')) rel = '/scan.html';       // /scan/<pass>, the conductor's tap
   if (rel === '/drive' || rel.startsWith('/drive/')) rel = '/drive.html';  // the demand map
-  if (rel === '/live-map') rel = '/map.html';               // real-geography live map
+  if (rel === '/live-map') rel = '/map.html';
+  if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
   const inParent = path.join(PARENT, clean);

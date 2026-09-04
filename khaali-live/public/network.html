@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · network load</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<style>
+:root{
+  --page:#f2f2f5; --surface:#fff; --ink:#14161a; --ink2:#40434a; --ink3:#8a8a84;
+  --line:#e6e5e0; --accent:#d8385a; --ok:#1f9d55;
+}
+:root[data-theme="dark"]{
+  --page:#0f1115; --surface:#171a21; --ink:#e9ebef; --ink2:#c3c8d2; --ink3:#949aa6;
+  --line:#2c313c; --accent:#e8496b; --ok:#35b86e;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--page);color:var(--ink);
+  font:400 14px/1.5 Manrope,system-ui,sans-serif;display:flex;flex-direction:column}
+.top{flex:none;background:var(--surface);border-bottom:1px solid var(--line);z-index:1001}
+.top .wrap{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap}
+.brand{font:800 20px/1 Manrope,sans-serif;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
+.brand span{color:var(--accent)}
+.brand small{display:block;font:500 7.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.16em;
+  color:var(--ink3);text-transform:uppercase}
+.clock{margin-left:auto;font:500 12px/1.35 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right}
+#map{flex:1;min-height:0}
+:root[data-theme="dark"] .leaflet-container{background:#0c0e12}
+
+.scrub{display:flex;align-items:center;gap:10px;flex:1;min-width:260px}
+.scrub input[type=range]{flex:1;accent-color:var(--accent)}
+.scrub b{font:700 13px/1 'IBM Plex Mono',monospace;color:var(--ink);min-width:52px}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);display:flex;align-items:center;justify-content:center;
+  font-size:15px;cursor:pointer;flex:none}
+
+/* ---- the key, on two axes, because a colour alone is only half of it ------ */
+.key{position:absolute;left:12px;bottom:12px;z-index:1000;max-width:330px;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 13px;
+  box-shadow:0 6px 22px rgba(0,0,0,.13)}
+.key h4{margin:0 0 8px;font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink3)}
+.key .row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font:500 11.5px/1.4 Manrope,sans-serif}
+.key .sw{width:16px;height:10px;border-radius:3px;flex:none}
+.key .tx{width:18px;height:10px;border-radius:3px;flex:none;background:var(--ink3)}
+.key .tx.soft{opacity:.5}
+.key .tx.hatch{background:repeating-linear-gradient(45deg,var(--ink3) 0 3px,transparent 3px 6px)}
+.key .tx.void{background:none;border:1px dotted var(--ink3)}
+.key .says{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
+  font:500 11px/1.55 Manrope,sans-serif;color:var(--ink3)}
+.key .fold{cursor:pointer;font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin-top:8px;display:inline-block}
+.key.small .rows,.key.small .says{display:none}
+
+.note{position:absolute;right:12px;bottom:12px;z-index:1000;max-width:340px;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 13px;
+  font:500 11px/1.6 Manrope,sans-serif;color:var(--ink3);box-shadow:0 6px 22px rgba(0,0,0,.13)}
+.note b{color:var(--ink2);font-weight:700}
+@media (max-width:760px){.note{display:none}.key{max-width:210px}}
+.leaflet-tooltip{font:500 11.5px/1.45 Manrope,sans-serif;max-width:280px;white-space:normal}
+</style>
+</head>
+<body>
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">khaali<span>.</span><small>network load &middot; part measured, part simulated</small></a>
+  <div class="scrub">
+    <b id="hh">--:--</b>
+    <input id="at" type="range" min="0" max="1410" step="30" value="510">
+    <button class="iconbtn" id="now" title="back to now">&#9673;</button>
+  </div>
+  <div class="clock" id="clock">&nbsp;</div>
+</div></div>
+<div id="map"></div>
+<div class="key" id="key"></div>
+<div class="note" id="note"></div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script>
+/* The whole network, coloured by how full it is - and, just as loudly, by how
+   khaali knows.
+
+   Four layers that behave four different ways when the hour moves, which is the
+   most honest thing on this page and is spelled out in the key:
+
+     metro   changes SHAPE. Its numbers are per station and per hour, from
+             BMRCL's own entry counts, so the pattern genuinely moves.
+     road    changes LEVEL only. khaali measured WHERE the road is slow from two
+             hundred thousand timed bus segments; WHEN it is slow is one
+             declared curve for the whole city, so every cell moves together.
+     bus     re-runs khaali's demo model, which has its own hour and direction.
+     rail    does not move at all. It is the berth inventory for a train on a
+             date - not a function of the wall clock - and scrubbing the hour
+             must not silently recompute it. It keeps a NOW badge instead. */
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hhmm = (m) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+
+let map, tile, layers = { grey: null, road: [], rail: [], metro: [] };
+let head = null, railHead = null, at = null, nowMin = 0;
+
+function theme() {
+  try {
+    const t = localStorage.getItem('khaali-theme');
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+}
+
+function boot() {
+  map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([12.97, 77.62], 11);
+  // The same basemap map.html uses. CARTO's voyager tiles want a key now and
+  // answer an unauthenticated request with a picture that says so across the
+  // whole city, which is a poor background for a page about honesty.
+  tile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+}
+
+const clear = (arr) => { arr.forEach(l => { try { map.removeLayer(l); } catch (e) {} }); return []; };
+
+/* ---- the roads, and the shape of what khaali has not measured ------------ */
+function paintRoad(j) {
+  layers.road = clear(layers.road);
+  if (layers.grey) { try { map.removeLayer(layers.grey); } catch (e) {} layers.grey = null; }
+  if (!j || !j.cells) return;
+  const C = j.colours || {};
+  if (j.bbox) {
+    layers.grey = L.rectangle([[j.bbox.south, j.bbox.west], [j.bbox.north, j.bbox.east]],
+      { stroke: false, fillColor: C.unknown, fillOpacity: 0.10, interactive: false }).addTo(map);
+    try { layers.grey.bringToBack(); } catch (e) {}
+  }
+  const half = j.cell / 2;
+  layers.road = j.cells.map(c => {
+    const r = L.rectangle([[c.lat - half, c.lng - half], [c.lat + half, c.lng + half]],
+      { stroke: false, fillColor: C[c.band] || C.unknown,
+        fillOpacity: c.band === 'green' ? 0.16 : 0.28, interactive: true });
+    r.bindTooltip('<b>' + c.kmh + ' km/h</b> &middot; ' + c.band
+      + '<br>normally ' + c.freeKmh + ' km/h here'
+      + '<br>' + c.samples + ' timed bus segments measured'
+      + '<br><i>the hour is a declared curve, not a measurement</i>');
+    r.addTo(map); try { r.bringToBack(); } catch (e) {}
+    return r;
+  });
+  if (layers.grey) try { layers.grey.bringToBack(); } catch (e) {}
+  try { tile.bringToBack(); } catch (e) {}
+}
+
+/* ---- the corridor: the only counted layer, and the only still one -------- */
+function paintRail(j) {
+  layers.rail = clear(layers.rail);
+  if (!j || !j.segments) return;
+  layers.rail = j.segments.map(sg => {
+    const made = sg.quality === 'simulated';
+    const ln = L.polyline([[sg.fromLat, sg.fromLng], [sg.toLat, sg.toLng]],
+      { color: sg.colour, weight: 10, opacity: made ? 0.5 : 0.85,
+        lineCap: 'butt', dashArray: made ? '11 8' : null });
+    ln.bindTooltip('<b>' + esc(sg.fromName) + ' &rarr; ' + esc(sg.toName) + '</b>'
+      + '<br>' + esc(sg.says)
+      + '<br><i>' + (made ? 'nobody has booked this leg through khaali, so this is '
+        + 'khaali&rsquo;s own starting occupancy' : 'counted from the berth inventory') + '</i>');
+    ln.addTo(map);
+    return ln;
+  });
+}
+
+/* ---- the metro: station dots only. A LINK is never coloured -------------- */
+function paintMetro(j, minute) {
+  layers.metro = clear(layers.metro);
+  if (!j || !j.stops) return;
+  const hour = Math.floor(minute / 60) % 24;
+  // The shape of the line, in BMRCL's own colour. khaali has station ENTRIES,
+  // not link flows, so colouring the track between two stations by either end
+  // would be a number nobody has.
+  if (j.shape && j.shape.length) {
+    const ln = L.polyline(j.shape, { color: '#8C2877', weight: 3, opacity: 0.55 });
+    ln.bindTooltip('Purple Line &middot; khaali knows how many people enter each station, '
+      + 'not how many are on the train between two of them');
+    ln.addTo(map); layers.metro.push(ln);
+  }
+  j.stops.forEach(s => {
+    if (s.lat == null || !s.crowd) return;
+    const peak = Math.max.apply(null, s.crowd.concat([1]));
+    const level = (s.crowd[hour] || 0) / peak;
+    const band = level >= 0.75 ? 'red' : level >= 0.60 ? 'orange' : level >= 0.40 ? 'yellow' : 'green';
+    const col = (head && head.colours) ? head.colours[band] : '#9a9a94';
+    const m = L.circleMarker([s.lat, s.lng], { radius: 5 + level * 6, color: '#fff', weight: 1.5,
+      fillColor: col, fillOpacity: 0.9 });
+    m.bindTooltip('<b>' + esc(s.n || s.name || '') + '</b><br>'
+      + Math.round(s.crowd[hour]).toLocaleString('en-IN') + ' people enter here at ' + hhmm(hour * 60)
+      + '<br>its own busiest hour is ' + hhmm(s.crowd.indexOf(peak) * 60)
+      + '<br><i>BMRCL hourly entries under RTI &mdash; each station against its own peak, '
+      + 'so two stations are not comparable</i>');
+    m.addTo(map); layers.metro.push(m);
+  });
+}
+
+/* ---- the key: four colours across, four textures down ------------------- */
+function drawKey() {
+  const C = (head && head.colours) || {};
+  const L1 = (head && head.legend) || null;
+  const bands = (L1 && L1.bands) || [];
+  const tex = (L1 && L1.textures) || [];
+  $('key').innerHTML =
+    '<h4>How full</h4><div class="rows">'
+    + bands.map(b => '<div class="row"><span class="sw" style="background:' + (C[b.band] || b.colour)
+      + '"></span>' + esc(b.word) + '</div>').join('')
+    + '</div><h4 style="margin-top:10px">How khaali knows</h4><div class="rows">'
+    + tex.map(t => '<div class="row"><span class="tx ' + t.texture + '"></span>'
+      + esc(t.says) + '</div>').join('')
+    + '</div><div class="says">' + esc(L1 ? L1.says : '') + '</div>'
+    + '<span class="fold" id="fold">hide</span>';
+  $('fold').onclick = () => {
+    const k = $('key');
+    k.classList.toggle('small');
+    $('fold').textContent = k.classList.contains('small') ? 'key' : 'hide';
+  };
+}
+
+function drawNote() {
+  $('note').innerHTML =
+    '<b>What this is.</b> Every part of khaali&rsquo;s network, coloured by how full it is and '
+    + 'drawn by how khaali knows. Grey is not green: it is khaali saying it has not measured '
+    + 'that stretch.<br><br>'
+    + '<b>The hour does four different things.</b> The metro changes shape &mdash; those are '
+    + 'BMRCL&rsquo;s own hourly entry counts. The roads change level only, all together, because '
+    + 'khaali measured where the road is slow and not when. The buses re-run khaali&rsquo;s demo '
+    + 'model. And the corridor does not move at all: it is the berth inventory for a train on a '
+    + 'date, not a thing the clock decides, so it keeps saying <b>now</b> however far you scrub.'
+    + '<br><br>'
+    + '<b>What has not happened.</b> No vehicle has been tracked. khaali has no probe data, no '
+    + 'phones reporting their position and no camera anywhere. The roads come from BMTC&rsquo;s '
+    + 'published run times, the metro from BMRCL under RTI, the corridor from khaali&rsquo;s own '
+    + 'berth inventory over a starting occupancy it declared, and the buses from a demo model '
+    + 'nobody has weighed.';
+}
+
+async function pull() {
+  // With no hour chosen, ASK FOR NONE: the server answers on its own clock and
+  // tells us what that was. Sending nowMin before the first answer arrives sent
+  // at=0 and made the page adopt midnight as the present.
+  try {
+    const [road, metro] = await Promise.all([
+      fetch('/api/road' + (at == null ? '' : '?at=' + at)).then(r => r.json()),
+      fetch('/api/metro').then(r => r.json()),
+    ]);
+    if (road && road.ok) {
+      head = road;
+      if (at == null) nowMin = road.minute;
+      paintRoad(road); drawKey();
+    }
+    paintMetro(metro, at == null ? nowMin : at);
+  } catch (e) { /* a failed poll leaves the last true picture on screen */ }
+}
+
+async function pullRail() {
+  try {
+    const j = await fetch('/api/rail/segments?train=16021&cls=SL').then(r => r.json());
+    if (j && j.ok) { railHead = j; paintRail(j); }
+  } catch (e) {}
+}
+
+function clock() {
+  const d = new Date();
+  $('clock').innerHTML = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    + '<br>' + (railHead ? 'corridor: ' + esc(railHead.date) + ' &middot; NOW' : '&nbsp;');
+}
+
+theme();
+boot();
+drawNote();
+$('at').oninput = () => { at = +$('at').value; $('hh').textContent = hhmm(at); pull(); };
+$('now').onclick = () => { at = null; $('at').value = nowMin; $('hh').textContent = hhmm(nowMin); pull(); };
+pull().then(() => { $('at').value = nowMin; $('hh').textContent = hhmm(nowMin); });
+pullRail();
+clock();
+setInterval(clock, 1000);
+setInterval(() => { if (at == null) pull(); }, 30000);
+setInterval(pullRail, 15000);
+</script>
+</body>
+</html>
