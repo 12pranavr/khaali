@@ -2489,6 +2489,46 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
 });
 
+console.log('\nwhere is it now: the same question, asked of a bus');
+
+t('a bus has a stop list and a minute at each, like a train always has', () => {
+  const opts = BM.directBus({ fromLat: 12.97751, fromLng: 77.57141, toLat: 12.99191, toLng: 77.7158, after: 600, limit: 1 });
+  assert.ok(opts.length, 'no bus from Majestic to Hoodi');
+  const l = opts[0].legs.find(x => x.mode === 'bus');
+  const r = BM.legStops({ route: l.id, boardIdx: l.boardIdx, nStops: l.nStops, stops: l.stops, depMin: l.depMin });
+  assert.ok(r, 'khaali could not place its own bus leg');
+  assert.ok(r.stops.length > 2, 'a stretch of ' + r.stops.length + ' stops');
+  assert.strictEqual(r.stops[0].n, l.from, 'the list starts where she boards');
+  assert.strictEqual(r.stops[r.stops.length - 1].n, l.to, 'and ends where she gets off');
+  // the minutes must rise, or "which stop has it passed" is meaningless
+  r.stops.forEach((s, i, a) => { if (i) assert.ok(s.min >= a[i - 1].min, 'time went backwards at ' + s.n); });
+  // and they are HER times, not the first bus of the day's
+  assert.strictEqual(r.stops[0].min, l.depMin);
+  assert.ok(r.stops.every(s => s.n && s.lat && s.lng), 'a stop with no name or no place');
+});
+
+t('the bus khaali cannot place is refused, not guessed at', () => {
+  assert.strictEqual(BM.legStops({ route: 'NO-SUCH-ROUTE', boardIdx: 0, stops: 2 }), null);
+  assert.strictEqual(BM.legStops({ route: '304-Z', boardIdx: 9999, stops: 2 }), null);
+  assert.strictEqual(BM.legStops({}), null);
+});
+
+t('a train that runs down the corridor still knows where it is', () => {
+  // `visited` is indexed west-to-east; three of the six trains run the other
+  // way. Taking the last hit out of the raw array returned the HIGHEST index
+  // visited - which for a down train is where it started, so the dot never
+  // moved for half the fleet.
+  const ST_N = ST.length;
+  const down = [...Array(ST_N).keys()].reverse();          // a dir:-1 stop list
+  const visited = ST.map(() => false);
+  down.slice(0, 5).forEach(i => { visited[i] = true; });   // it has done five stops
+  const oldWay = visited.map((v, i) => v ? i : -1).filter(i => i >= 0).pop();
+  const newWay = down.filter(i => visited[i]).pop();
+  assert.strictEqual(oldWay, ST_N - 1, 'the old reading was its origin');
+  assert.strictEqual(newWay, ST_N - 5, 'the new reading is its latest stop');
+  assert.notStrictEqual(newWay, oldWay);
+});
+
 console.log('\ntracking: where it should have got to by now');
 
 t('a ride reports its stage from the booking and the clock, not from a store', () => {
@@ -2939,5 +2979,63 @@ t('a trip pass skips the hired leg instead of refusing the whole pass', () => {
   assert.ok(/booked on its own/.test(only.error), only.error);
 });
 
+
+console.log('\nwhat khaali will not say out loud');
+
+t('a free answer carrying a fare, a time or a route number is dropped', () => {
+  // No action ran, so there are no facts - every one of these is memory.
+  assert.ok(IN.invents('Take bus 500D, it is ₹35.'));
+  assert.ok(IN.invents('It costs 40 rupees.'));
+  assert.ok(IN.invents('The 6:40 PM leaves from platform two.'));
+  assert.ok(IN.invents('Take 16022 from Bangarpet.'));
+  assert.ok(IN.invents('Catch route 314.'));
+  assert.ok(IN.invents('The KBS-1K goes there.'));
+  assert.ok(IN.invents('Take the 304-A.'));
+});
+
+t('ordinary numbers are not inventions - khaali still talks like a person', () => {
+  assert.ok(!IN.invents('Two changes, about ten minutes of walking.'));
+  assert.ok(!IN.invents('Ask me to plan it and I will look it up properly.'));
+  assert.ok(!IN.invents(''));
+  assert.ok(!IN.invents(null));
+});
+
+t('khaali says it does not know in the language it was asked in', () => {
+  assert.ok(IN.CANNOT_SAY['en-IN'] && IN.CANNOT_SAY['hi-IN'] && IN.CANNOT_SAY['kn-IN']);
+  // and what it says instead must not itself trip the guard
+  for (const s of Object.values(IN.CANNOT_SAY)) assert.ok(!IN.invents(s), 'the refusal invents: ' + s);
+});
+
+t('a named bus stand is a place, not a demand for buses only', async () => {
+  // This line carried two literal backspaces where \b belonged, so the regex
+  // matched nothing and the guard never fired. It is live behaviour, so it
+  // gets a test.
+  const llm = async () => JSON.stringify({ origin: { text: 'Shivajinagar bus station' }, destination: { text: 'Whitefield' }, modes: ['bus'] });
+  const r = await IN.parseIntent('Shivajinagar bus station to Whitefield', { llm });
+  const m = r.request.modes || [];
+  assert.ok(!(m.length === 1 && m[0] === 'bus'), 'a bus STAND was read as bus ONLY: ' + JSON.stringify(m));
+});
+
+t('nothing khaali can say to a chatbot changes a booking', () => {
+  // The dispatch is a hand-rolled if-chain, and it stays read-only: chat plans
+  // and shows. Booking, paying, holding and cancelling are the app's, not the
+  // model's.
+  const src = fs.readFileSync(new URL('./server.mjs', import.meta.url), 'utf8');
+  const chat = src.slice(src.indexOf('SAARTHI_SYS'));
+  const types = [...new Set([...chat.matchAll(/act(?:ion)?\s*&&\s*act(?:ion)?\.type === '([a-z]+)'/g)].map(m => m[1]))].sort();
+  assert.deepStrictEqual(types, ['cancellations', 'mybookings', 'odds', 'plan', 'search']);
+});
+
+t('a chatbot hands out a car only when the traveller asked for one', () => {
+  // The chat planner falls back to the NETWORK, never to a vehicle. A car or a
+  // bike reaches the answer only through the modes she named, and those are
+  // filtered against ALL_MODES before use.
+  const src = fs.readFileSync(new URL('./server.mjs', import.meta.url), 'utf8');
+  const i = src.indexOf("act.type === 'plan'");
+  const plan = src.slice(i, src.indexOf("act.type === 'mybookings'"));
+  assert.ok(/use = modes\.length \? modes : \[\.\.\.journey\.MODES\]/.test(plan), 'the fallback is not the network');
+  assert.ok(!/'car'|'bike'/.test(plan), 'the chat planner names a vehicle of its own');
+  for (const h of JY.HIRE_MODES) assert.ok(!JY.MODES.includes(h), h + ' is in the default modes');
+});
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

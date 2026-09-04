@@ -200,6 +200,44 @@ export function legFound({ route, boardIdx, nStops, stops } = {}) {
   return null;
 }
 
+/**
+ * The stops a bus actually calls at between where she boards and where she gets
+ * off, each with the minute it reaches them.
+ *
+ * This is the bus's answer to "where is it now". A train has a station list and
+ * a scheduled minute at each one, and khaali has always been able to say which
+ * one it has reached; a bus has exactly the same thing in BMTC's pattern data
+ * and khaali has simply never read it out.
+ *
+ * `depMin` is when THIS bus left the first stop of its pattern, so the times
+ * are the ones on her ticket rather than the ones for the first bus of the day.
+ */
+export function legStops({ route, boardIdx, nStops, stops, depMin = null } = {}) {
+  const D = data();
+  const k = Number(boardIdx), n = Number(nStops), s = Number(stops);
+  if (!Number.isInteger(k) || k < 0) return null;
+  const r = D.routes.find(x => x.n === String(route || ''));
+  if (!r) return null;
+  const cands = r.p.filter(p => (Number.isInteger(n) && n > 0 ? p.s.length === n : true) && k < p.s.length);
+  for (const p of cands) {
+    const j = Number.isInteger(s) && s > 0 ? k + s : p.s.length - 1;
+    if (!(j > k && j < p.s.length)) continue;
+    // the whole pattern's clock, shifted so stop k is her boarding minute
+    const base = depMin != null ? depMin - p.m[k] : 0;
+    const out = [];
+    for (let i = k; i <= j; i++) {
+      const st = D.stops[p.s[i]];
+      if (!st) return null;
+      out.push({ i, n: st[1], lat: st[2], lng: st[3],
+        min: base + p.m[i], fromBoard: p.m[i] - p.m[k],
+        kind: stopKind(st[1]) });
+    }
+    return { route: r.n, headsign: r.ln || null, boardIdx: k, alightIdx: j,
+      nStops: p.s.length, stops: out };
+  }
+  return null;
+}
+
 /** How many stops and routes are loaded - for /api/meta and the tests. */
 export function stats() { const D = data(); return { stops: D.stops.length, routes: D.routes.length, patterns: D.routes.reduce((n, r) => n + r.p.length, 0), source: D.source }; }
 

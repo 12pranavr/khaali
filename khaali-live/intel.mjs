@@ -224,7 +224,7 @@ export async function parseIntent(text, { llm = null, geocode = null } = {}) {
   if (local.modes) merged.modes = local.modes;
   // "Shivajinagar bus station" names a place, not a preference: a model that
   // reads it as "bus only" is overruled when the grammar found no restriction
-  else if (/(bus|metro|railway|train) (station|stand|stop)/i.test(raw)) delete merged.modes;
+  else if (/\b(bus|metro|railway|train) (station|stand|stop)\b/i.test(raw)) delete merged.modes;
   merged.preferences = { ...(merged.preferences || {}), ...local.preferences };
   if (local.maxTransfers != null) merged.maxTransfers = local.maxTransfers;
   if (local.accessibility.stepFree) merged.accessibility = { stepFree: true };
@@ -350,3 +350,31 @@ function answerLocally(q, f) {
   if (/change|transfer|whitefield|via|through/.test(t)) return r.legs.filter(l => l.mode !== 'walk').map(l => (l.name || l.mode) + ' from ' + l.from + ' to ' + l.to).join(', then ') + '.';
   return 'You leave at ' + r.leaves + ' by ' + r.modes.join(' and ') + ', arriving ' + r.arrives + ' for ₹' + r.fare + '. Ask me about the seat, the crowding, the cost, or why this way.';
 }
+
+/**
+ * Does this sentence claim a fact khaali did not produce?
+ *
+ * leaks() above guards an answer that HAS facts behind it: a number in the
+ * sentence that is in none of the facts is an invention. This guards the other
+ * case - a free reply with no action, and so no facts at all. Deliberately
+ * narrow: a fare, a clock time, or a route/train number. Ordinary numbers -
+ * "two changes", "ten minutes' walk" - are fine and are not what this is for.
+ * What it stops is the model answering a timetable question out of its memory.
+ */
+export function invents(text) {
+  const t = String(text || '');
+  if (/₹\s?\d|\brs\.?\s?\d|\brupees?\b/i.test(t)) return true;                  // a fare
+  if (/\b\d{1,2}[:.]\d{2}\s?(am|pm)?\b/i.test(t)) return true;                  // a departure time
+  if (/\b\d{4,5}\b/.test(t)) return true;                                       // a train number
+  if (/\b(?:bus|route)\s+(?:no\.?\s*)?[0-9]{1,3}[A-Za-z]?\b/i.test(t)) return true;   // "bus 500D"
+  if (/\b[A-Za-z]{2,5}-[0-9][0-9A-Za-z]{0,3}\b/.test(t)) return true;           // "KBS-1K"
+  if (/\b[0-9]{2,3}-[A-Za-z]\b/.test(t)) return true;                           // "304-Z"
+  return false;
+}
+
+/** What khaali says instead of guessing. */
+export const CANNOT_SAY = {
+  'en-IN': 'I do not have that one to hand — ask me to plan the journey and I will look it up properly.',
+  'hi-IN': 'यह मेरे पास अभी नहीं है — मुझे यात्रा प्लान करने को कहिए, मैं ठीक से देखकर बताता हूँ।',
+  'kn-IN': 'ಅದು ಈಗ ನನ್ನ ಬಳಿ ಇಲ್ಲ — ಪ್ರಯಾಣ ಯೋಜಿಸಲು ಹೇಳಿ, ನಾನು ಸರಿಯಾಗಿ ನೋಡಿ ಹೇಳುತ್ತೇನೆ.',
+};

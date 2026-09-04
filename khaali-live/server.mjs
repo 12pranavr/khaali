@@ -639,6 +639,11 @@ const SAARTHI_SYS = () => [
   'CANCELLATION QUESTIONS (which trains are cancelled / is X cancelled / kya cancel hai / \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"cancellations","from":<index>,"to":<index>,"date":"YYYY-MM-DD"}} \u2014 from/to/date all OPTIONAL (omit for the whole corridor; date defaults to tomorrow; today is allowed).',
   'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, \u0cb5\u0cc7\u0caf\u0ccd\u0c9f\u0cbf\u0c82\u0c97\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} \u2014 wl REQUIRED (their waitlist position), the rest optional.',
   'TICKET QUESTIONS (my ticket / meri booking / mera PNR / is my train ok / \u0ca8\u0ca8\u0ccd\u0ca8 \u0c9f\u0cbf\u0c95\u0cc6\u0c9f\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"mybookings"}} \u2014 the system reads the traveller\u2019s real tickets and checks each for cancellation.',
+  // khaali stopped being a rail app some time ago. Saarthi was never told.
+  'khaali is not only trains. It also plans a whole journey across Bengaluru: BMTC buses (the real timetable, 9,875 stops), the Namma Metro Purple Line, the walk between them that nobody mentions, and - only when the traveller asks for one - a hired car or bike for a last mile no bus reaches. A trip pass covers the bus and metro legs of one journey and is spent when they have been ridden. khaali also measures how fast the roads are moving, from BMTC run times.',
+  'JOURNEY QUESTIONS - anything that is not two corridor rail stations. "How do I get to Hebbal", "bus to Majestic", "Bangarpet to Whitefield by metro", "I need to reach Indiranagar by nine", a house, an office, a landmark, a bus stop: respond ONLY with JSON {"say":"","action":{"type":"plan","from":"<their words for the origin>","to":"<their words for the destination>","after":"HH:MM","modes":["train","metro","bus"]}} - "after" ONLY if they named a time; "modes" ONLY if they restricted themselves, and include "car" or "bike" ONLY if they actually asked to hire one. The system plans it properly and answers with real times and fares.',
+  'NEVER state a bus number, a route, a fare, a departure time or how long a road takes from your own knowledge. You do not have that data - the planner does. Return the plan action and let the system answer. If you cannot, say you will look it up rather than guessing.',
+  'khaali cannot book a bus, a metro ride or a cab for anybody, and it takes no payment: it plans and shows. If asked to book, say the booking is done on the page and offer to plan the journey.',
   'For anything else respond ONLY with JSON: {"say":"<your answer>","action":null}.',
   'Your "say" text may be READ ALOUD: write plain flowing sentences only \u2014 never bullet lists, dashes, "=" signs, slashes, brackets, tables or markdown of any kind.',
   'ONGOING CONVERSATIONS: follow-ups inherit context from history. \u201caur parso?\u201d = same route, date today+2. \u201c3AC mein?\u201d = same route and date, cls 3A. \u201cwapas\u201d or \u201creturn\u201d = swap from and to. Resolve them and STILL return the search action \u2014 never ask for information already in the history.',
@@ -1295,6 +1300,34 @@ async function api(req, res, url) {
       factor: f.factor, factorQuality: f.quality,
       stats: road.stats(),
       note: 'Where a road is slow is measured from BMTC run times. When it is slow is a declared curve, not a measurement.' });
+  }
+
+  // Where a bus has got to on her stretch of it.
+  //
+  // The same question khaali has always answered for a train, asked of a bus:
+  // a list of stops with a minute at each, and which one the clock has passed.
+  // Only the server has BMTC's pattern data, so the stop list comes from here;
+  // the drawing and the sentence are the client's, shared with the train.
+  //
+  // Simulated in exactly the sense the train is: this is where the timetable
+  // says the bus should be. Nobody publishes where it actually is.
+  if (p === '/api/where') {
+    if (q.get('kind') !== 'bus') return send(res, 400, { ok: false, error: 'khaali can only place a bus here.' });
+    const dep = parseInt(q.get('dep'), 10);
+    const r = bmtc.legStops({ route: q.get('route'), boardIdx: parseInt(q.get('boardIdx'), 10),
+      nStops: parseInt(q.get('nStops'), 10), stops: parseInt(q.get('stops'), 10),
+      depMin: (dep >= 0 && dep < 2880) ? dep : null });
+    if (!r) return send(res, 404, { ok: false, error: 'khaali does not know that bus leg.' });
+    const at = parseInt(q.get('at'), 10);
+    const now = (at >= 0 && at < 2880) ? at : (simNow().getHours() * 60 + simNow().getMinutes());
+    // the last stop the clock has gone past; -1 when it has not left yet
+    let cur = -1;
+    r.stops.forEach((s, i) => { if (now >= s.min) cur = i; });
+    const last = r.stops.length - 1;
+    return send(res, 200, { ok: true, ...r, at: now, cur,
+      state: cur < 0 ? 'waiting' : cur >= last ? 'arrived' : 'running',
+      simulated: true,
+      source: 'BMTC published timetable · where the bus is scheduled to be, not where it is' });
   }
 
   // ---- the intelligence layer: sentences in, sentences out, facts untouched ----
@@ -2184,13 +2217,22 @@ async function api(req, res, url) {
           + 'Every word of your "say" text MUST be in ' + sl[0] + ' (' + sl[1] + '), in its own script, for THIS and every later reply until they switch. Do not use any other language.'
         : '';
       const msgs1 = [{ role: 'system', content: SAARTHI_SYS() + langNote }, ...SHOTS, ...hist];
+      // Whichever provider answers. This used to call Sarvam directly and, on
+      // failure, RETRY THE SAME DEAD PROVIDER - so a spent Sarvam quota took
+      // Saarthi down completely even with an OpenAI key sitting right there.
+      // llmFor already tries them in turn; the chat path simply never used it.
+      const chatLlm = llmFor('chat');
+      if (!chatLlm) return send(res, 200, { say: 'Saarthi has no voice configured right now.', lang: sl ? sl[1] : null });
       let first;
-      try { first = await sarvam(msgs1); }
-      catch (e1) { first = await sarvam(msgs1); }   // Sarvam load spike: one retry
+      try { first = await chatLlm(msgs1, { maxTokens: 700 }); }
+      catch (e1) { try { first = await chatLlm(msgs1, { maxTokens: 700 }); } catch (e1b) { first = ''; } }
       // Long multi-turn prompts occasionally come back EMPTY. Retry once
       // without the few-shots (shorter prompt, same history) before giving up.
       if (!String(first || '').trim()) {
-        try { first = await sarvam([{ role: 'system', content: SAARTHI_SYS() + langNote }, ...hist]); } catch (e2) {}
+        try { first = await chatLlm([{ role: 'system', content: SAARTHI_SYS() + langNote }, ...hist], { maxTokens: 700 }); } catch (e2) {}
+      }
+      if (!String(first || '').trim()) {
+        return send(res, 200, { say: await retrySayFor(sl), lang: sl ? sl[1] : null });
       }
       let plan = null;
       try { plan = JSON.parse((first.match(/\{[\s\S]*\}/) || ['{}'])[0]); } catch { plan = null; }
@@ -2263,6 +2305,66 @@ async function api(req, res, url) {
         let sayO = en;
         if (sl) { try { sayO = (await translateTo(en, sl[1])) || en; } catch (e) {} }
         return send(res, 200, { say: sayO, lang: sl ? sl[1] : null, link: linkO });
+      }
+
+      // A whole journey across the city, planned by the planner.
+      //
+      // Saarthi does not answer this one. It only says WHERE the traveller
+      // wants to go; the answer comes from journeysAnywhere -> capacity ->
+      // allocate, and the sentence read aloud is allocate.sentence(), the same
+      // deterministic line the planner card shows. No model prose reaches the
+      // traveller here, so no fare and no bus number can be invented.
+      if (act && act.type === 'plan') {
+        const words = v => String(v || '').slice(0, 80).trim();
+        const endOf = async txt => {
+          if (!txt) return null;
+          const r = intel.resolvePlace(txt);                    // a station or a metro stop
+          if (r) return { end: { kind: r.kind, id: r.id }, name: r.name };
+          const g = await findPlace(txt);                       // a bus stop, then the map
+          return g ? { end: { kind: 'place', lat: g.lat, lng: g.lng, name: g.name }, name: g.name } : null;
+        };
+        const A = await endOf(words(act.from)), B = await endOf(words(act.to));
+        if (!A || !B) {
+          const miss = !A ? words(act.from) : words(act.to);
+          const en = 'I could not find ' + (miss || 'that place') + ' on khaali’s map. Try a station, a bus stop, or a landmark in Bengaluru.';
+          let sayP = en; if (sl) { try { sayP = (await translateTo(en, sl[1])) || en; } catch (e) {} }
+          return send(res, 200, { say: sayP, lang: sl ? sl[1] : null });
+        }
+        // she may name a mode; she is never given one she did not name
+        const modes = (Array.isArray(act.modes) ? act.modes : [])
+          .map(x => String(x).toLowerCase()).filter(x => journey.ALL_MODES.includes(x));
+        const use = modes.length ? modes : [...journey.MODES];
+        const mt = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(act.after || ''));
+        const after = mt ? (+mt[1]) * 60 + (+mt[2]) : (simNow().getHours() * 60 + simNow().getMinutes());
+        const date = TODAY();
+        const r = journey.journeysAnywhere({ from: A.end, to: B.end, after, modes: use,
+          counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } } });
+        let en;
+        if (!r.ok || !r.chains.length) {
+          en = 'I could not find a way from ' + A.name + ' to ' + B.name + ' with what khaali knows'
+            + (modes.length ? ' using only ' + use.join(' and ') : '') + '.';
+        } else {
+          capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
+            if (!(fi >= 0 && ti >= 0)) return null;
+            const k = store.countsFor(String(no), date, 'SL', fi, ti);
+            return { free: k.free, total: k.free + k.part + k.taken + k.locked };
+          } });
+          const a = allocate.allocate(r.chains, { after });
+          const c = r.chains[a.recommended != null ? a.recommended : 0];
+          const legs = c.legs.filter(l => l.mode !== 'walk')
+            .map(l => l.mode === 'metro' ? (l.line || 'the metro') : (l.name || l.mode));
+          en = 'From ' + A.name + ' to ' + B.name + ', leave at ' + c.depText + ' and you are there by '
+            + c.arrText + '. That is ' + legs.join(', then ') + ', about ₹' + c.fare + '. '
+            + allocate.sentence(a.reason);
+        }
+        let sayP = en;
+        if (sl) { try { sayP = (await translateTo(en, sl[1])) || en; } catch (e) {} }
+        const q2 = new URLSearchParams({ fromKind: A.end.kind, fromId: A.end.kind === 'place'
+          ? (A.end.lat.toFixed(5) + ',' + A.end.lng.toFixed(5)) : A.end.id,
+          toKind: B.end.kind, toId: B.end.kind === 'place'
+            ? (B.end.lat.toFixed(5) + ',' + B.end.lng.toFixed(5)) : B.end.id,
+          fromName: A.name, toName: B.name, after: String(after), modes: use.join(',') });
+        return send(res, 200, { say: sayP, lang: sl ? sl[1] : null, link: '/plan?' + q2.toString() });
       }
 
       if (act && act.type === 'mybookings') {
@@ -2401,6 +2503,15 @@ async function api(req, res, url) {
         });
       }
       let sayFinal = (plan && plan.say ? String(plan.say).trim() : '') || sayOf(first) || await retrySayFor(sl);
+      // A free answer with no action behind it has NO facts behind it either.
+      //
+      // /api/explain and /api/ask have been guarded by intel.leaks() from the
+      // start - a number in the sentence that is in none of the facts is an
+      // invention - but this path never was. So "which bus goes to Majestic"
+      // came back with a route number and a fare from the model's own memory,
+      // in khaali's voice, spoken aloud. Confident and unverified is worse
+      // than not knowing, so khaali says it does not know instead.
+      if (intel.invents(sayFinal)) sayFinal = intel.CANNOT_SAY[sl && sl[1]] || intel.CANNOT_SAY['en-IN'];
       // Hard guarantee: an explicitly requested language always wins, even if
       // the model ignored the pin — force-translate (auto-detected source).
       if (sl && sl[1] !== 'en-IN') {

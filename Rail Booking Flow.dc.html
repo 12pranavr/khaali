@@ -2464,6 +2464,27 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="{{ c.subStyle }}">{{ c.sub }}</div>
         <div style="{{ c.statusStyle }}">{{ c.status }}</div>
         <div style="{{ c.barOuter }}"><div style="{{ c.barFill }}"></div></div>
+        <div style="{{ c.panelStyle }}">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:2px">
+            <span style="{{ c.pBadgeStyle }}">{{ c.pBadge }}</span>
+          </div>
+          <div style="{{ c.pLineStyle }}">{{ c.pLine }}</div>
+          <div style="margin-top:12px">
+            <sc-for list="{{ c.pStops }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;gap:11px;align-items:flex-start">
+                <div style="display:flex;flex-direction:column;align-items:center;align-self:stretch;flex:none">
+                  <div style="{{ s.dotStyle }}"></div>
+                  <div style="{{ s.connStyle }}"></div>
+                </div>
+                <div style="flex:1;min-width:0;padding-bottom:11px">
+                  <div style="{{ s.nameStyle }}">{{ s.name }}</div>
+                  <div style="{{ s.metaStyle }}">{{ s.meta }}</div>
+                </div>
+                <div style="{{ s.tagStyle }}">{{ s.tag }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
         <div style="{{ c.noteStyle }}">{{ c.note }}</div>
       </div>
     </sc-for>
@@ -3541,6 +3562,24 @@ class Component extends DCLogic {
     // arrived from the server yet, so validating against TRAINS here would
     // silently reject deep links to the 122 timetable trains.
     const tn=q.get('train');if(tn&&/^\d{3,5}$/.test(tn))patch.train=tn;
+    // A link into the planner carries the whole question, so "Show me →" from
+    // Saarthi opens a planner already filled in rather than an empty one.
+    if(page==='plan'){
+      const kindOf=k=>k==='metro'?'metro':k==='place'?'place':'rail';
+      const fk=q.get('fromKind'),fi=q.get('fromId'),tk=q.get('toKind'),ti=q.get('toId');
+      if(fk&&fi){patch.pFromK=kindOf(fk);patch.pFromId=fi;patch.pTxtF=null;}
+      if(tk&&ti){patch.pToK=kindOf(tk);patch.pToId=ti;patch.pTxtT=null;}
+      // a point on the map is not in planPlaces() until it is remembered
+      [['place',fk,fi,q.get('fromName')],['place',tk,ti,q.get('toName')]].forEach(([w,k,id,nm])=>{
+        if(k!=='place'||!id)return;
+        const m=String(id).match(/^(-?[\d.]+),(-?[\d.]+)$/);if(!m)return;
+        this.planAddPlace({id,name:nm||('A point on the map'),lat:parseFloat(m[1]),lng:parseFloat(m[2]),near:null});
+      });
+      const af=num('after');if(af!=null&&af>=0&&af<1440){patch.pTime=this.toHHMM(af);patch.pAfterCustom=true;}
+      const md=(q.get('modes')||'').split(',').map(x=>x.trim()).filter(Boolean);
+      if(md.length)patch.pModes=md;
+      if(fk&&fi&&tk&&ti)patch.pAutoSearch=true;
+    }
     // A confirm or ticket link has no hold or booking behind it on a cold load.
     patch.page=this.TRANSIENT[page]||page;
     patch.classModal=false;patch.countModal=false;patch.hov=null;patch.picks=[];
@@ -5256,6 +5295,7 @@ class Component extends DCLogic {
      is what it is doing. */
   trackPull(){
     if(this._trBusy)return;this._trBusy=true;
+    this.planBoot();                       // the Purple Line, for a metro pass
     Promise.all([
       this.authFetch('/api/ride',{},9000).then(r=>r.json()).catch(()=>null),
       this.authFetch('/api/pass',{},9000).then(r=>r.json()).catch(()=>null),
@@ -5264,7 +5304,26 @@ class Component extends DCLogic {
       if(rd&&rd.rides)Object.assign(st,{trRides:rd.rides,trToday:rd.today,trMinute:rd.minute});
       if(ps&&ps.passes)st.trPasses=ps.passes;
       this.setState(st);
-    }).finally(()=>{this._trBusy=false;});
+    }).finally(()=>{this._trBusy=false;this.trackBuses();});
+  }
+  /** Where each bus on a live trip pass has got to. The server holds BMTC's
+      pattern data, so the stop list has to come from there. */
+  trackBuses(){
+    const today=this.dateIsoFor(0);
+    (this.state.trPasses||[]).forEach(p=>{
+      if(p.kind!=='trip'||p.date!==today)return;
+      const leg=(p.legs||[]).find(l=>l.mode==='bus'&&!l.ridden)||(p.legs||[]).find(l=>l.mode==='bus');
+      if(!leg||!leg.route)return;
+      const key='pass:'+p.id;
+      if((this.state.trWhere||{})[key]||this._trW===key)return;
+      this._trW=key;
+      const qs='kind=bus&route='+encodeURIComponent(leg.route)
+        +(leg.boardIdx!=null?'&boardIdx='+leg.boardIdx:'&boardIdx=0')
+        +(leg.nStops?'&nStops='+leg.nStops:'')+(leg.stops?'&stops='+leg.stops:'');
+      this.tfetch('/api/where?'+qs,null,9000).then(r=>r.json()).then(j=>{
+        if(j&&j.ok)this.setState({trWhere:{...(this.state.trWhere||{}),[key]:j}});
+      }).catch(()=>{}).finally(()=>{if(this._trW===key)this._trW=null;});
+    });
   }
   /**
    * Where her train has got to on HER stretch - from the timetable and the
@@ -5292,6 +5351,124 @@ class Component extends DCLogic {
       stage:done?'arrived':started?'running':'waiting',
       mins:started?Math.max(1,span-gone):(done?0:((dep-now)+1440)%1440)};
   }
+  /**
+   * One panel, three vehicles.
+   *
+   * "Where your train is now" already existed on the ticket page and was the
+   * right idea; it was just welded to this.ST, this.TRAINS and the global
+   * search state, so a bus could not use a line of it. This builds the same
+   * shape - a sentence, a badge, a list of stops with a dot on the current one
+   * - from whatever the vehicle happens to be.
+   */
+  trackPanel({stops,cur,board,alight,state,badge,line,here}){
+    const dot=(i)=>{
+      const isCur=i===cur&&state==='running',isBoard=i===board,isOff=i===alight;
+      const passed=cur>=0&&i<=cur;
+      return {width:(isCur||isBoard||isOff)?12:8,height:(isCur||isBoard||isOff)?12:8,
+        borderRadius:'50%',flex:'none',marginTop:4,
+        background:isCur?'var(--k-d8385a)':isBoard?'var(--k-14161a)':passed?'var(--k-1f9d55)':'var(--k-fff)',
+        border:isCur||isBoard||passed?'none':'2px solid var(--k-d4d3ce)'};
+    };
+    return {
+      line,badge,
+      badgeStyle:{font:'800 9px/1 Manrope,sans-serif',letterSpacing:'.1em',padding:'4px 7px',
+        borderRadius:4,flex:'none',
+        background:state==='running'?'var(--k-e6f4ec)':'var(--k-f1f1ee)',
+        color:state==='running'?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)'},
+      lineStyle:{marginTop:10,padding:'11px 13px',borderRadius:9,
+        font:'700 13px/1.6 Manrope,sans-serif',
+        background:state==='running'?'var(--k-eaf0fd)':'var(--k-f4f4f2)',
+        color:state==='running'?'var(--k-fg-1f3f8f)':'var(--k-fg-40434a)'},
+      stops:stops.map((s,i)=>({
+        name:s.name,meta:s.meta,
+        dotStyle:dot(i),
+        connStyle:{width:2,flex:'none',alignSelf:'stretch',marginLeft:5,
+          background:i===stops.length-1?'transparent':'var(--k-e6e5e0)'},
+        nameStyle:{font:((i===cur&&state==='running')||i===board)?'700 13.5px/1.35 Manrope,sans-serif':'600 13px/1.35 Manrope,sans-serif',
+          color:(i===cur&&state==='running')?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'},
+        metaStyle:{font:"500 11px/1.5 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',marginTop:1},
+        tag:(i===cur&&state==='running')?here:(i===board?'You board':(i===alight?'You get off':'')),
+        tagStyle:{display:((i===cur&&state==='running')||i===board||i===alight)?'block':'none',
+          flex:'none',font:'700 10.5px/1.5 Manrope,sans-serif',
+          color:(i===cur&&state==='running')?'var(--k-fg-d8385a)':'var(--k-fg-8a8a84)'},
+      })),
+    };
+  }
+  /** The train, from its own timetable - the same arithmetic the ticket uses. */
+  trackTrainPanel(b){
+    const tr=this.TRAINS.find(t=>t.no===b.train);
+    if(!tr)return null;
+    const lv=this.liveOf(tr),order=this.stopIdxs(tr);
+    const cur=order.filter(i=>lv.visited[i]).pop();
+    const ci=cur==null?-1:order.indexOf(cur),bi=order.indexOf(b.from),ai=order.indexOf(b.to);
+    const lo=Math.max(0,Math.min(ci<0?bi:ci,bi)-1),hi=Math.min(order.length-1,Math.max(ai,ci<0?bi:ci)+1);
+    const win=order.slice(lo,hi+1);
+    const disp=m=>m==null?'':this.toHHMM(((m%1440)+1440)%1440);
+    const running=lv.state==='run';
+    const gap=order.indexOf(b.from)-(ci<0?0:ci);
+    const line=!running
+      ?('Not running right now. Boarding at '+this.ST[b.from].n+' at '+disp(this.sMin(tr,b.from,'d'))+'.')
+      :gap>0?('Train is at '+this.ST[cur].n+' — '+gap+(gap===1?' station':' stations')+' before you board.')
+        :gap===0?('Train is at your boarding station, '+this.ST[b.from].n+'. Board now.')
+          :('Train has left '+this.ST[b.from].n+' — it is at '+this.ST[cur].n+'.');
+    return this.trackPanel({
+      stops:win.map(i=>({name:this.ST[i].n,
+        meta:this.ST[i].c+' · Pf '+this.plat(tr,i)+' · '+disp(this.sMin(tr,i,'a')||this.sMin(tr,i,'d'))})),
+      cur:win.indexOf(cur),board:win.indexOf(b.from),alight:win.indexOf(b.to),
+      state:running?'running':'waiting',
+      badge:lv.delay?('RUNNING '+lv.delay+' MIN LATE'):'ON TIME',
+      line,here:'Train here'});
+  }
+  /** The bus, from BMTC's own pattern - fetched, because only the server has it. */
+  trackBusPanel(key){
+    const w=(this.state.trWhere||{})[key];
+    if(!w||!w.ok)return null;
+    const disp=m=>this.toHHMM(((m%1440)+1440)%1440);
+    const last=w.stops.length-1;
+    const line=w.state==='waiting'
+      ?('Not left yet — it reaches '+w.stops[0].n+' at '+disp(w.stops[0].min)+'.')
+      :w.state==='arrived'?('The bus has reached '+w.stops[last].n+'.')
+        :('Bus is at '+w.stops[w.cur].n+' — '+(last-w.cur)+(last-w.cur===1?' stop':' stops')+' to go.');
+    return this.trackPanel({
+      stops:w.stops.map(s=>({name:s.n,meta:w.route+' · '+s.kind+' · '+disp(s.min)})),
+      cur:w.cur,board:0,alight:last,state:w.state,
+      badge:w.state==='running'?'ON TIME':'SCHEDULED',line,here:'Bus here'});
+  }
+  /** The metro, from BMRCL's own published run times. */
+  trackMetroPanel(leg){
+    const M=this.state.pMetro||[];
+    if(!M.length||!leg)return null;
+    const i=M.findIndex(x=>x.id===leg.fromId||x.n===leg.from);
+    const j=M.findIndex(x=>x.id===leg.toId||x.n===leg.to);
+    if(i<0||j<0||j<=i)return null;
+    const win=M.slice(i,j+1);
+    const d=new Date(),now=d.getHours()*60+d.getMinutes();
+    // the line runs every few minutes, so "where is it" is really "where would
+    // she be" - the ride from her boarding stop, against the clock
+    const board=leg.depMin!=null?leg.depMin:null;
+    const mins=k=>board==null?null:Math.round(board+(win[k].min-win[0].min));
+    let cur=-1;if(board!=null)win.forEach((x,k)=>{if(now>=mins(k))cur=k;});
+    const state=board==null?'waiting':cur<0?'waiting':cur>=win.length-1?'arrived':'running';
+    const line=state==='waiting'?('Board at '+win[0].n+(board!=null?(' around '+this.toHHMM(board)):'')+'.')
+      :state==='arrived'?('You should be at '+win[win.length-1].n+' by now.')
+        :('Around '+win[cur].n+' — '+(win.length-1-cur)+' more stop'+((win.length-1-cur)===1?'':'s')+'.');
+    return this.trackPanel({
+      stops:win.map((x,k)=>({name:x.n,meta:x.id+' · Purple Line'+(mins(k)!=null?(' · '+this.toHHMM(mins(k))):'')})),
+      cur,board:0,alight:win.length-1,state,
+      badge:'EVERY FEW MINUTES',line,here:'About here'});
+  }
+  /** The cab. Two points, and how far along the road she is between them. */
+  trackCabPanel(r){
+    const st=r.status2||{};
+    const running=st.stage==='riding';
+    const stops=[{name:r.from,meta:'pick-up'+(r.pickupMin!=null?(' · '+this.toHHMM(r.pickupMin)):'')},
+      {name:r.to,meta:r.km+' km · about '+r.min+' min by road'}];
+    return this.trackPanel({stops,
+      cur:st.stage==='arrived'?1:(running?0:-1),board:0,alight:1,
+      state:running?'running':(st.stage==='arrived'?'arrived':'waiting'),
+      badge:running?'ON THE WAY':(st.stage==='arrived'?'ARRIVED':'BOOKED'),
+      line:st.label||'Booked',here:'Your '+r.kind+' is here'});
+  }
   trackBindings(){
     const S=this.state,gone={display:'none'};
     if(S.page==='track'&&this._trPage!==true){this._trPage=true;this.trackPull();}
@@ -5317,6 +5494,7 @@ class Component extends DCLogic {
         pct:(onToday&&t)?t.pct:null,
         barStyle:{display:(onToday&&t)?'block':'none'},
         fillStyle:{width:((onToday&&t)?t.pct:0)+'%',background:CH.train},
+        panel:onToday?this.trackTrainPanel(b):null,
         onOpen:()=>this.openTicket(b.pnr),
         note:(onToday&&t)?'From this train’s own timetable and the clock. khaali has no live feed for where a train really is, and will not draw a dot it cannot see.':'',
         noteStyle:{display:(onToday&&t)?'block':'none',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
@@ -5338,6 +5516,10 @@ class Component extends DCLogic {
         pct:trip&&legs.length?Math.round(done/legs.length*100):null,
         barStyle:{display:(trip&&legs.length)?'block':'none'},
         fillStyle:{width:(trip&&legs.length?Math.round(done/legs.length*100):0)+'%',background:'#8C2877'},
+        panel:(p.kind==='trip'&&p.date===today)
+          ?(this.trackBusPanel('pass:'+p.id)
+            ||this.trackMetroPanel((p.legs||[]).find(l=>l.mode==='metro'&&!l.ridden)||(p.legs||[]).find(l=>l.mode==='metro')))
+          :null,
         onOpen:()=>{},note:'',noteStyle:gone};
       (p.date===today&&p.status!=='used'?live:past).push(card);
     });
@@ -5353,6 +5535,7 @@ class Component extends DCLogic {
         pct:st.progress!=null?st.progress:null,
         barStyle:{display:st.progress!=null?'block':'none'},
         fillStyle:{width:(st.progress||0)+'%',background:CH[r.kind]||CH.car},
+        panel:(r.date===today)?this.trackCabPanel(r):null,
         onOpen:()=>{},
         note:'khaali runs no cars. This is where the ride should have got to by now, from the booking and the clock.',
         noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
@@ -5360,15 +5543,21 @@ class Component extends DCLogic {
     });
 
     const deco=c=>({...c,
+      // the panel, when there is one; otherwise the row just shows its status
+      hasPanel:!!c.panel,
+      panelStyle:{display:c.panel?'block':'none',marginTop:12,paddingTop:12,borderTop:'1px solid var(--k-f0efeb)'},
+      pLine:c.panel?c.panel.line:'', pLineStyle:c.panel?c.panel.lineStyle:gone,
+      pBadge:c.panel?c.panel.badge:'', pBadgeStyle:c.panel?c.panel.badgeStyle:gone,
+      pStops:c.panel?c.panel.stops:[],
       rowStyle:{background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:12,
         padding:'15px 17px',marginBottom:11},
       chipS:{...c.chipStyle,font:'800 9px/1 Manrope,sans-serif',letterSpacing:'.12em',
         padding:'5px 7px',borderRadius:4,flex:'none'},
       titleStyle:{font:'700 14px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)',marginTop:8},
       subStyle:{font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:3},
-      statusStyle:{display:c.status?'block':'none',marginTop:8,
+      statusStyle:{display:(c.status&&!c.panel)?'block':'none',marginTop:8,
         font:'700 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
-      barOuter:{...c.barStyle,height:6,borderRadius:99,background:'var(--k-f1f1ee)',marginTop:8,overflow:'hidden'},
+      barOuter:{...(c.panel?gone:c.barStyle),height:6,borderRadius:99,background:'var(--k-f1f1ee)',marginTop:8,overflow:'hidden'},
       barFill:{...c.fillStyle,height:'100%',borderRadius:99},
     });
 
@@ -7392,6 +7581,11 @@ class Component extends DCLogic {
     // the map is whatever journey is selected, and it repaints when that
     // changes - or when the coordinates it was waiting for finally land
     {const S0=this.state;
+      // arrived from Saarthi with both ends filled in: run it for her
+      if(S0.page==='plan'&&S0.pAutoSearch&&!this._autoRan){
+        this._autoRan=true;this.setState({pAutoSearch:false});
+        setTimeout(()=>this.planSearch(),120);}
+      if(S0.page!=='plan')this._autoRan=false;
       if(S0.page==='plan'&&S0.pMapChain&&this._pmapSig!==this.planMapSig(S0.pMapChain))
         this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
       // A route that is no longer the answer must come OFF the map. The box
@@ -8446,8 +8640,12 @@ class Component extends DCLogic {
         return out;})(),
       approachLine:(()=>{
         if(lv.state!=='run')return 'Not running right now. Boarding at '+fromS.n+' (Pf '+this.plat(tr,S.from)+') at '+disp(depJ)+'.';
-        const seen=lv.visited.map((v,i)=>v?i:-1).filter(i=>i>=0);
-        const cur=seen.length?seen[seen.length-1]:idxsT[0];
+        // `visited` is indexed by ST, which runs west to east; half the fleet
+        // runs the other way. Walking the raw array and taking the last hit
+        // returns the HIGHEST station index visited, which for a down train is
+        // where it started - so the dot never moved. Walk the train's own
+        // direction-sorted stop list instead.
+        const cur=idxsT.filter(i=>lv.visited[i]).pop() ?? idxsT[0];
         const order=idxsT;
         const gap=order.indexOf(S.from)-order.indexOf(cur);
         if(gap>0)return 'Train is at '+ST[cur].n+' — '+gap+(gap===1?' station':' stations')+' before your boarding point. Reach '+fromS.n+' Pf '+this.plat(tr,S.from)+' by '+disp(depJ==null?null:depJ-20)+'.';
@@ -8458,8 +8656,7 @@ class Component extends DCLogic {
         font:'600 13.5px/1.5 Manrope,sans-serif',color:lv.state!=='run'?'var(--k-fg-40434a)':'var(--k-fg-1f3f8f)'},
       approachStops:(()=>{
         const order=idxsT;
-        const seen=lv.visited.map((v,i)=>v?i:-1).filter(i=>i>=0);
-        const cur=seen.length?seen[seen.length-1]:order[0];
+        const cur=order.filter(i=>lv.visited[i]).pop() ?? order[0];
         const ci=order.indexOf(cur),fi=order.indexOf(S.from);
         const lo=Math.max(0,Math.min(ci,fi)-1),hi=Math.min(order.length-1,Math.max(ci,fi)+1);
         return order.slice(lo,hi+1).map((i,k,arr)=>{
