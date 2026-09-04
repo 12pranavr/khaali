@@ -18,6 +18,7 @@ import * as SIM from './sim.mjs';
 import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
+import * as HR from './hire.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -2464,8 +2465,12 @@ t('a place that is close enough is walked to; one too far is refused', () => {
   const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 12.9760, lng: 77.5740, name: 'Near Majestic' }, after: 480 });
   const last = r.chains[0].legs[r.chains[0].legs.length - 1];
   assert.strictEqual(last.mode, 'walk');
+  // khaali now LOOKS as far as it would ever travel and lets the last mile
+  // decide, so the refusal names the wall that was actually hit: no bus runs
+  // there, rather than a radius nobody outside the code knows about.
   const far = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 13.4, lng: 77.9, name: 'Chikkaballapur' }, after: 480 });
-  assert.strictEqual(far.ok, false); assert.strictEqual(far.reason, 'to-too-far');
+  assert.strictEqual(far.ok, false);
+  assert.ok(['no-bus', 'to-too-far'].includes(far.reason), far.reason);
   // a place a bus does not reach from any nearby station is a "no", not an auto
   const nowhere = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 12.90, lng: 78.05, name: 'A field near Bangarpet' }, after: 480 });
   if (!nowhere.ok) assert.ok(['no-bus', 'to-too-far'].includes(nowhere.reason), nowhere.reason);
@@ -2480,6 +2485,195 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   const a = AL.allocate(r.chains, { after: 480 });
   assert.ok(a.recommended != null);
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
+});
+
+console.log('\nhiring: a car and a bike for the miles the network does not cover');
+
+// The point from the screenshot: 20 km north of Majestic, where nothing runs.
+const NOWHERE = { kind: 'place', lat: 13.1556, lng: 77.5730, name: 'A point 20 km N of Majestic' };
+const REACHED = { kind: 'place', lat: 12.9902, lng: 77.7181, name: 'Hoodi' };   // a bus does go here
+const BWT = { kind: 'rail', id: 'BWT' };
+const anyHire = c => c.legs.some(l => l.mode === 'car' || l.mode === 'bike');
+const plan = (to, modes, extra = {}) => JY.journeysAnywhere({ from: BWT, to, after: 480, modes, ...extra });
+
+t('nothing is hired unless she asks: the default is the network, and it always was', () => {
+  // the regression guard for the whole feature. If this fails, hiring has
+  // leaked into every search khaali does.
+  [NOWHERE, REACHED].forEach(to => {
+    const r = plan(to, undefined);                       // no modes at all: the default
+    if (r.ok) assert.ok(r.chains.every(c => !anyHire(c)), 'a default search hired something');
+    const m = plan(to, ['train', 'metro', 'bus']);
+    if (m.ok) assert.ok(m.chains.every(c => !anyHire(c)), 'an explicit network search hired something');
+  });
+  // A place khaali can reach by bus it now DOES reach by bus, wide search or
+  // not - what must never happen is hiring something to get there.
+  const net = plan(NOWHERE, ['train', 'metro', 'bus']);
+  if (net.ok) assert.ok(net.chains.every(c => !anyHire(c)));
+  // and somewhere nothing runs at all is still a no
+  assert.strictEqual(plan({ kind: 'place', lat: 12.90, lng: 78.05, name: 'A field' }, ['train', 'metro', 'bus']).ok, false);
+});
+
+t('turned on, a car reaches the place a bus never could', () => {
+  const r = plan(NOWHERE, ['train', 'metro', 'bus', 'car']);
+  assert.ok(r.ok, 'a car should reach 20 km north of Majestic');
+  const withCar = r.chains.filter(anyHire);
+  assert.ok(withCar.length, 'no chain used the car');
+  const l = withCar[0].legs.find(x => x.mode === 'car');
+  assert.strictEqual(l.name, 'Car');
+  assert.ok(l.km > 0 && l.min > 0);
+  assert.strictEqual(l.source, 'estimated', 'a hired fare is an estimate and says so');
+});
+
+t('a named bus still beats a car over the same ground', () => {
+  // Hoodi has a BMTC bus. mile() must reach it by that bus, not by hiring -
+  // the order in mile() is the whole promise of commit afa6eeb.
+  const gap = JY.mile({ name: 'Kempegowda Bus Station', lat: 12.97751, lng: 77.57141 },
+    { name: 'Hoodi', lat: 12.99191, lng: 77.7158 }, 600, 15.7, { hire: ['car', 'bike'] });
+  assert.ok(gap, 'the gap is closable');
+  assert.ok(gap.bus, 'a bus runs it, so a bus is what khaali used');
+  assert.ok(!gap.ride, 'khaali hired something anyway');
+});
+
+t('a hired fare is a range, never a single figure khaali cannot know', () => {
+  const f = HR.fareFor('car', 10);
+  assert.ok(f.min < f.mid && f.mid < f.max, JSON.stringify(f));
+  assert.strictEqual(f.estimated, true);
+  assert.ok(f.source.length, 'a fare with no source is an invented number');
+  const bike = HR.fareFor('bike', 10);
+  assert.ok(bike.mid < f.mid, 'a bike undercuts a car');
+  assert.strictEqual(HR.fareFor('helicopter', 10), null);
+});
+
+t('a bike carries one person and is never step-free', () => {
+  assert.strictEqual(HR.pick(['car', 'bike'], { pax: 1 }), 'bike', 'cheapest when it is allowed');
+  assert.strictEqual(HR.pick(['car', 'bike'], { pax: 3 }), 'car', 'three people do not fit on a bike');
+  assert.strictEqual(HR.pick(['car', 'bike'], { pax: 1, needs: ['step-free'] }), 'car');
+  assert.strictEqual(HR.pick(['bike'], { pax: 2 }), null, 'and khaali says no rather than squeezing them on');
+  assert.strictEqual(HR.pick(['bike'], { pax: 1, needs: ['step-free'] }), null);
+  assert.strictEqual(HR.pick([], { pax: 1 }), null);
+  // and the planner honours both
+  const three = plan(NOWHERE, ['train', 'metro', 'bus', 'car', 'bike'], { pax: 3 });
+  assert.ok(three.ok && three.chains.some(anyHire));
+  assert.ok(three.chains.every(c => !c.legs.some(l => l.mode === 'bike')), 'a bike was offered to three people');
+});
+
+t('khaali will not be driven to the next district', () => {
+  const farOff = { kind: 'place', lat: 13.75, lng: 77.20, name: 'A long way off' };
+  const r = plan(farOff, ['train', 'metro', 'bus', 'car']);
+  assert.ok(!r.ok, 'khaali planned a ride past its own limit');
+  assert.ok(/too-far/.test(r.reason), r.reason);
+  assert.strictEqual(HR.newRide({ id: 'x', who: 'h', date: '2026-09-10', kind: 'car', km: 200 }).reason, 'too-far');
+});
+
+t('no profile hands out a free taxi where a bus runs - not even the fastest', () => {
+  const r = plan(REACHED, ['train', 'metro', 'bus', 'car', 'bike']);
+  assert.ok(r.ok);
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+  ['balanced', 'cheapest', 'network', 'comfortable'].forEach(profile => {
+    const a = AL.allocate(r.chains, { profile, after: 480 });
+    assert.ok(!anyHire(r.chains[a.recommended]),
+      profile + ' recommended a hired ride where a bus reaches');
+  });
+  // fastest is allowed to, because that is what the passenger asked for - but
+  // it must still be paying the hire penalty, not getting it for nothing
+  assert.ok(AL.WEIGHTS.fastest.hire > 0, 'fastest hires for free');
+});
+
+t('a hired ride is charged for, and a long one is refused outright', () => {
+  const r = plan(NOWHERE, ['train', 'metro', 'bus', 'car']);
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+  const a = AL.allocate(r.chains, { profile: 'balanced', after: 480 });
+  const hired = r.chains.filter(anyHire);
+  assert.ok(hired.every(c => c.alloc.passenger.hire > 0), 'a hired leg cost the score nothing');
+  assert.ok(r.chains.every(c => AL.rideKm(c) <= AL.LIMITS.maxRideKm
+    || c.alloc.overLimit.includes('LONGER_RIDE_THAN_LIMIT')),
+    'a ride past the limit was still a candidate');
+  // and the recommendation says why the car is there
+  const rec = r.chains[a.recommended];
+  if (anyHire(rec)) {
+    assert.ok(a.reason.reasons.some(x => /^RIDE_/.test(x)), a.reason.reasons.join(','));
+    assert.ok(/estimate|quote/.test(AL.sentence(a.reason)), AL.sentence(a.reason));
+  }
+});
+
+t('khaali does not claim no bus runs there when a bus runs there', () => {
+  // The honesty case. NOWHERE is reachable by bus, just two hours slower. If a
+  // hired ride wins on time, the reason must say SO - not invent an absence.
+  const r = plan(NOWHERE, ['train', 'metro', 'bus', 'car', 'bike']);
+  assert.ok(r.ok);
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+  const a = AL.allocate(r.chains, { profile: 'balanced', after: 480 });
+  const rec = r.chains[a.recommended];
+  const net = r.chains.filter(c => !anyHire(c));
+  assert.ok(net.length, 'this place should be reachable without hiring');
+  if (anyHire(rec)) {
+    assert.ok(a.reason.reasons.includes('RIDE_IS_FASTER_THAN_THE_NETWORK'),
+      'khaali said nothing runs there while a bus was in its own results');
+    assert.ok(!a.reason.reasons.includes('RIDE_BECAUSE_NOTHING_RUNS'));
+    assert.ok(a.reason.facts.networkAlternative, 'the alternative is not in the facts');
+    const said = AL.sentence(a.reason);
+    assert.ok(!/no bus khaali knows runs/.test(said), said);
+    assert.ok(/gets there for/.test(said), said);
+  }
+  // and where genuinely nothing runs, the other code is used
+  const none = plan({ kind: 'place', lat: 13.30, lng: 77.85, name: 'A far point' }, ['train', 'metro', 'bus', 'car']);
+  if (none.ok) {
+    CAP.annotate(none.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+    const b = AL.allocate(none.chains, { profile: 'balanced', after: 480 });
+    if (anyHire(none.chains[b.recommended]))
+      assert.ok(b.reason.reasons.includes('RIDE_BECAUSE_NOTHING_RUNS'), b.reason.reasons.join(','));
+  }
+});
+
+t('a hired vehicle is not network capacity, in either direction', () => {
+  const car = { mode: 'car', name: 'Car', km: 8, min: 25 };
+  const snap = CAP.snapshot(car, {});
+  assert.strictEqual(snap.occupancy, 0);
+  assert.strictEqual(snap.capacity, null);
+  assert.strictEqual(snap.quality, 'exact');
+  // the important half: an empty car must not make a journey look kind to the
+  // network. Pressure over a full train is the same with or without the car.
+  const train = { mode: 'train', name: 'X', min: 60, cap: { occupancy: 0.95, capacity: 432, quality: 'exact' } };
+  const alone = CAP.pressure({ legs: [train] });
+  const withCar = CAP.pressure({ legs: [train, { ...car, cap: snap }] });
+  assert.strictEqual(alone.value, withCar.value, 'the car diluted network pressure');
+  assert.ok(!CAP.impact({ legs: [train, { ...car, cap: snap }] }).some(x => x.mode === 'car'));
+});
+
+t('ten thousand people do not share one car', () => {
+  const a = { mode: 'car', id: 'c', name: 'Car', depMin: 500 };
+  assert.notStrictEqual(SIM.vehicleKey(a), SIM.vehicleKey(a), 'two riders got the same car');
+  assert.strictEqual(SIM.crushOf(a), Infinity);
+  assert.strictEqual(SIM.seatsOf(a), Infinity);
+});
+
+t('a ride is booked, not scanned - and priced by khaali, not by the phone', () => {
+  const r = HR.newRide({ id: 'abcdef123456', who: 'her@x', date: '2026-09-10',
+    kind: 'car', from: 'Majestic', to: 'A field', km: 12, holder: 'Achina' });
+  assert.ok(r.ok);
+  assert.strictEqual(r.ride.status, 'booked');
+  assert.strictEqual(r.ride.simulated, true, 'khaali books nothing real and says so');
+  assert.strictEqual(r.ride.code, 'ABCDEF');
+  assert.deepStrictEqual(r.ride.fare, HR.fareFor('car', 12));
+  assert.strictEqual(HR.publicOf(r.ride).simulated, true);
+  HR.cancelRide(r.ride);
+  assert.strictEqual(r.ride.status, 'cancelled');
+  assert.strictEqual(HR.newRide({ id: 'a', who: 'h', date: '2026-09-10', kind: 'rocket', km: 4 }).reason, 'bad-kind');
+  assert.strictEqual(HR.newRide({ id: 'a', who: 'h', date: '2026-09-10', kind: 'car', km: 0 }).reason, 'no-distance');
+});
+
+t('a trip pass skips the hired leg instead of refusing the whole pass', () => {
+  const r = JY.priceTripLegs([
+    { mode: 'car', from: 'Majestic', to: 'A field', km: 12 },
+    { mode: 'metro', fromId: 'KDGD', toId: 'KGWA' },
+  ]);
+  assert.ok(r.ok, 'the car killed the pass');
+  assert.strictEqual(r.legs.length, 1, 'only the metro belongs on a pass');
+  assert.ok(r.skipped.some(x => x.why === 'booked-separately'));
+  // a journey that is ONLY a hired ride has no pass to sell, and says so
+  const only = JY.priceTripLegs([{ mode: 'bike', from: 'a', to: 'b', km: 5 }]);
+  assert.strictEqual(only.ok, false);
+  assert.ok(/booked on its own/.test(only.error), only.error);
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

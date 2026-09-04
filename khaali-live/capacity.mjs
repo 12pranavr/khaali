@@ -19,6 +19,11 @@
 
 export const QUALITY = ['exact', 'estimated', 'predicted', 'unknown'];
 
+/** Modes that are not the network: a footpath, and anything she hires for
+    herself. None of them may add to - or subtract from - network pressure. */
+export const HIRED = ['car', 'bike'];
+export const OFF_NETWORK = ['walk', 'auto', ...HIRED];
+
 /** How much a quality label is worth when a recommendation leans on it. */
 export const QUALITY_WEIGHT = { exact: 1.0, estimated: 0.7, predicted: 0.6, unknown: 0.3 };
 
@@ -74,6 +79,11 @@ export function snapshot(leg, facts = {}) {
   }
   if (leg.mode === 'walk' || leg.mode === 'auto') return { ...base, quality: 'exact', occupancy: 0, capacity: null,
     source: leg.mode === 'walk' ? 'a footpath has no capacity' : 'an auto is not a network vehicle' };
+  // A hired vehicle carries her and nobody else. It is not shared capacity, so
+  // it has no occupancy to know - and, importantly, no EMPTINESS to offer the
+  // network either. See the exclusions in pressure() and impact() below.
+  if (HIRED.includes(leg.mode)) return { ...base, quality: 'exact', occupancy: 0, capacity: null,
+    source: 'a hired ' + leg.mode + ' carries only her; it is not network capacity' };
   return base;
 }
 
@@ -106,7 +116,10 @@ export function annotate(chains, { trainCap = null } = {}) {
 export function pressure(chain) {
   let num = 0, den = 0, conf = 0, n = 0, unknown = 0;
   chain.legs.forEach(l => {
-    if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
+    // A hired ride is empty by definition. Counting it would let a journey look
+    // kind to the network precisely BECAUSE it took a car off it, which is
+    // backwards - so it counts for nothing here, in either direction.
+    if (OFF_NETWORK.includes(l.mode) || !l.cap) return;
     const occ = l.cap.occupancy == null ? 0.5 : l.cap.occupancy;
     if (l.cap.occupancy == null) unknown++;
     const w = Math.max(1, l.min || 1);
@@ -125,7 +138,7 @@ export function pressure(chain) {
  * argument for moving people, so it is computed, not asserted.
  */
 export function impact(chain, passengers = 1) {
-  return chain.legs.filter(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap).map(l => {
+  return chain.legs.filter(l => !OFF_NETWORK.includes(l.mode) && l.cap).map(l => {
     const before = l.cap.occupancy, cap = l.cap.capacity;
     const after = (before == null || !cap) ? null : clamp01(before + passengers / cap);
     return { leg: l.name || l.line || l.mode, mode: l.mode, capacity: cap,

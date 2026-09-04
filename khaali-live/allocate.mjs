@@ -19,12 +19,25 @@ import { pressure, impact } from './capacity.mjs';
 /** Everything in minutes-equivalent: what a rupee, a change, a minute of
     walking, and standing for the ride are worth against a minute of travel. */
 export const WEIGHTS = {
-  balanced:    { time: 1.0, fare: 0.08, change: 8, walk: 1.5, seat: 14, crowd: 24 },
-  fastest:     { time: 1.0, fare: 0.00, change: 2, walk: 1.0, seat: 0,  crowd: 0  },
-  cheapest:    { time: 0.3, fare: 0.60, change: 3, walk: 0.5, seat: 4,  crowd: 4  },
-  comfortable: { time: 0.8, fare: 0.04, change: 16, walk: 3.0, seat: 30, crowd: 30 },
-  network:     { time: 1.0, fare: 0.06, change: 8, walk: 1.5, seat: 10, crowd: 48 },
+  balanced:    { time: 1.0, fare: 0.08, change: 8, walk: 1.5, seat: 14, crowd: 24, hire: 18 },
+  fastest:     { time: 1.0, fare: 0.00, change: 2, walk: 1.0, seat: 0,  crowd: 0,  hire: 6  },
+  cheapest:    { time: 0.3, fare: 0.60, change: 3, walk: 0.5, seat: 4,  crowd: 4,  hire: 40 },
+  comfortable: { time: 0.8, fare: 0.04, change: 16, walk: 3.0, seat: 30, crowd: 30, hire: 26 },
+  network:     { time: 1.0, fare: 0.06, change: 8, walk: 1.5, seat: 10, crowd: 48, hire: 30 },
 };
+
+/** A hired ride is a last resort she opted into, not a convenience the
+    allocator reaches for. It costs nothing to the network and everything to
+    the point of the product, so it carries its own standing penalty - without
+    which `fastest` (fare weight 0.00) would hand out a free taxi every time.
+
+    `comfortable` is among the MOST reluctant, which looks backwards until you
+    remember what it is weighing: a hired vehicle guarantees a seat, so the
+    seat weight of 30 pulls hard toward it - and the comfort of that seat is
+    the one thing khaali cannot check. A bike in Bengaluru traffic is not what
+    somebody choosing Comfortable meant. */
+export const HIRE_MODES = ['car', 'bike'];
+export const isHire = m => HIRE_MODES.includes(m);
 export const PROFILES = Object.keys(WEIGHTS);
 
 /** The lines the network may never cross on a passenger's behalf. A profile
@@ -34,6 +47,13 @@ export const LIMITS = {
   extraMin: 25,        // never recommend more than this slower than the fastest way
   extraChanges: 1,     // nor more than one change beyond the fastest way
   maxWalkKm: 1.5,      // nor a long walk nobody asked for
+  // Nor a hired ride longer than a last mile plausibly is. This is deliberately
+  // far - a real gap in a metro region is fifteen or twenty kilometres, and a
+  // cap that cannot close the gap makes hiring pointless. What keeps a car from
+  // being the easy answer is the hire penalty in the score, not this line; this
+  // line is only here so khaali never answers "Bangarpet to Majestic" with a
+  // ninety-kilometre taxi.
+  maxRideKm: 25,
 };
 export const PROFILE_LIMITS = {
   fastest: { extraMin: 10 }, balanced: { extraMin: 25 }, network: { extraMin: 30 },
@@ -57,6 +77,8 @@ const SEAT_COST = { yes: 0, likely: 2, maybe: 6, standing: 14, unknown: 4 };
 
 const walkKm = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.km || 0), 0);
 const walkMin = c => c.legs.filter(l => l.mode === 'walk').reduce((s, l) => s + (l.min || 0), 0);
+export const rideKm = c => c.legs.filter(l => isHire(l.mode)).reduce((s, l) => s + (l.km || 0), 0);
+const rideLegs = c => c.legs.filter(l => isHire(l.mode)).length;
 const seatRank = c => (c.seat && c.seat.rank != null) ? c.seat.rank : -1;
 
 /**
@@ -72,6 +94,10 @@ export function score(c, w, ref) {
     walk: walkMin(c) * w.walk,
     seat: seatW,
   };
+  // hiring is charged per ride and again per kilometre: one short hop to a
+  // station is a different thing from being driven most of the way
+  const nHire = rideLegs(c);
+  if (nHire) passenger.hire = (w.hire || 0) * nHire + rideKm(c) * (w.hire || 0) * 0.25;
   const network = { crowd: p.value * w.crowd };
   const pCost = Object.values(passenger).reduce((a, b) => a + b, 0);
   const nCost = network.crowd;
@@ -115,6 +141,7 @@ export function allocate(chains, { profile = 'balanced', limits = {}, maxChanges
     if (sp(c) - sp(fastest) > L.extraMin) overLimit.push('SLOWER_THAN_LIMIT');
     if (c.changes - fastest.changes > L.extraChanges) overLimit.push('MORE_CHANGES_THAN_LIMIT');
     if (walkKm(c) > L.maxWalkKm) overLimit.push('LONGER_WALK_THAN_LIMIT');
+    if (rideKm(c) > L.maxRideKm) overLimit.push('LONGER_RIDE_THAN_LIMIT');
     c.alloc = { ...s, idx: i, broken, overLimit,
       candidate: broken.length === 0 && overLimit.length === 0 };
   });
@@ -139,7 +166,12 @@ export function allocate(chains, { profile = 'balanced', limits = {}, maxChanges
     if (seatRank(c) >= 2 && seatRank(c) === seatRank(bestSeat)) c.alloc.labels.push('seated');
   });
 
-  return { chains, recommended: rec.alloc.idx, reason: explain(rec, fastest, cheapest, { after, by }) };
+  // The best way there that hires nothing. If one exists, a hired journey is a
+  // CHOICE over it, not a necessity - and the recommendation has to say which.
+  const netOnly = chains.filter(c => !rideKm(c));
+  const netBest = netOnly.length ? netOnly.reduce((p, c) => sp(c) < sp(p) ? c : p) : null;
+  return { chains, recommended: rec.alloc.idx,
+    reason: explain(rec, fastest, cheapest, { after, by, netBest, span: sp }) };
 }
 
 /**
@@ -163,6 +195,14 @@ export function explain(rec, fastest, cheapest, ref = {}) {
     capacityConfidence: pr.word,
     simulated: !!rec.simulated,
     modes: rec.modes,
+    hiredKm: rideKm(rec),
+    hired: rec.legs.filter(l => isHire(l.mode)).map(l => ({ mode: l.mode, from: l.from, to: l.to, km: l.km })),
+    // what the network could have done instead, if anything
+    networkAlternative: (ref.netBest && ref.netBest !== rec) ? {
+      minutes: ref.netBest.totalMin, fare: ref.netBest.fare,
+      modes: ref.netBest.modes,
+      slowerByMinutes: ref.span ? Math.max(0, ref.span(ref.netBest) - ref.span(rec)) : null,
+    } : null,
   };
   const reasons = [];
   if (rec === fastest) reasons.push('FASTEST');
@@ -172,6 +212,17 @@ export function explain(rec, fastest, cheapest, ref = {}) {
   if (rec.changes < fastest.changes) reasons.push('FEWER_CHANGES');
   if (rec !== fastest && dt > 0) reasons.push(dt <= 10 ? 'ONLY_MINUTES_SLOWER' : 'SLOWER_BUT_WORTH_IT');
   if (rec.changes === 0) reasons.push('DIRECT');
+  // a hired ride is never silently preferred: if one is on the recommended
+  // journey, saying why is part of the recommendation
+  if (facts.hired.length) {
+    // "no bus runs there" is only true when no bus runs there. When one does
+    // and is merely slower, saying otherwise is a lie khaali would be telling
+    // to justify a fare it invented.
+    reasons.unshift(facts.networkAlternative ? 'RIDE_IS_FASTER_THAN_THE_NETWORK' : 'RIDE_BECAUSE_NOTHING_RUNS');
+    // carried through so the sentence can own up to it
+    if (rec.alloc && rec.alloc.overLimit && rec.alloc.overLimit.includes('LONGER_RIDE_THAN_LIMIT'))
+      reasons.push('LONGER_RIDE_THAN_LIMIT');
+  }
   if (!reasons.length) reasons.push('BEST_BALANCE');
   return { primary: reasons[0], secondary: reasons[1] || null, reasons,
     confidence: pr.confidence, facts, impact: impact(rec) };
@@ -194,6 +245,22 @@ export function sentence(reason) {
   if (has('DIRECT') && !has('FASTEST')) parts.push('no changes');
   let s = parts.length ? parts.join(', ') : 'The best balance of time, cost and comfort';
   s = s.charAt(0).toUpperCase() + s.slice(1) + '.';
+  if ((has('RIDE_BECAUSE_NOTHING_RUNS') || has('RIDE_IS_FASTER_THAN_THE_NETWORK')) && f.hired && f.hired.length) {
+    const h = f.hired[0], alt = f.networkAlternative;
+    s += alt
+      ? (' The ' + h.mode + ' covers the last ' + h.km + ' km to ' + h.to + '. The '
+        + (alt.modes || []).filter((m, i, a) => a.indexOf(m) === i).join(' and ')
+        + ' gets there for ₹' + alt.fare
+        + (alt.slowerByMinutes ? ', about ' + alt.slowerByMinutes + ' minutes slower' : '')
+        + '; the ride is an estimated fare, not a quote.')
+      : (' The ' + h.mode + ' is there because no bus khaali knows runs the '
+        + h.km + ' km to ' + h.to + '; that fare is an estimate.');
+    // A ride past khaali's own limit is only here because nothing else reached
+    // at all. Recommending it quietly would be the part that is not honest.
+    if (has('LONGER_RIDE_THAN_LIMIT'))
+      s += ' That is a longer ride than khaali would normally put you in, and it '
+        + 'is offered only because nothing else reaches at all.';
+  }
   if (f.capacityConfidence === 'LOW') s += ' Crowding here is partly unknown.';
   return s;
 }

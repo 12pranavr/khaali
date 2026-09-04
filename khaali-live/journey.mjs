@@ -20,9 +20,16 @@ import { LINE, STOPS, HEADWAYS, FARE, ENTRANCES, STREET_TO_PLATFORM_MIN } from '
 import { BUSES, BUS_FARE_PER_KM, BUS_MIN_FARE } from './buses.mjs';
 import { TRAINS } from './data.mjs';
 import { serves, sMin, fare as railFare } from './engine.mjs';
+import * as hire from './hire.mjs';
 
 export const WALK_KMH = 4.5;
+/** The network: things that run whether or not she is on them. Every default
+    in khaali is this list, and that is deliberate. */
 export const MODES = ['train', 'metro', 'bus'];
+/** Hired vehicles. Never a default - she has to ask for one. */
+export const HIRE_MODES = [...hire.KINDS];
+/** Everything a request is ALLOWED to name, which is not what it gets. */
+export const ALL_MODES = [...MODES, ...HIRE_MODES];
 
 /**
  * Will she get a seat, and why.
@@ -297,11 +304,22 @@ export function priceTripLegs(legs) {
       out.push({ mode: 'bus', name: String((l && l.name) || 'BMTC').slice(0, 40),
         route: known ? known.id : (l.id || null),
         from: a.name, to: b2.name, fare: busFare({ fromLat: a.lat, fromLng: a.lng, toLat: b2.lat, toLng: b2.lng }) });
+    } else if (hire.isHire(mode)) {
+      // A pass is scanned at a door. A hired car has no door to scan, so it is
+      // not on the pass - it is booked separately and rides on the same ticket.
+      skipped.push({ mode, name: hire.HIRE[mode].name, from, to, why: 'booked-separately' });
+      continue;
     } else return { ok: false, error: 'A trip pass covers the bus and the metro. The train is on the ticket.' };
   }
-  if (!out.length) return { ok: false,
-    error: 'Nothing on this journey is a BMTC bus or a metro ride, so there is no pass to sell. Buy the '
-      + (skipped[0] ? skipped[0].name : 'other') + ' seat at the counter.' };
+  if (!out.length) {
+    const ride = skipped.find(x => x.why === 'booked-separately');
+    return { ok: false, skipped,
+      error: ride
+        ? 'Nothing on this journey is a BMTC bus or a metro ride. The ' + ride.name.toLowerCase()
+          + ' is booked on its own, not on a pass.'
+        : 'Nothing on this journey is a BMTC bus or a metro ride, so there is no pass to sell. Buy the '
+          + (skipped[0] ? skipped[0].name : 'other') + ' seat at the counter.' };
+  }
   return { ok: true, legs: out, skipped };
 }
 
@@ -611,6 +629,9 @@ function summarise(c) {
 export const WALK_MAX_KM = 1.2;
 /** How far from anything khaali knows a place may be before we say so. */
 export const REACH_MAX_KM = 15;
+/** ...and how far, once she has said she will hire something to close the gap.
+    Past this khaali still says no: a two-hour taxi is not a journey plan. */
+export const HIRE_REACH_MAX_KM = hire.HIRE_MAX_KM;
 /** How many nearby stations to try for a bus: the nearest one is not always
     the one with a bus to where she is going. */
 export const NODES_TO_TRY = 5;
@@ -643,17 +664,34 @@ const walkLeg = (from, to, startMin, kmv) => {
 /**
  * The miles between a point and a station: a walk if it is short, otherwise
  * a BMTC bus with its walks - a real route, a real stop, a boarding position.
- * `after` is when she is at `from`. Returns { legs, min, fare } or null when
- * nothing direct runs - and null means null, not "take an auto".
+ * `after` is when she is at `from`.
+ *
+ * Only when both of those fail, and only if she has said she will hire one,
+ * does a car or a bike appear. The order is the whole point: a named bus is
+ * always tried first, and a hired ride never gets to compete with one.
+ * Without `opts.hire` this function behaves exactly as it did before - null,
+ * and null means null.
  */
-export function mile(from, to, after, kmv) {
+export function mile(from, to, after, kmv, opts = {}) {
   if (kmv <= WALK_MAX_KM) { const l = walkLeg(from, to, after, kmv); return { legs: [l], min: l.min, fare: 0, walk: true }; }
-  if (!_bmtc) return null;
-  const opts = _bmtc.directBus({ fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng, after, within: 0.7, limit: 1 });
-  if (!opts.length) return null;
-  const o = opts[0];
-  o.legs.forEach(l => { if (l.mode === 'walk') { if (l.from === 'here') l.from = from.name; if (l.to === 'there') l.to = to.name; } });
-  return { legs: o.legs, min: o.arrive - after, fare: o.fare, bus: o.legs.find(l => l.mode === 'bus') };
+  if (_bmtc) {
+    const found = _bmtc.directBus({ fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng, after, within: 0.7, limit: 1 });
+    if (found.length) {
+      const o = found[0];
+      o.legs.forEach(l => { if (l.mode === 'walk') { if (l.from === 'here') l.from = from.name; if (l.to === 'there') l.to = to.name; } });
+      return { legs: o.legs, min: o.arrive - after, fare: o.fare, bus: o.legs.find(l => l.mode === 'bus') };
+    }
+  }
+  const kind = hire.pick(opts.hire || [], { pax: opts.pax || 1, needs: opts.needs || [] });
+  if (!kind || kmv > hire.HIRE_MAX_KM) return null;
+  // A hired ride is a LAST MILE. Riding thirty-seven kilometres out of the city
+  // because that station happened to be on a convenient train is not a last
+  // mile, it is a taxi with a train ticket stapled to it. The caller says how
+  // far the nearest station to this end actually is, and khaali will not hire
+  // from one much further away than that.
+  if (opts.maxHireKm != null && kmv > opts.maxHireKm) return null;
+  const l = hire.leg(kind, from, to, after, kmv, hhmm, dayMin);
+  return { legs: [l], min: l.min, fare: l.fare, ride: l };
 }
 
 /**
@@ -664,20 +702,42 @@ export function mile(from, to, after, kmv) {
  */
 export function journeysAnywhere(req) {
   const { from, to } = req;
-  const Fs = from.kind === 'place' ? nearestNodes(from.lat, from.lng) : [null];
-  const Ts = to.kind === 'place' ? nearestNodes(to.lat, to.lng) : [null];
-  if (from.kind === 'place' && !Fs.length) return { ok: false, reason: 'from-too-far' };
-  if (to.kind === 'place' && !Ts.length) return { ok: false, reason: 'to-too-far' };
+  // What she is willing to hire, if anything. Nothing, unless she said so.
+  const hireKinds = (req.modes || MODES).filter(m => HIRE_MODES.includes(m));
+  const mileOpts = { hire: hireKinds, pax: req.pax || 1, needs: req.needs || [] };
+  // How far to LOOK for a station is not the same question as how far she is
+  // willing to travel to one. khaali used to tie the two together and so
+  // refused a place 37 km out that a BMTC bus reaches perfectly well, then
+  // offered a car for it - the wrong answer twice over. Look wide; let mile()
+  // decide what can actually be closed, by foot, by bus, or by hire.
+  const reach = HIRE_REACH_MAX_KM;
+  /** How a station was reached, for the "we tried these" report. */
+  const byOf = m => m ? (m.walk ? 'walk' : m.ride ? m.ride.name.toLowerCase() : m.bus ? m.bus.name : 'a ride') : null;
+  const Fs = from.kind === 'place' ? nearestNodes(from.lat, from.lng, NODES_TO_TRY, reach) : [null];
+  const Ts = to.kind === 'place' ? nearestNodes(to.lat, to.lng, NODES_TO_TRY, reach) : [null];
+  if (from.kind === 'place' && !Fs.length) return { ok: false, reason: 'from-too-far', reach };
+  if (to.kind === 'place' && !Ts.length) return { ok: false, reason: 'to-too-far', reach };
   const fromPt = { name: from.name || 'Start', lat: from.lat, lng: from.lng };
   const toPt = { name: to.name || 'Destination', lat: to.lat, lng: to.lng };
+  // nearestNodes is sorted nearest first, so the head of each list is the
+  // shortest a hired ride at that end could possibly be. Anything much longer
+  // is a different journey pretending to be a last mile.
+  const HIRE_SLACK = 1.5, HIRE_PAD = 3;
+  const capOf = list => (list[0] && list[0].km != null) ? list[0].km * HIRE_SLACK + HIRE_PAD : null;
+  const fromOpts = { ...mileOpts, maxHireKm: capOf(Fs) };
+  const toOpts = { ...mileOpts, maxHireKm: capOf(Ts) };
   const out = []; const tried = { from: [], to: [] }; let anyMile = false;
   Fs.forEach(F => {
-    const first = F ? mile(fromPt, F, req.after || 0, F.km) : null;
-    if (F) tried.from.push({ ...F, reached: !!first, by: first ? (first.walk ? 'walk' : first.bus.name) : null });
+    const first = F ? mile(fromPt, F, req.after || 0, F.km, fromOpts) : null;
+    if (F) tried.from.push({ ...F, reached: !!first, by: byOf(first) });
     if (F && !first) return;
     Ts.forEach(T => {
-      // a rough allowance for the last mile, so reach-by is honest before the bus is known
-      const lastGuess = T ? (T.km <= WALK_MAX_KM ? Math.round(T.km / WALK_KMH * 60) : Math.round(T.km / 15 * 60) + 15) : 0;
+      // a rough allowance for the last mile, so reach-by is honest before the
+      // bus - or the car - is known. A hired ride is quicker than a bus, so
+      // guessing at bus speed would throw away journeys that do reach in time.
+      const lastKmh = hireKinds.length ? 20 : 15;
+      const lastWait = hireKinds.length ? 5 : 15;
+      const lastGuess = T ? (T.km <= WALK_MAX_KM ? Math.round(T.km / WALK_KMH * 60) : Math.round(T.km / lastKmh * 60) + lastWait) : 0;
       const inner = journeys({ ...req,
         from: F ? { kind: F.kind, id: F.id } : from,
         to: T ? { kind: T.kind, id: T.id } : to,
@@ -689,7 +749,7 @@ export function journeysAnywhere(req) {
         let dep = c.dep, arr = c.arr, fare = c.fare;
         if (first) { legs.unshift(...first.legs); dep = req.after || 0; fare += first.fare; }
         if (T) {
-          const last = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km);
+          const last = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km, toOpts);
           if (!last) return;
           legs.push(...last.legs); arr = c.arr + last.min; fare += last.fare;
           if (req.by != null && arr > req.by) return;
@@ -705,8 +765,10 @@ export function journeysAnywhere(req) {
       });
     });
   });
-  Ts.forEach(T => { if (T) { const m = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, req.after || 0, T.km); tried.to.push({ ...T, reached: !!m, by: m ? (m.walk ? 'walk' : m.bus.name) : null }); } });
-  if (!out.length && (Fs[0] || Ts[0])) return { ok: false, reason: 'no-bus', tried };
+  Ts.forEach(T => { if (T) { const m = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, req.after || 0, T.km, toOpts); tried.to.push({ ...T, reached: !!m, by: byOf(m) }); } });
+  // with something hired on the table, "no bus runs there" is no longer the
+  // reason nothing was found - so say which wall was actually hit
+  if (!out.length && (Fs[0] || Ts[0])) return { ok: false, reason: hireKinds.length ? 'no-way' : 'no-bus', tried };
   // the same shape through the same stations at the same times is one choice
   const seen = new Set();
   const chains = out.filter(c => { const k = c.kind + '|' + c.dep + '|' + c.arr; if (seen.has(k)) return false; seen.add(k); return true; })

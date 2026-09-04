@@ -18,19 +18,30 @@
 // the same engine runs on the golden test network and on Bengaluru.
 
 import { allocate, span } from './allocate.mjs';
-import { VEHICLE } from './capacity.mjs';
+import { VEHICLE, OFF_NETWORK } from './capacity.mjs';
+
+/** A footpath and a hired car are both things the network does not have to
+    find room on. Neither takes a load, neither fills up, neither can leave
+    somebody standing. */
+const offNet = m => OFF_NETWORK.includes(m);
 
 /** Vehicles a passenger can be put on, keyed so two people on the same
     train trip share a load. A metro is a train every headway; a bus is a
     trip; a train is a trip. */
 export function vehicleKey(leg, headway = 10) {
   if (leg.mode === 'metro') return 'metro|' + Math.floor((leg.depMin || 0) / headway);
+  // A hired vehicle is hers alone. Sharing a key would pack ten thousand
+  // passengers into one car and report it at 13,000% full. It is excluded from
+  // load accounting anyway; this is the belt to that pair of braces.
+  if (offNet(leg.mode) && leg.mode !== 'walk') return leg.mode + '|private|' + (++_privateSeq);
   return leg.mode + '|' + (leg.id || leg.name) + '|' + (leg.depMin || 0);
 }
+let _privateSeq = 0;
 
 /** What a vehicle can carry, at a crush. Trains: the berths on this stretch
     plus the aisle - Indian sleeper coaches run well past their berth count. */
 export function crushOf(leg) {
+  if (offNet(leg.mode)) return Infinity;      // a footpath and a hired car never fill
   if (leg.mode === 'bus') return VEHICLE.bus.crush;
   if (leg.mode === 'metro') return VEHICLE.metro.crush;
   if (leg.mode === 'train') return Math.round((leg.cap && leg.cap.capacity ? leg.cap.capacity : 432) * 1.5);
@@ -38,6 +49,7 @@ export function crushOf(leg) {
 }
 /** ...and seated. */
 export function seatsOf(leg) {
+  if (offNet(leg.mode)) return Infinity;      // nobody stands in a car they hired
   if (leg.mode === 'bus') return VEHICLE.bus.seats;
   if (leg.mode === 'metro') return VEHICLE.metro.seats;
   if (leg.mode === 'train') return (leg.cap && leg.cap.capacity) ? leg.cap.capacity : 432;
@@ -77,7 +89,7 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
       const people = (k, l) => base.get(k) * crushOf(l) + (loads.get(k) || 0);
       const refresh = () => cands.forEach(c => {
         c.legs.forEach(l => {
-          if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
+          if (offNet(l.mode) || !l.cap) return;
           const k = vehicleKey(l, headway);
           if (!base.has(k)) base.set(k, l.cap.occupancy == null ? 0.5 : l.cap.occupancy);
           if (!seen.has(k)) seen.set(k, l);
@@ -89,7 +101,7 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
       });
       refresh();
       // a vehicle that cannot take the next slice is not a choice
-      const full = (c, slice) => c.legs.some(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap && people(vehicleKey(l, headway), l) + slice > crushOf(l));
+      const full = (c, slice) => c.legs.some(l => !offNet(l.mode) && l.cap && people(vehicleKey(l, headway), l) + slice > crushOf(l));
       // one decision per slice, so a bucket of two hundred does not all pile
       // onto one bus and the next slice sees what the last one did
       let left = count;
@@ -101,13 +113,13 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
         if (mode === 'baseline') pick = open.reduce((p, c) => span(c, { after: t }) < span(p, { after: t }) ? c : p);
         else { const a = allocate(open, { profile, after: t }); pick = a.recommended != null ? open[a.recommended] : open[0]; }
         pick.legs.forEach(l => {
-          if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
+          if (offNet(l.mode) || !l.cap) return;
           const k = vehicleKey(l, headway);
           loads.set(k, (loads.get(k) || 0) + slice);
         });
         refresh();
         // did this slice stand: any leg past its seats
-        const stands = pick.legs.some(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap && people(vehicleKey(l, headway), l) > seatsOf(l));
+        const stands = pick.legs.some(l => !offNet(l.mode) && l.cap && people(vehicleKey(l, headway), l) > seatsOf(l));
         if (stands) standing += slice;
         totalSpan += span(pick, { after: t }) * slice;
         assigned += slice;

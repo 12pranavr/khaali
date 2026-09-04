@@ -45,6 +45,7 @@ import * as sim from './sim.mjs';
 import * as bmtc from './bmtc.mjs';
 journey.useBmtc(bmtc);
 import * as metro from './metro.mjs';
+import * as hire from './hire.mjs';
 import crypto from 'node:crypto';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -98,6 +99,7 @@ const CONSENTS = new Map();
 const ALERTS = new Map();
 // Day passes for the city: the right to ride, scanned at the door, never a seat.
 const PASSES = new Map();
+const RIDES = new Map();
 
 /**
  * The name and number khaali can honestly put to an alert. The booking is the
@@ -240,6 +242,8 @@ setInterval(matchOrders, 20000).unref();
     if (r.t === 'pass' && r.pass && r.pass.id) PASSES.set(r.pass.id, { ...r.pass, rides: (r.pass.rides || []).slice() });
     if (r.t === 'passride') { const p = PASSES.get(r.id); if (p && r.ride) p.rides.push(r.ride); }
     if (r.t === 'passgone') { const p = PASSES.get(r.id); if (p) journey.cancelPass(p, r.at); }
+    if (r.t === 'ride' && r.ride && r.ride.id) RIDES.set(r.ride.id, { ...r.ride });
+    if (r.t === 'ridegone') { const x = RIDES.get(r.id); if (x) hire.cancelRide(x, r.at); }
   }
   for (const o of ORDERS.values()) {
     const s = { id: o.payId, kind: 'order', orderId: o.id, who: o.who, amount: o.cap, expiresAt: Infinity,
@@ -1342,24 +1346,34 @@ async function api(req, res, url) {
     const after = parseInt(q.get('after'), 10);
     const by = q.get('by') ? parseInt(q.get('by'), 10) : null;
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('date') || '')) ? q.get('date') : TODAY();
-    const modes = String(q.get('modes') || 'train,metro,bus').split(',')
-      .map(x => x.trim()).filter(x => journey.MODES.includes(x));
+    // A request may NAME a hired vehicle; it never gets one by default. The
+    // default is the network, and it always has been.
+    const modes = String(q.get('modes') || journey.MODES.join(',')).split(',')
+      .map(x => x.trim()).filter(x => journey.ALL_MODES.includes(x));
     const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
+    const pax = Math.max(1, Math.min(6, parseInt(q.get('pax'), 10) || 1));
     const r = journey.journeysAnywhere({
       from: fromEnd, to: toEnd,
       after: (after >= 0 && after < 1440) ? after : 0,
       by: (by >= 0 && by < 2880) ? by : null,
-      modes, needs,
+      modes, needs, pax,
       // the same inventory the seat map and the booking page read
       counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } },
     });
     if (!r.ok) {
+      const hired = modes.some(m => journey.HIRE_MODES.includes(m));
+      const near = [...(r.tried && r.tried.from || []), ...(r.tried && r.tried.to || [])].slice(0, 3).map(t => t.name).join(', ');
       const msg = r.reason === 'to-too-far' || r.reason === 'from-too-far'
-        ? 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.'
+        ? (hired
+          ? 'That place is more than ' + journey.HIRE_REACH_MAX_KM + ' km from any station or stop khaali knows, which is further than it will send a car.'
+          : 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.')
         : r.reason === 'no-bus'
-          ? 'khaali found no direct BMTC bus between ' + [...(r.tried.from || []), ...(r.tried.to || [])].slice(0, 3).map(t => t.name).join(', ') + ' and that place. It will not guess at an auto.'
-          : r.reason;
-      return send(res, 400, { ...r, error: msg });
+          ? 'khaali found no direct BMTC bus between ' + near + ' and that place. It will not guess at an auto — but it can call a car or a bike if you turn one on.'
+          : r.reason === 'no-way'
+            ? 'khaali could not join ' + near + ' to that place, even by car.'
+            : r.reason;
+      // the way out, offered rather than described
+      return send(res, 400, { ...r, error: msg, canHire: !hired && (r.reason === 'no-bus' || r.reason === 'to-too-far' || r.reason === 'from-too-far') });
     }
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
@@ -1433,6 +1447,56 @@ async function api(req, res, url) {
     return send(res, 200, { passes: [...PASSES.values()].filter(x => x.who === who)
       .sort((a, b) => b.issuedAt - a.issuedAt).slice(0, 10).map(journey.publicOf) });
   }
+  // ------------------------------------------------------------- the ride --
+  //
+  // A car or a bike for the miles the network does not cover. Booked, not
+  // scanned - and priced HERE, from khaali's own tariff, whatever fare the
+  // phone believed. The same posture the berth hold and the trip pass take.
+  if (p === '/api/ride' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to book a ride.' });
+    const kind = String(b.kind || '');
+    if (!hire.KINDS.includes(kind)) return send(res, 400, { ok: false, error: 'khaali hires a car or a bike, nothing else.' });
+    // the distance is measured from the two ends, not taken from the body
+    const a = pointOf(b.fromAt), z = pointOf(b.toAt);
+    if (!a || !z) return send(res, 400, { ok: false, error: 'A ride needs two points inside Karnataka.' });
+    const kmv = journey.km(a, z);
+    if (!(kmv > 0)) return send(res, 400, { ok: false, error: 'Those two points are the same place.' });
+    if (kmv > hire.HIRE_MAX_KM) return send(res, 400, { ok: false,
+      error: 'That is ' + Math.round(kmv) + ' km. khaali will not call a car further than ' + hire.HIRE_MAX_KM + ' km.' });
+    const pax = Math.max(1, Math.min(6, parseInt(b.pax, 10) || 1));
+    if (pax > hire.HIRE[kind].seats) return send(res, 400, { ok: false,
+      error: 'A ' + kind + ' carries ' + hire.HIRE[kind].seats + '. Book a car for ' + pax + '.' });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
+    const id = crypto.randomBytes(6).toString('hex');
+    const pickupMin = (b.pickupMin >= 0 && b.pickupMin < 2880) ? Math.floor(b.pickupMin) : null;
+    const r = hire.newRide({ id, who, date, kind, km: kmv, pickupMin,
+      from: b.from, to: b.to, holder: b.holder ? String(b.holder).slice(0, 60) : null }, simNow().getTime());
+    if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
+    RIDES.set(id, r.ride);
+    journal.append({ t: 'ride', ride: r.ride });
+    return send(res, 200, { ok: true, ride: hire.publicOf(r.ride) });
+  }
+  if (p === '/api/ride') {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true });
+    return send(res, 200, { rides: [...RIDES.values()].filter(x => x.who === who)
+      .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10).map(hire.publicOf) });
+  }
+  const mRide = p.match(/^\/api\/ride\/([a-f0-9]+)$/);
+  if (mRide) {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true });
+    const rd = RIDES.get(mRide[1]);
+    if (!rd || rd.who !== who) return send(res, 404, { error: 'no such ride' });
+    if (req.method === 'DELETE') {
+      hire.cancelRide(rd, simNow().getTime());
+      journal.append({ t: 'ridegone', id: rd.id, at: rd.cancelledAt });
+    }
+    return send(res, 200, { ok: true, ride: hire.publicOf(rd) });
+  }
+
   const mPass = p.match(/^\/api\/pass\/([a-f0-9]+)$/);
   if (mPass) {
     const who = await whoIs(req);

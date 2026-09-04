@@ -18,7 +18,7 @@
 
 import { ST } from './data.mjs';
 import { STOPS } from './metro.mjs';
-import { MODES } from './journey.mjs';
+import { MODES, ALL_MODES } from './journey.mjs';
 import { sentence, PROFILES } from './allocate.mjs';
 
 // ------------------------------------------------------------------ places --
@@ -86,7 +86,10 @@ export function validateIntent(o) {
     else errors.push('timeConstraint ignored');
   }
   if (Array.isArray(o.modes)) {
-    const m = o.modes.map(x => String(x).toLowerCase()).filter(x => MODES.includes(x));
+    // A sentence may ASK for a car. It may not be given one by a model that
+    // decided a car would be nice: only a named mode gets through, and the
+    // default (r.modes) is still the network.
+    const m = o.modes.map(x => String(x).toLowerCase()).filter(x => ALL_MODES.includes(x));
     if (m.length) r.modes = m; else errors.push('modes ignored');
   }
   if (o.preferences && typeof o.preferences === 'object') {
@@ -161,6 +164,16 @@ export function parseLocally(text) {
     for (const m of MODES) if (t.match(new RegExp(' (?:no|not|without|avoid|skip|hate|dont want|don t want|do not want) (?:the |a |any )?' + m + '(?:es|s)? '))) no.push(m);
     if (no.length) o.modes = MODES.filter(m => !no.includes(m));
     else if (t.match(/ (?:dont mind|don t mind|do not mind|ok with|fine with|happy with) (?:a |the )?bus/)) o.modes = [...MODES];
+  }
+  // She may say she will hire something. khaali never decides that for her, so
+  // this is the only way a car or a bike enters a request from a sentence.
+  const wantsCar = t.match(/ (?:cab|taxi|car|uber|ola|auto|four wheeler|4 wheeler) /);
+  const wantsBike = t.match(/ (?:bike|scooter|two wheeler|2 wheeler|rapido|pillion) /);
+  if (wantsCar || wantsBike) {
+    const set = new Set(o.modes || MODES);
+    if (wantsCar) set.add('car');
+    if (wantsBike) set.add('bike');
+    o.modes = [...set];
   }
   // preferences
   if (t.match(/ (?:not much|less|little|no|minimal|minimum|hate|avoid|cant|can t|cannot) (?:long )?walk/)) o.preferences.minimizeWalking = true;
@@ -270,6 +283,13 @@ export async function explain(reason, { llm = null } = {}) {
     const out = await llm([{ role: 'system', content: EXPLAIN_SYSTEM }, { role: 'user', content: JSON.stringify(facts) }], { maxTokens: 120, temperature: 0.3 });
     const text = String(out || '').trim().replace(/\s+/g, ' ');
     if (!text || text.length > 400 || leaks(text, facts)) return { text: fallback, provider: 'template' };
+    // A model may say the same thing more warmly. It may not say LESS: a hired
+    // vehicle on the journey costs her money khaali only estimated, and a
+    // sentence that quietly leaves the car out is not an explanation.
+    const saysRide = reason.reasons.includes('RIDE_BECAUSE_NOTHING_RUNS')
+      || reason.reasons.includes('RIDE_IS_FASTER_THAN_THE_NETWORK');
+    if (saysRide && !/\b(car|bike|hired?|ride)\b/i.test(text))
+      return { text: fallback, provider: 'template' };
     return { text, provider: 'model' };
   } catch { return { text: fallback, provider: 'template' }; }
 }
