@@ -1606,8 +1606,11 @@ async function api(req, res, url) {
   if (p === '/api/ride') {
     const who = await whoIs(req);
     if (!who) return send(res, 401, { needsAuth: true });
-    return send(res, 200, { rides: [...RIDES.values()].filter(x => x.who === who)
-      .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10).map(hire.publicOf) });
+    const now = simNow(), minute = now.getHours() * 60 + now.getMinutes();
+    return send(res, 200, { today: TODAY(), minute,
+      rides: [...RIDES.values()].filter(x => x.who === who)
+        .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10)
+        .map(x => ({ ...hire.publicOf(x), status2: hire.statusOf(x, minute, { today: TODAY() }) })) });
   }
   const mRide = p.match(/^\/api\/ride\/([a-f0-9]+)$/);
   if (mRide) {
@@ -1619,7 +1622,9 @@ async function api(req, res, url) {
       hire.cancelRide(rd, simNow().getTime());
       journal.append({ t: 'ridegone', id: rd.id, at: rd.cancelledAt });
     }
-    return send(res, 200, { ok: true, ride: hire.publicOf(rd) });
+    const now2 = simNow(), min2 = now2.getHours() * 60 + now2.getMinutes();
+    return send(res, 200, { ok: true, ride: hire.publicOf(rd),
+      status2: hire.statusOf(rd, min2, { today: TODAY() }) });
   }
 
   const mPass = p.match(/^\/api\/pass\/([a-f0-9]+)$/);
@@ -2446,7 +2451,7 @@ const PARENT = path.resolve(DIR, '..');
 const APP_ROUTES = new Set([
   '/', '/index.html', '/trains', '/route-map', '/train',
   '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites', '/waitlist-odds', '/seat-hop', '/wallet', '/fair-tatkal',
-  '/plan',
+  '/plan', '/track',
 ]);
 
 function serveStatic(res, urlPath) {

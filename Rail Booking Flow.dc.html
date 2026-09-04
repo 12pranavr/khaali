@@ -728,18 +728,14 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         </div>
         <div onClick="{{ r.onDrop }}" style="{{ r.dropStyle }}">&times;</div>
       </div>
+      <div style="{{ r.hopStyle }}">
+        <span style="{{ r.hopLabelStyle }}">{{ r.hopLabel }}</span>
+        <sc-for list="{{ r.hopChips }}" as="c" hint-placeholder-count="6">
+          <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.l }}</div>
+        </sc-for>
+      </div>
     </sc-for>
-    <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0 14px">
-      <sc-for list="{{ pcHops }}" as="h" hint-placeholder-count="2">
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span style="width:54px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ h.label }}</span>
-          <sc-for list="{{ h.chips }}" as="c" hint-placeholder-count="6">
-            <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.l }}</div>
-          </sc-for>
-        </div>
-      </sc-for>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px">
       <div onClick="{{ pcAdd }}" style="{{ pcAddStyle }}">{{ pcAddLabel }}</div>
       <button onClick="{{ pcRun }}" style="{{ pcRunStyle }}">{{ pcRunLabel }}</button>
     </div>
@@ -2446,6 +2442,50 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 </div>
 </sc-if>
 
+<sc-if value="{{ onTrack }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:900px;margin:0 auto;padding:32px 22px 80px">
+  <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:22px">
+    <div>
+      <div style="font:500 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:10px">Account</div>
+      <h1 style="margin:0;font:700 26px/1.2 Manrope,sans-serif;letter-spacing:-.02em">Track</h1>
+      <div style="font-size:13px;color:var(--k-fg-8a8a84);margin-top:6px">The train, the pass and the ride &#8212; in one place, while they are happening</div>
+    </div>
+    <div style="margin-left:auto"><div onClick="{{ trRefresh }}" style="{{ trRefreshStyle }}">Refresh</div></div>
+  </div>
+
+  <div style="{{ trEmptyStyle }}">{{ trEmpty }}</div>
+
+  <div style="{{ trLiveStyle }}">
+    <div style="font:800 10.5px/1 Manrope,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-d8385a);margin-bottom:11px">{{ trLiveHead }}</div>
+    <sc-for list="{{ trLive }}" as="c" hint-placeholder-count="2">
+      <div style="{{ c.rowStyle }}">
+        <span style="{{ c.chipS }}">{{ c.chip }}</span>
+        <div style="{{ c.titleStyle }}">{{ c.title }}</div>
+        <div style="{{ c.subStyle }}">{{ c.sub }}</div>
+        <div style="{{ c.statusStyle }}">{{ c.status }}</div>
+        <div style="{{ c.barOuter }}"><div style="{{ c.barFill }}"></div></div>
+        <div style="{{ c.noteStyle }}">{{ c.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="{{ trPastStyle }}">
+    <div style="font:800 10.5px/1 Manrope,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:11px">{{ trPastHead }}</div>
+    <sc-for list="{{ trPast }}" as="c" hint-placeholder-count="3">
+      <div style="{{ c.rowStyle }}">
+        <span style="{{ c.chipS }}">{{ c.chip }}</span>
+        <div style="{{ c.titleStyle }}">{{ c.title }}</div>
+        <div style="{{ c.subStyle }}">{{ c.sub }}</div>
+        <div style="{{ c.statusStyle }}">{{ c.status }}</div>
+        <div style="{{ c.noteStyle }}">{{ c.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top:22px;font:500 11.5px/1.7 Manrope,sans-serif;color:var(--k-fg-8a8a84);max-width:56em">{{ trNote }}</div>
+</div>
+</sc-if>
+
 <sc-if value="{{ onBookings }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:900px;margin:0 auto;padding:32px 22px 80px">
   <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:22px">
@@ -3467,7 +3507,7 @@ class Component extends DCLogic {
   // One path per page, so back/forward work and any screen can be linked.
   ROUTES={home:'/',results:'/trains',map:'/route-map',train:'/train',
     showtimes:'/departures',seats:'/berths',confirm:'/confirm',ticket:'/ticket',
-    bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop',wallet:'/wallet',tatkal:'/fair-tatkal',
+    track:'/track',bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop',wallet:'/wallet',tatkal:'/fair-tatkal',
     plan:'/plan'};
   // Pages whose meaning depends on which journey you picked.
   JOURNEY_PAGES=['results','train','showtimes','seats','confirm','ticket','odds','hop'];
@@ -5204,6 +5244,153 @@ class Component extends DCLogic {
     this.planLeaflet().then(ok=>{if(!ok)return;
       setTimeout(()=>{if(this.state.pMapChain)this.planPaintMap();else this.planPaintPick();},80);});
   }
+  /* ------------------------------------------------------------ track --
+     What is happening to her right now, in one place: the train she is on and
+     where it actually is, the pass and which of its rides are behind her, the
+     car and whether it has turned up. Three things she booked separately and
+     has to watch at once, which is the whole reason this page exists.
+
+     Every status here is DERIVED - from the booking she holds and the clock -
+     not stored, so there is no second copy to fall out of step. And khaali
+     runs no cars, so a ride says where it SHOULD have got to, and says that
+     is what it is doing. */
+  trackPull(){
+    if(this._trBusy)return;this._trBusy=true;
+    Promise.all([
+      this.authFetch('/api/ride',{},9000).then(r=>r.json()).catch(()=>null),
+      this.authFetch('/api/pass',{},9000).then(r=>r.json()).catch(()=>null),
+    ]).then(([rd,ps])=>{
+      const st={};
+      if(rd&&rd.rides)Object.assign(st,{trRides:rd.rides,trToday:rd.today,trMinute:rd.minute});
+      if(ps&&ps.passes)st.trPasses=ps.passes;
+      this.setState(st);
+    }).finally(()=>{this._trBusy=false;});
+  }
+  /**
+   * Where her train has got to on HER stretch - from the timetable and the
+   * clock, the same way the ride is derived.
+   *
+   * Not from a live feed, because khaali does not have one for a train's real
+   * position and will not invent a dot moving along a line. What it does have
+   * is when this train is booked to leave her station and reach her one, and
+   * the honest thing to report is progress against that.
+   */
+  trackTrain(rec){
+    const t=this.TRAINS.find(x=>x.no===rec.train);
+    if(!t)return null;
+    const dep=this.sMin(t,rec.from,'d'),arr=this.sMin(t,rec.to,'a');
+    if(dep==null||arr==null)return null;
+    const d=new Date(),now=d.getHours()*60+d.getMinutes();
+    const span=((arr-dep)+1440)%1440||1;
+    const gone=((now-dep)+1440)%1440;
+    // before departure the "gone" wrap makes it look nearly finished, so the
+    // only honest reading before it leaves is: it has not left
+    const started=now>=dep&&gone<=span;
+    const done=now>arr&&gone>span;
+    return {train:t,dep,arr,
+      pct:started?Math.round(gone/span*100):(done?100:0),
+      stage:done?'arrived':started?'running':'waiting',
+      mins:started?Math.max(1,span-gone):(done?0:((dep-now)+1440)%1440)};
+  }
+  trackBindings(){
+    const S=this.state,gone={display:'none'};
+    if(S.page==='track'&&this._trPage!==true){this._trPage=true;this.trackPull();}
+    if(S.page!=='track')this._trPage=false;
+    const today=this.dateIsoFor(0);
+    const live=[],past=[];
+    const CH={train:'var(--k-d8385a)',metro:'#8C2877',bus:'#1f6fd0',car:'#0f8a7e',bike:'#c9701a'};
+
+    // the trains she is holding a berth on
+    (S.bookings||[]).filter(b=>b.status!=='refunded').forEach(b=>{
+      const tr=this.TRAINS.find(t=>t.no===b.train);
+      const t=this.trackTrain(b);
+      const onToday=(b.dayIdx||0)===0;
+      const card={kind:'train',key:'pnr'+b.pnr,
+        chip:'TRAIN',chipStyle:{background:CH.train,color:'#fff'},
+        title:(tr?tr.name:b.train)+' · '+this.ST[b.from].n+' → '+this.ST[b.to].n,
+        sub:'PNR '+b.pnr+' · '+this.dateIsoFor(b.dayIdx||0)+(b.berths&&b.berths.length?' · '+b.berths.join(', '):''),
+        status:(onToday&&t)
+          ?(t.stage==='running'?('On the way · about '+t.mins+' min to '+this.ST[b.to].n)
+            :t.stage==='arrived'?('Arrived at '+this.ST[b.to].n)
+              :('Leaves '+this.ST[b.from].n+' at '+this.toHHMM(t.dep)+' · in '+t.mins+' min'))
+          :'',
+        pct:(onToday&&t)?t.pct:null,
+        barStyle:{display:(onToday&&t)?'block':'none'},
+        fillStyle:{width:((onToday&&t)?t.pct:0)+'%',background:CH.train},
+        onOpen:()=>this.openTicket(b.pnr),
+        note:(onToday&&t)?'From this train’s own timetable and the clock. khaali has no live feed for where a train really is, and will not draw a dot it cannot see.':'',
+        noteStyle:{display:(onToday&&t)?'block':'none',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
+      (onToday?live:past).push(card);
+    });
+
+    // the pass, and which of its rides are behind her
+    (S.trPasses||[]).forEach(p=>{
+      const trip=p.kind==='trip';
+      const legs=(p.legs||[]);
+      const done=legs.filter(l=>l.ridden).length;
+      const card={kind:'pass',key:'pass'+p.id,
+        chip:trip?'TRIP PASS':'DAY PASS',chipStyle:{background:'#8C2877',color:'#fff'},
+        title:trip&&legs.length?legs.map(l=>l.from+' → '+l.to).join('  ·  '):'Metro and BMTC',
+        sub:'₹'+p.fare+' · '+p.date+(p.holder?' · '+p.holder:''),
+        status:p.status==='used'?'Travelled — this ticket is over'
+          :p.status!=='valid'?p.status
+            :trip?(done+' of '+legs.length+' ridden'):(p.rides+' taps so far'),
+        pct:trip&&legs.length?Math.round(done/legs.length*100):null,
+        barStyle:{display:(trip&&legs.length)?'block':'none'},
+        fillStyle:{width:(trip&&legs.length?Math.round(done/legs.length*100):0)+'%',background:'#8C2877'},
+        onOpen:()=>{},note:'',noteStyle:gone};
+      (p.date===today&&p.status!=='used'?live:past).push(card);
+    });
+
+    // the car or the bike, and whether it has turned up
+    (S.trRides||[]).forEach(r=>{
+      const st=r.status2||{};
+      const card={kind:'ride',key:'ride'+r.id,
+        chip:(r.kind||'car').toUpperCase(),chipStyle:{background:CH[r.kind]||CH.car,color:'#fff'},
+        title:r.from+' → '+r.to,
+        sub:'₹'+(r.fare?r.fare.min+'–'+r.fare.max:'?')+' estimated · '+r.km+' km · ref '+r.code,
+        status:st.label||'Booked',
+        pct:st.progress!=null?st.progress:null,
+        barStyle:{display:st.progress!=null?'block':'none'},
+        fillStyle:{width:(st.progress||0)+'%',background:CH[r.kind]||CH.car},
+        onOpen:()=>{},
+        note:'khaali runs no cars. This is where the ride should have got to by now, from the booking and the clock.',
+        noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
+      ((r.date===today&&st.stage!=='arrived'&&st.stage!=='cancelled')?live:past).push(card);
+    });
+
+    const deco=c=>({...c,
+      rowStyle:{background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:12,
+        padding:'15px 17px',marginBottom:11},
+      chipS:{...c.chipStyle,font:'800 9px/1 Manrope,sans-serif',letterSpacing:'.12em',
+        padding:'5px 7px',borderRadius:4,flex:'none'},
+      titleStyle:{font:'700 14px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)',marginTop:8},
+      subStyle:{font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:3},
+      statusStyle:{display:c.status?'block':'none',marginTop:8,
+        font:'700 12.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      barOuter:{...c.barStyle,height:6,borderRadius:99,background:'var(--k-f1f1ee)',marginTop:8,overflow:'hidden'},
+      barFill:{...c.fillStyle,height:'100%',borderRadius:99},
+    });
+
+    return {
+      trLive:live.map(deco), trPast:past.map(deco),
+      trLiveStyle:{display:live.length?'block':'none'},
+      trPastStyle:{display:past.length?'block':'none',marginTop:26},
+      trEmpty:(!live.length&&!past.length)
+        ?'Nothing to track yet. Book a journey and the train, the pass and the ride all turn up here.':'',
+      trEmptyStyle:{display:(!live.length&&!past.length)?'block':'none',
+        padding:'22px 20px',borderRadius:12,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
+        font:'600 13.5px/1.7 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      trLiveHead:'Happening now',
+      trPastHead:'Everything else',
+      trRefresh:()=>this.trackPull(),
+      trRefreshStyle:{cursor:'pointer',display:'inline-flex',alignItems:'center',minHeight:34,
+        padding:'8px 14px',borderRadius:999,font:'700 12px/1 Manrope,sans-serif',
+        border:'1px solid var(--k-dedcd6)',background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
+      trNote:'Positions come from khaali’s own live feed for trains, from the gate taps for a pass, and for a hired ride from the booking and the clock — khaali runs no cars.',
+    };
+  }
+
   /* ------------------------------------------------ a journey she draws --
      The planner above answers "get me from here to there" and chooses the
      shape itself. This one lets her draw the shape: Bangarpet, then the
@@ -6233,6 +6420,31 @@ class Component extends DCLogic {
           dropStyle:{display:this.pcList().length>2?'inline-flex':'none',cursor:'pointer',flex:'none',
             width:30,height:30,alignItems:'center',justifyContent:'center',borderRadius:8,
             border:'1px solid var(--k-dedcd6)',color:'var(--k-fg-8a8a84)',font:'700 14px/1 Manrope,sans-serif'},
+          // The hop OUT of this stop, drawn under it. A row of mode chips
+          // floating below the whole list belongs to no hop in particular,
+          // which is no use when there are three of them.
+          hopStyle:{display:(i<this.pcList().length-1)?'flex':'none',
+            alignItems:'center',gap:7,flexWrap:'wrap',margin:'2px 0 10px 26px',
+            paddingLeft:14,borderLeft:'2px dashed var(--k-dedcd6)'},
+          hopLabel:(i<this.pcList().length-1)
+            ?('to '+(()=>{const nx=this.pcList()[i+1];const q=nx?this.planPlace(nx.k,nx.id):null;
+              return q?(q.n.length>26?q.n.slice(0,25)+'…':q.n):'the next stop';})()+' by')
+            :'',
+          hopLabelStyle:{flex:'none',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.1em',
+            textTransform:'uppercase',color:'var(--k-fg-8a8a84)',marginRight:2},
+          hopChips:(i<this.pcList().length-1)
+            ? [['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car','Car'],['bike','Bike']].map(([k,l])=>{
+                const sel=this.pcModesList()[i]||[];
+                const on=k?sel.includes(k):sel.length===0;
+                const hire=k==='car'||k==='bike';
+                return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
+                  else this.pcToggleMode(i,k);},
+                  style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Manrope,sans-serif',
+                    minHeight:30,display:'inline-flex',alignItems:'center',
+                    border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
+                    background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
+                    color:on?'#fff':'var(--k-fg-40434a)'}};})
+            : [],
         };
       }),
       pcHops:this.pcModesList().map((sel,i)=>({
@@ -7815,7 +8027,7 @@ class Component extends DCLogic {
       onPlan:S.page==='plan',
       onHome:S.page==='home',onResults:S.page==='results',onMap:S.page==='map',onTrain:S.page==='train',onShowtimes:S.page==='showtimes',onSeats:S.page==='seats',
       onConfirm:S.page==='confirm',onTicket:S.page==='ticket',onAbout:S.page==='about',
-      onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',onTatkal:S.page==='tatkal',
+      onTrack:S.page==='track',onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',onTatkal:S.page==='tatkal',
       // Berths is deliberately not here: the seat map only means anything once a
       // train and a journey are chosen, so it is reached through Departures.
       // Departures left the nav on purpose: it sells no part of the story and
@@ -7824,7 +8036,7 @@ class Component extends DCLogic {
       // 'Plan a journey' is the whole trip - train, walk, metro, pass - and it
       // is its own page. The map is for watching trains; Trains is for booking
       // one. None of the three borrows another's screen.
-      nav:[{l:'Trains',p:'home'},{l:'Plan a journey',p:'plan'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
+      nav:[{l:'Trains',p:'home'},{l:'Plan a journey',p:'plan'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'Track',p:'track'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
         sheetStyle:{font:'700 15px/1 Manrope,sans-serif',cursor:'pointer',padding:'16px 22px',
@@ -8598,6 +8810,7 @@ class Component extends DCLogic {
           ...this.orderBindings(),
           ...this.sosBindings(),
           ...this.planBindings(),
+          ...this.trackBindings(),
           goWallet:()=>this.go('wallet'),
           walletBal:String(this.walletAvail())+(this.walletHeld()?' \u00b7 '+this.walletHeld()+' blocked':''),
           walletChip:{flex:'none',cursor:'pointer',font:"700 12.5px/1 'IBM Plex Mono',monospace",

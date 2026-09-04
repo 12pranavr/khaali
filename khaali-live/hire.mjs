@@ -192,6 +192,48 @@ export function newRide({ id, who, date, kind, from, to, km, holder, pickupMin }
   } };
 }
 
+/**
+ * Where the ride has got to, at a minute of the day.
+ *
+ * Derived, not stored: a booking plus a clock is enough to say whether the
+ * driver is still coming or she is already in the car, and a stored status
+ * would only be a second thing to keep in step with the first.
+ *
+ * Every stage of this is SIMULATED and says so. khaali runs no cars, so there
+ * is no driver moving and no position to report - what it can honestly say is
+ * where the ride SHOULD be by now, against the booking she holds.
+ */
+export const STAGES = ['booked', 'assigned', 'arriving', 'riding', 'arrived', 'cancelled'];
+
+export function statusOf(r, minute = null, { today = null } = {}) {
+  if (!r) return null;
+  const base = { simulated: true, source: 'derived from the booking and the clock; khaali runs no cars' };
+  if (r.status === 'cancelled') return { ...base, stage: 'cancelled', label: 'Cancelled', progress: 0 };
+  if (today && r.date !== today) {
+    const future = r.date > today;
+    return { ...base, stage: 'booked', progress: 0,
+      label: future ? 'Booked for ' + r.date : 'Travelled on ' + r.date, notToday: true };
+  }
+  const start = r.pickupMin != null ? r.pickupMin : null;
+  if (start == null || minute == null) return { ...base, stage: 'booked', label: 'Booked', progress: 0 };
+  const wait = r.waitMin || 4, ride = r.min || 1;
+  const d = minute - start;                       // minutes until (negative) or since pickup
+  if (d < -20) return { ...base, stage: 'booked', progress: 0,
+    label: 'Booked · a ' + r.kind + ' is held for ' + hhmmOf(start) };
+  if (d < -wait) return { ...base, stage: 'assigned', progress: 0,
+    label: 'A ' + r.kind + ' is assigned · leaves at ' + hhmmOf(start) };
+  if (d < 0) return { ...base, stage: 'arriving', progress: 0,
+    label: 'Arriving at ' + r.from + ' in about ' + Math.max(1, -d) + ' min' };
+  if (d < ride) return { ...base, stage: 'riding', progress: Math.round(d / ride * 100),
+    label: 'On the way to ' + r.to + ' · about ' + Math.max(1, ride - d) + ' min left' };
+  return { ...base, stage: 'arrived', progress: 100, label: 'Arrived at ' + r.to };
+}
+
+const hhmmOf = m => {
+  const x = ((m % 1440) + 1440) % 1440;
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+};
+
 export function cancelRide(r, now = Date.now()) {
   if (!r) return { ok: false, reason: 'missing' };
   if (r.status === 'cancelled') return { ok: true, already: true };

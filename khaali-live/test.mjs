@@ -2489,6 +2489,39 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
 });
 
+console.log('\ntracking: where it should have got to by now');
+
+t('a ride reports its stage from the booking and the clock, not from a store', () => {
+  const r = HR.newRide({ id: 'abcdef000000', who: 'h', date: '2026-09-10', kind: 'car',
+    from: 'Majestic', to: 'Hoodi', km: 18, pickupMin: 9 * 60 }).ride;
+  const at = m => HR.statusOf(r, m, { today: '2026-09-10' });
+  assert.strictEqual(at(9 * 60 - 60).stage, 'booked');
+  assert.strictEqual(at(9 * 60 - 12).stage, 'assigned');
+  assert.strictEqual(at(9 * 60 - 2).stage, 'arriving');
+  const mid = at(9 * 60 + Math.floor(r.min / 2));
+  assert.strictEqual(mid.stage, 'riding');
+  assert.ok(mid.progress > 20 && mid.progress < 80, mid.progress + '% through');
+  assert.strictEqual(at(9 * 60 + r.min + 5).stage, 'arrived');
+  assert.strictEqual(at(9 * 60 + r.min + 5).progress, 100);
+  // nothing here pretends khaali can see a car
+  Object.values([at(9 * 60 - 60), mid]).forEach(s => {
+    assert.strictEqual(s.simulated, true);
+    assert.ok(/runs no cars/.test(s.source), s.source);
+  });
+});
+
+t('a ride on another day is not tracked as if it were happening', () => {
+  const r = HR.newRide({ id: 'abcdef000001', who: 'h', date: '2026-09-11', kind: 'bike',
+    from: 'a', to: 'b', km: 5, pickupMin: 9 * 60 }).ride;
+  const s = HR.statusOf(r, 9 * 60 + 3, { today: '2026-09-10' });
+  assert.strictEqual(s.notToday, true);
+  assert.strictEqual(s.progress, 0);
+  assert.ok(/Booked for/.test(s.label), s.label);
+  // and a cancelled one says so whatever the clock says
+  HR.cancelRide(r);
+  assert.strictEqual(HR.statusOf(r, 9 * 60 + 3, { today: '2026-09-11' }).stage, 'cancelled');
+});
+
 console.log('\na journey she draws herself');
 
 t('a named vehicle can be a whole hop, which the guided planner will not do', () => {
