@@ -53,6 +53,7 @@
   button.ok{background:#1f6f45}
   button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
   button:disabled{opacity:.45;cursor:default}
+  .says.rate{padding:0 0 8px 21px;color:#7c828f}
   .ask{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 10px 21px}
   .ask .said{font:600 11.5px/1.5 Manrope,sans-serif;color:#5bd48b;flex:1;min-width:140px}
   .ask button{margin-top:0;width:auto;flex:1;min-width:180px}
@@ -182,11 +183,25 @@ function render() {
         (s.seed ? '<span class="chip">demo</span>' : s.partSeed ? '<span class="chip">part demo</span>' : '') +
         '</div><div class="when">' + esc(s.windowText) +
         (s.away != null ? ' &middot; ' + esc(s.away) + ' km away' : '') +
-        (sup.said ? ' &middot; ' + sup.said + ' said yes' : '') + '</div></div>' +
+        (sup.said ? ' &middot; ' + sup.said + ' said yes'
+          + (sup.expected != null ? ', ' + sup.expected + ' expected' : '') : '') + '</div></div>' +
       '<div class="num"><div class="big">' + (s.floor > 0 ? esc(s.floor) + '–' + esc(s.ceiling) : esc(s.ceiling)) +
         '</div><div class="of">' + (s.floor > 0 ? 'no bus at all' : 'a bus exists') + '</div></div>' +
       '</div>');
     card.appendChild(row);
+
+    /* Where the "expected" number came from, in full, every time it is shown.
+       Never the ratio on its own: "31 of the last 50" can be checked against
+       its denominator and "62%" cannot, and this page has no business showing
+       a figure a driver has to take on trust. */
+    if (sup.said && sup.rate) {
+      card.appendChild($('<div class="says rate">' + esc(sup.rate.says) + '.' +
+        (sup.rate.rate == null ? ''
+          : ' <span class="chip">' + esc(sup.rate.quality) + '</span>' +
+            (sup.rate.seed ? '<span class="chip">demo</span>'
+              : sup.rate.partSeed ? '<span class="chip">part demo</span>' : '')) +
+        '</div>'));
+    }
 
     /* The question, asked where the number is. A driver should not have to go
        looking for the place to answer it. */
@@ -236,6 +251,11 @@ function render() {
     'you taking a ride somewhere else, and there is no score attached to your name &mdash; khaali counts how ' +
     'often a yes turns out to be true by place and by time of day, never by person. You can take it back at ' +
     'any point before the half hour ends.<br><br>' +
+    '<b>Where &ldquo;expected&rdquo; comes from.</b> khaali&rsquo;s own record of what happened at this place ' +
+    'at this time of day, and it always shows you both counts rather than a percentage, so you can check the ' +
+    'denominator instead of trusting the fraction. Under twenty it does not have a number and says so. The ' +
+    'ones it could not see are drivers who shared no position and took no ride &mdash; they are left out of ' +
+    'the sum entirely rather than counted as having failed to turn up.<br><br>' +
     '<b>What has not happened.</b> No driver has been dispatched to anybody. No fare has moved. khaali owns ' +
     'no vehicle, employs no driver, and has not checked that anyone reading this drives anything. Rows marked ' +
     'demo are seeded so the map is not blank; they are real questions asked of the real BMTC timetable, but ' +

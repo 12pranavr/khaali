@@ -41,6 +41,7 @@ import * as journey from './journey.mjs';
 import * as demand from './demand.mjs';
 import * as dispatch from './dispatch.mjs';
 import * as commit from './commit.mjs';
+import * as reliability from './reliability.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
@@ -268,6 +269,19 @@ try {
   for (const r of rows) if (r && r.id) DEMAND.push({ ...r, seed: true });
   console.log('demand: ' + DEMAND.length + ' seeded declarations');
 } catch { /* no seed file, and an empty map is an honest one */ }
+
+// And two days of drivers having said they would be somewhere, with what
+// became of each. khaali has never run, so nobody has ever said they would be
+// at Whitefield at nine and then either been there or not - and without that
+// there is nothing for a kept-rate to count. These are anonymous outcomes in
+// commit.forget() shape: a place, a three-hour band, what happened, and the
+// mark that says nobody actually said it. Delete the file and khaali goes back
+// to "not measured enough to say", which is the true thing to say.
+try {
+  const rows = JSON.parse(fs.readFileSync(path.join(DIR, 'seed-commit.json'), 'utf8'));
+  for (const r of rows) if (r && r.outcome) HISTORY.push({ ...r, seed: true });
+  console.log('reliability: ' + HISTORY.length + ' seeded outcomes');
+} catch { /* no history, and khaali says so rather than guessing */ }
 
 // orders outlive a restart: rebuild the book and the blocks behind it
 {
@@ -2004,9 +2018,20 @@ async function api(req, res, url) {
       e.rungs[commit.rungOf(c, { now: t, holding: holdingA(c.driver), served: servedFrom(c) }).rung]++;
       if (driver && c.driver === driver) { e.mine = true; e.mineId = c.id; e.sharing = c.share; }
     }
-    return send(res, 200, { today: TODAY(), minute: nowMin, windows: [...by.values()],
-      // khaali counted statements. Whether the people who made them are there
-      // is a different question, and reliability.mjs is where it gets answered.
+    // How many of them khaali expects to actually be there - counted from its
+    // own record of how often a yes turned out to be true at this place at this
+    // time of day. An integer, bracketed by two counts: never fewer than the
+    // drivers already near it, never more than the ones who said yes.
+    const windows = [...by.values()].map(e => {
+      const rate = reliability.rateFor(HISTORY, { at: e.at, minute: e.window });
+      const floor = e.rungs.nearby + e.rungs.available + e.rungs.served;
+      return { ...e, supplyFloor: floor, rate,
+        expected: reliability.expected(e.said, floor, rate) };
+    });
+    return send(res, 200, { today: TODAY(), minute: nowMin, windows,
+      // khaali counted statements - that part is exact. How many of the people
+      // who made them turn up is its own past record applied forward, which is
+      // what capacity.mjs calls `predicted` and is a weaker thing.
       quality: 'exact', simulated: true,
       says: by.size ? 'Drivers who have said they expect to be at these places.'
         : 'Nobody has said they will be anywhere in the next hour and a half.' });

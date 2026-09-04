@@ -19,6 +19,7 @@ import * as JY from './journey.mjs';
 import * as DM from './demand.mjs';
 import * as DP from './dispatch.mjs';
 import * as CM from './commit.mjs';
+import * as RL from './reliability.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
@@ -2504,6 +2505,113 @@ t('what khaali keeps of a finished commitment is not a record of anybody', () =>
   assert.ok(!('fix' in v) && !('driver' in v) && !('km0' in v), 'and none of it reaches another driver');
   assert.strictEqual(v.mine, false);
   assert.strictEqual(CM.publicOf(c, { forDriver: 'd1' }).mine, true);
+});
+
+console.log('\nhow often a yes turned out to be true');
+
+// The rate is the one ratio in khaali, and it is allowed only because it never
+// travels without both its counts. What is pinned here is mostly what it
+// refuses to say.
+
+const rows = (n, outcome, extra) => Array.from({ length: n }, () =>
+  ({ at: 'Whitefield', band: 2, outcome, seed: false, ...(extra || {}) }));
+
+t('two out of two is not certainty, it is two', () => {
+  // The failure this whole gate exists for: a sample of two, both kept, is
+  // 1.0 - the most confident-looking figure anywhere on the page, from the
+  // thinnest evidence on it. A small sample does not deserve a shrunken
+  // estimate; it deserves none.
+  const r = RL.rateFor(rows(2, 'kept'), { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.rate, null);
+  assert.notStrictEqual(r.rate, 1);
+  assert.notStrictEqual(r.rate, 0, 'and null is not zero either');
+  assert.strictEqual(r.quality, 'unknown');
+  assert.strictEqual(r.level, null);
+  assert.match(r.says, /not measured enough/);
+});
+
+t('nineteen is not enough and twenty is', () => {
+  const at = { at: 'Whitefield', minute: 8 * 60 };
+  assert.strictEqual(RL.rateFor(rows(19, 'kept'), at).rate, null);
+  const r = RL.rateFor(rows(20, 'kept'), at);
+  assert.strictEqual(r.rate, 1);
+  assert.strictEqual(r.of, 20);
+  assert.strictEqual(RL.MIN_SAMPLE, 20);
+});
+
+t('a rate never leaves without its two counts', () => {
+  const r = RL.rateFor(rows(31, 'kept').concat(rows(19, 'missed')), { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.rate, 0.62);
+  assert.match(r.says, /31 of the last 50/, 'a denominator a reader can check');
+  assert.doesNotMatch(r.says, /62%|0\.62/, 'and never the fraction on its own');
+});
+
+t('a driver who shared nothing is not counted as having failed', () => {
+  // Putting `lapsed` in the denominator would make the number worse for
+  // exactly the drivers who declined to be watched, and would make declining
+  // cost them something. It costs them nothing, and this is where that is true.
+  const r = RL.rateFor(rows(20, 'kept').concat(rows(12, 'lapsed')), { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.of, 20, 'the unobservable are in neither half');
+  assert.strictEqual(r.rate, 1);
+  assert.strictEqual(r.unobserved, 12);
+  assert.match(r.says, /could not see another 12/);
+});
+
+t('changing your mind still counts - a withdrawn yes was not supply either', () => {
+  const r = RL.rateFor(rows(15, 'kept').concat(rows(5, 'withdrawn')), { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.of, 20);
+  assert.strictEqual(r.kept, 15);
+  assert.strictEqual(r.withdrew, 5);
+  assert.strictEqual(r.rate, 0.75);
+});
+
+t('a thin cell widens rather than guessing, and says which it used', () => {
+  const here = rows(5, 'kept');                                  // Whitefield, morning
+  const elsewhen = rows(40, 'kept', { band: 6 });                // Whitefield, evening
+  const elsewhere = rows(40, 'kept', { at: 'Hebbal', band: 2 });
+  const morning = { at: 'Whitefield', minute: 8 * 60 };
+  assert.strictEqual(RL.rateFor(here.concat(elsewhen), morning).level, 'place',
+    'five this morning is thin, so it widens to this place at any hour');
+  assert.strictEqual(RL.rateFor(here.concat(elsewhen), morning).of, 45);
+  assert.strictEqual(RL.rateFor(here.concat(elsewhere), morning).level, 'global',
+    'and when the place itself is thin, to everywhere');
+  assert.strictEqual(RL.rateFor(rows(40, 'kept'), morning).level, 'place-band',
+    'the narrowest cell that holds, when it holds');
+});
+
+t('the rate is history applied forward, and is labelled as that', () => {
+  const r = RL.rateFor(rows(40, 'kept'), { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.quality, 'predicted', 'khaali\'s own past outcomes, carried forward');
+  assert.ok(CAP.QUALITY.includes(r.quality), 'and a rung of the ladder the rest of khaali uses');
+  assert.notStrictEqual(r.quality, 'exact', 'the count is exact; the rate applied forward is not');
+});
+
+t('expected supply is an integer bracketed by two counts', () => {
+  const rate = RL.rateFor(rows(31, 'kept').concat(rows(19, 'missed')), { at: 'Whitefield', minute: 8 * 60 });
+  const e = RL.expected(12, 0, rate);
+  assert.strictEqual(e, 7, '12 x 0.62 is 7.44, and 7.44 never leaves the module');
+  assert.ok(Number.isInteger(e));
+  assert.strictEqual(RL.expected(12, 9, rate), 9, 'never fewer than the ones already near it');
+  assert.strictEqual(RL.expected(12, 0, { rate: 1.4 }), 12, 'never more than the ones who said yes');
+  assert.strictEqual(RL.expected(12, 0, RL.rateFor(rows(2, 'kept'), {})), null,
+    'and with no measured rate there is no expectation, not a zero');
+});
+
+t('a seeded history says it is seeded, and one real row changes that', () => {
+  const seeded = rows(40, 'kept', { seed: true });
+  assert.strictEqual(RL.rateFor(seeded, {}).seed, true);
+  assert.strictEqual(RL.rateFor(seeded, {}).partSeed, false);
+  const mixed = RL.rateFor(seeded.concat(rows(1, 'kept')), {});
+  assert.strictEqual(mixed.seed, false);
+  assert.strictEqual(mixed.partSeed, true, 'part real, and it does not claim to be all real');
+});
+
+t('no history at all is not a rate of nothing', () => {
+  const r = RL.rateFor([], { at: 'Whitefield', minute: 8 * 60 });
+  assert.strictEqual(r.rate, null);
+  assert.strictEqual(r.of, 0);
+  assert.strictEqual(r.quality, 'unknown');
+  assert.strictEqual(RL.expected(12, 0, r), null, 'and twelve who said yes stay twelve who said yes');
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');
