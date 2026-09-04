@@ -2078,6 +2078,10 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
                     <span style="{{ f.vt }}">{{ f.value }}</span>
                   </div>
                 </sc-for>
+                <div onClick="{{ p.optClick }}" style="{{ p.optStyle }}">
+                  <span style="{{ p.optBox }}">{{ p.optTick }}</span>
+                  <span style="{{ p.optLabel }}">{{ p.optText }}</span>
+                </div>
                 <sc-if value="{{ cfZeroOn }}" hint-placeholder-val="{{ false }}">
                   <sc-for list="{{ p.zero }}" as="f" hint-placeholder-count="2">
                     <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;opacity:.7">
@@ -3001,6 +3005,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </sc-for>
           </div>
         </div>
+        <div style="{{ c.shTitleStyle }}">{{ c.shTitle }}</div>
+        <div style="{{ c.shSaysStyle }}">{{ c.shSays }}</div>
         <div style="{{ c.olTitleStyle }}">{{ c.olTitle }}</div>
         <sc-for list="{{ c.olLines }}" as="o" hint-placeholder-count="3">
           <div style="{{ o.tStyle }}">{{ o.t }}</div>
@@ -5886,7 +5892,8 @@ class Component extends DCLogic {
         body:JSON.stringify({kind:ride.mode,from:ride.from,to:ride.to,
           fromAt:ride.fromLat!=null?(ride.fromLat.toFixed(5)+','+ride.fromLng.toFixed(5)):null,
           toAt:ride.toLat!=null?(ride.toLat.toFixed(5)+','+ride.toLng.toFixed(5)):null,
-          pax:rec.pax||1,pickupMin:ride.depMin,holder,date:this.dateIsoFor(rec.dayIdx||0)})},9000);
+          pax:rec.pax||1,pickupMin:ride.depMin,holder,pool:!!rec.sharePool,
+          date:this.dateIsoFor(rec.dayIdx||0)})},9000);
       const j=await r.json().catch(()=>({}));
       if(j&&j.ok)this.rideSet(rec.pnr,j.ride);
       else this.setState({rideErr:(j&&j.error)||'khaali could not book the ride. Nothing was charged.'});
@@ -6547,7 +6554,7 @@ class Component extends DCLogic {
     };
   }
   trackBindings(){
-    const S=this.state,gone={display:'none'};
+    const S=this.state,gone={display:'none'},R='₹';
     if(S.page==='track'&&this._trPage!==true){this._trPage=true;this.trackPull();}
     if(S.page!=='track')this._trPage=false;
     const today=this.dateIsoFor(0);
@@ -6616,11 +6623,21 @@ class Component extends DCLogic {
         onOpen:()=>{},
         note:'khaali owns no vehicle. Once a driver has accepted, this is where the ride should have got to by now, from the booking and the clock \u2014 not from watching anybody.',
         noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6},
-        outlook:this.trackOutlook(r)};
+        outlook:this.trackOutlook(r),
+        // and, when khaali actually put her with somebody, what that means for
+        // her: how many, and what her share came to. Never who they are.
+        share:r.share||null};
       ((r.date===today&&st.stage!=='arrived'&&st.stage!=='cancelled')?live:past).push(card);
     });
 
     const deco=c=>({...c,
+      shTitle:c.share?('Shared '+'·'+' '+R+c.share.fareMin+'–'+R+c.share.fareMax+' your share'):'',
+      shTitleStyle:{display:c.share?'inline-block':'none',marginTop:10,
+        font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+        padding:'6px 10px',borderRadius:6,background:'var(--k-e6f4ec)',color:'var(--k-fg-14663a)'},
+      shSays:c.share?c.share.says:'',
+      shSaysStyle:{display:c.share?'block':'none',marginTop:7,
+        font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       // What khaali counted about the place she is heading for. Counts and
       // places only: nothing here has her ride as its subject.
       hasOutlook:!!c.outlook,
@@ -9491,13 +9508,17 @@ class Component extends DCLogic {
     // pass is cut against this booking now, rather than offered again on the
     // ticket as though it were a thing she had not just paid for.
     const keep=S.cfOff||{};
+    // Read here, before the confirm page's state is cleared, and kept on the
+    // booking - so a ride rebooked later carries the same answer rather than
+    // silently losing it.
+    rec.sharePool=!!S.cfShare;
     if(rec.journey&&(rec.journey.legs||[]).length&&!keep.pass)setTimeout(()=>this.getPass(rec),0);
     if(rec.journey&&(rec.journey.rides||[]).length&&!keep.ride)setTimeout(()=>this.getRide(rec),0);
     // and the last mile is counted whichever way she went on the ride itself
     if(rec.journey&&(rec.journey.rides||[]).length)setTimeout(()=>this.tellLastMile(rec),0);
     // the journey is spent on this booking; the next one starts without it
     this.setState({bookings:[rec].concat(S.bookings),page:'ticket',picks:picks,viewPnr:rec.pnr,holdId:null,hold:null,holdErr:null,
-      classModal:false,countModal:false,hov:null,pBookChain:null,cfOff:{}});
+      classModal:false,countModal:false,hov:null,pBookChain:null,cfOff:{},cfShare:false});
     window.scrollTo(0,0);this.syncAv();}
   componentDidUpdate(){
     this.syncUrl();
@@ -10648,6 +10669,7 @@ class Component extends DCLogic {
           st:{font:'700 14px/1.4 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
           vt:{font:"700 14px/1.4 'JetBrains Mono',monospace",color:'var(--k-fg-14161a)'}});
         const row=r=>({...r,st:st,vt:r.value===NA?{...vt,color:'var(--k-fg-8a8a84)'}:vt});
+        const shareOn=!!S.cfShare;
         const dropBtn=(on,k)=>({t:on?'Remove':'Add back',
           onClick:()=>{const cur=this.state.cfOff||{};
             this.setState({cfOff:{...cur,[k]:!cur[k]}});},
@@ -10665,6 +10687,7 @@ class Component extends DCLogic {
           sum:sub('Train',R+money(trainSum)),
           keep:'khaali books this',keepStyle:{font:'600 12px/1 Archivo,sans-serif',color:'var(--k-fg-8a8a84)',flex:'none'},
           dropStyle:{display:'none'},drop:{t:'',onClick:()=>{},style:{}},
+          optStyle:{display:'none'},optClick:()=>{},optBox:{},optTick:'',optLabel:{},optText:'',
           faded:{opacity:1},
         }];
 
@@ -10678,6 +10701,7 @@ class Component extends DCLogic {
           sum:sub('Trip pass',passOn?(q?(R+q.fare+' blocked'):'\u2026'):'not blocked'),
           keep:'',keepStyle:{display:'none'},
           dropStyle:{display:'block'},drop:dropBtn(passOn,'pass'),
+          optStyle:{display:'none'},optClick:()=>{},optBox:{},optTick:'',optLabel:{},optText:'',
           faded:{opacity:passOn?1:.55},
         });
 
@@ -10691,6 +10715,22 @@ class Component extends DCLogic {
           sum:sub('Ride',rideOn?'booked, not charged here':'not taken'),
           keep:'',keepStyle:{display:'none'},
           dropStyle:{display:'block'},drop:dropBtn(rideOn,'ride'),
+          // Sharing a vehicle with a stranger is a thing a person agrees to,
+          // so it is off unless she turns it on. The promise under it is the
+          // reason it can be offered at all, and it is the whole label.
+          optStyle:{display:rideOn?'flex':'none',alignItems:'flex-start',gap:10,cursor:'pointer',
+            padding:'11px 0 2px',marginTop:6,borderTop:'1px dotted var(--k-e6e5e0)'},
+          optClick:()=>this.setState({cfShare:!this.state.cfShare}),
+          optBox:{flex:'none',width:18,height:18,borderRadius:5,marginTop:1,
+            border:'1.5px solid '+(shareOn?'#0f8a7e':'var(--k-d4d3ce)'),
+            background:shareOn?'#0f8a7e':'var(--k-fff)',color:'#fff',
+            font:'800 11px/16px Archivo,sans-serif',textAlign:'center',display:'block'},
+          optTick:shareOn?'\u2713':'',
+          optLabel:{font:'500 12.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-40434a)'},
+          optText:'Share this ride if somebody is going the same way. If another traveller leaves from '
+            +'here in the same half hour heading in your direction, khaali puts you in one vehicle and '
+            +'splits the fare by distance. It may take a few minutes longer. khaali will never share a '
+            +'ride where your part would come to more than riding alone.',
           faded:{opacity:rideOn?1:.55},
         });
 

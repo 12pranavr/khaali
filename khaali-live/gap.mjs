@@ -90,10 +90,18 @@ export function gapOf(spot, supply, expected, { floor = FLOOR } = {}) {
   const gap = expected == null ? null : spot.floor - expected;
   const over = expected == null ? null : expected - spot.ceiling;
 
-  // What to act on. With a measured rate it is the working gap; without one it
-  // is the pessimistic bound - so deleting the history makes khaali recruit
-  // MORE cautiously rather than stopping, which is the right way round.
-  const acting = gap != null ? gap : gapCeiling;
+  // What to act on, and it is always measured against the FLOOR - the people
+  // with no bus at all.
+  //
+  // The first version fell back to gapCeiling when there was no rate, on the
+  // reasoning that the pessimistic bound is the safe one. It is the safe one
+  // for a passenger and the wrong one here: at a stop where every one of
+  // twenty-one people could take a bus, it asked twenty-one drivers to drive
+  // over. Over-recruiting is the failure this whole file exists to prevent, so
+  // the cautious direction is downwards, and the floor is the number khaali is
+  // actually sure of. Without a rate it just assumes nobody has arrived yet,
+  // which is true of the drivers it cannot see.
+  const acting = gap != null ? gap : (spot.floor - supply.floor);
 
   // Three independent stops, and the second needs no reliability at all, so it
   // works on the first day khaali runs.

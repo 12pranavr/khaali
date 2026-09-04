@@ -2634,6 +2634,20 @@ t('below the privacy floor there is no gap, and that is the whole defence', () =
   assert.strictEqual(GP.asks([GP.gapOf(spot(2, 2), sup(0), null)]).length, 0);
 });
 
+t('a place where everybody has a bus is not a shortage of drivers', () => {
+  // Caught on the first morning-peak screen: Kengeri showed 0 to 21 - twenty-
+  // one people booked, every one of whom could take a bus - and khaali asked
+  // twenty-one drivers to drive over for them. The fallback was measuring
+  // against the ceiling; over-recruiting is the failure this file exists to
+  // prevent, so the cautious direction is downwards.
+  const g = GP.gapOf(spot(0, 21), sup(0), null);
+  assert.strictEqual(g.asking, 0, 'nobody is short of a ride here');
+  assert.strictEqual(g.radiusKm, 0);
+  assert.strictEqual(g.gapCeiling, 21, 'the pessimistic bound is still reported, as information');
+  const real = GP.gapOf(spot(13, 13), sup(0), null);
+  assert.strictEqual(real.asking, 13, 'and where nobody has a bus, khaali asks for all of them');
+});
+
 t('the gap has two integer bounds even with no reliability at all', () => {
   const g = GP.gapOf(spot(8, 12), sup(3, 1), null);
   assert.strictEqual(g.gap, null, 'no measured rate, no working number');

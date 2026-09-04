@@ -108,6 +108,41 @@ let simAtAnchor = Date.now();      // simulated ms at that moment
 let simSpeed = 1;                  // 1 = real time
 const simNow = () => new Date(simAtAnchor + (Date.now() - simAnchor) * simSpeed);
 
+/**
+ * Where the demo clock starts.
+ *
+ * Real time by default, and it stays real time all day - the clock drives
+ * which trains have left, what can be charted and when tatkal opens, and
+ * moving it under somebody mid-booking would be worse than a dull first
+ * screen.
+ *
+ * The exception is the small hours. Between eleven at night and five in the
+ * morning khaali is honestly, correctly empty: no trains running, nobody
+ * booking, and a last-mile map showing three people at Kengeri at 02:30. That
+ * is true and it is useless as a first impression, and it is exactly when
+ * somebody in another timezone opens the link. So in those hours only, the
+ * clock starts at the morning peak.
+ *
+ * It is never silent about it: shiftMin goes out on /api/sim, and the header
+ * reads SIM in red rather than LIVE the moment this fires. SIM_SHIFT_MIN in
+ * the environment overrides both, for a demo that wants a particular hour.
+ */
+const DEMO_MIN = 8 * 60 + 40;      // 08:40, the middle of the morning peak
+{
+  const env = parseInt(process.env.SIM_SHIFT_MIN || '', 10);
+  const h = new Date().getHours();
+  if (Number.isFinite(env)) {
+    simAtAnchor = Date.now() + env * 60000;
+    console.log('clock: shifted ' + env + ' min by SIM_SHIFT_MIN · now ' + simNow().toTimeString().slice(0, 5));
+  } else if (h >= 23 || h < 5) {
+    const d = new Date();
+    const mins = ((DEMO_MIN - (d.getHours() * 60 + d.getMinutes())) % 1440 + 1440) % 1440;
+    simAtAnchor = Date.now() + mins * 60000;
+    console.log('clock: the small hours, so the demo starts at '
+      + simNow().toTimeString().slice(0, 5) + ' (+' + mins + ' min, shown as SIM)');
+  }
+}
+
 // ------------------------------------------------------------------ orders --
 // "Tell khaali what you need, not which train." The order book lives here;
 // what an order is and how it fills lives in orders.mjs.
@@ -919,7 +954,7 @@ setInterval(() => {
   // keeps journeys booked for a later day; only what is finished goes.
   const then = simNow();
   const kept = demand.prune(DEMAND, then.getHours() * 60 + then.getMinutes(), TODAY());
-  if (kept.length !== DEMAND.length) DEMAND.splice(0, DEMAND.length, ...kept);
+  if (kept.length !== DEMAND.length) { DEMAND.splice(0, DEMAND.length, ...kept); spotsStale(); }
 
   // And every half hour a driver promised has now been and gone. What became
   // of it is decided by commit.sweep and written down here - including the
@@ -960,8 +995,7 @@ function outlookFor(ride) {
   if (!ride || ride.pickupMin == null) return null;
   const now = simNow(), nowMin = now.getHours() * 60 + now.getMinutes();
   const window = demand.windowOf(ride.pickupMin);
-  const spot = demand.hotspots(DEMAND, { nowMin, today: TODAY() })
-    .find(h => h.at === ride.from && h.window === window);
+  const spot = spotsNow(nowMin, null).find(h => h.at === ride.from && h.window === window);
 
   const live = [...COMMITS.values()].filter(c => !c.outcome && c.at === ride.from && c.window === window);
   const rungs = { nearby: 0, available: 0, 'moving-toward': 0 };
@@ -986,6 +1020,61 @@ function outlookFor(ride) {
     // statement that it will.
     promise: false, simulated: true,
   };
+}
+
+/**
+ * The hotspot map, recomputed at most twice a minute.
+ *
+ * Two pages poll this every five seconds, and both of them are read by more
+ * than one person at a time. Without a cache, ten drivers is a hundred and
+ * twenty full passes a minute over eighteen hundred seeded declarations plus
+ * everything real on top - and for nothing, because the answer only moves when
+ * somebody books a journey or the half hour turns over.
+ *
+ * The distance sort is NOT cached: it is per driver, it is cheap, and caching
+ * it would hand one driver another driver's position. So the bucketing is
+ * shared and the `away` on each row is worked out per request.
+ */
+let spotAt = 0, spotFor = '', spotRows = [];
+const SPOT_MS = 30000;
+function spotsNow(nowMin, near) {
+  const key = TODAY() + '|' + demand.windowOf(nowMin);
+  const t = Date.now();
+  if (t - spotAt > SPOT_MS || key !== spotFor) {
+    spotRows = demand.hotspots(DEMAND, { nowMin, today: TODAY() });
+    spotAt = t; spotFor = key;
+  }
+  if (!near) return spotRows;
+  return spotRows.map(h => ({ ...h,
+    away: h.lat == null ? null : Math.round(journey.km(near, h) * 10) / 10 }))
+    .sort((a, b) => a.ahead - b.ahead || b.ceiling - a.ceiling
+      || ((a.away == null ? 1e9 : a.away) - (b.away == null ? 1e9 : b.away)));
+}
+/** Anything that changes the map drops it, so a new booking shows at once. */
+function spotsStale() { spotAt = 0; }
+
+/** The pooled offer this ride is one leg of, if there is one. */
+function pooledWith(rd) {
+  return [...OFFERS.values()].find(o => o.riders && o.riders.length > 1
+    && o.riders.some(r => r.id === rd.id)
+    && o.status !== 'cancelled' && o.status !== 'expired') || null;
+}
+
+/**
+ * What a passenger is told about sharing: that she is, with how many, and what
+ * her share is. Never another rider's name and never where anybody else is
+ * going - those reach the driver who has to make the stops, and stop there.
+ */
+function shareOf(rd) {
+  const o = pooledWith(rd);
+  if (!o) return null;
+  const me = o.riders.find(r => r.id === rd.id);
+  const others = o.riders.length - 1;
+  return { with: others, fareMin: me.fareMin, fareMax: me.fareMax,
+    was: { min: rd.fare ? rd.fare.min : null, max: rd.fare ? rd.fare.max : null },
+    says: 'You are sharing this with ' + others + (others === 1 ? ' other person' : ' other people')
+      + ' going the same way from here. Your share is lower than riding alone — khaali does not '
+      + 'put anybody in a shared ride who would pay more for it.' };
 }
 
 /**
@@ -2016,6 +2105,7 @@ async function api(req, res, url) {
     }, simNow().getTime());
     if (!d.ok) return send(res, 400, { ok: false, error: d.reason });
     DEMAND.push(d.record);
+    spotsStale();                     // a booking shows on the map at once
     journal.append({ t: 'lastmile', rec: d.record });
     // the declaring passenger is told the count, not their own line back
     return send(res, 200, { ok: true, counted: true, need });
@@ -2029,7 +2119,7 @@ async function api(req, res, url) {
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const lat = parseFloat(q.get('lat')), lng = parseFloat(q.get('lng'));
     const near = (isFinite(lat) && isFinite(lng)) ? { lat, lng } : null;
-    const rows = demand.hotspots(DEMAND, { nowMin, today: TODAY(), near });
+    const rows = spotsNow(nowMin, near);
     return send(res, 200, {
       today: TODAY(), minute: nowMin, floor: demand.FLOOR,
       windowMin: demand.WINDOW_MIN, hotspots: rows,
@@ -2063,8 +2153,7 @@ async function api(req, res, url) {
         return send(res, 409, { ok: false, reason: 'already-said',
           commit: commit.publicOf(c, { forDriver: driver }) });
     // the place is one khaali is already publishing demand for, not a string
-    const spot = demand.hotspots(DEMAND, { nowMin, today: TODAY() })
-      .find(h => h.at === at && h.window === window);
+    const spot = spotsNow(nowMin, null).find(h => h.at === at && h.window === window);
     if (!spot) return send(res, 404, { ok: false, reason: 'no-such-window',
       error: 'khaali is not showing demand for that place and half hour.' });
     const d = commit.declare({
@@ -2153,7 +2242,7 @@ async function api(req, res, url) {
     // gap; a place the map is NOT publishing gets none, because a gap beside a
     // driver count would give away the passenger count the floor exists to
     // withhold. gapOf() returns null there and asks() drops it.
-    const spots = demand.hotspots(DEMAND, { nowMin, today: TODAY(), near });
+    const spots = spotsNow(nowMin, near);
     const gaps = spots.map(sp => {
       const e = windows.find(w => w.at === sp.at && w.window === sp.window);
       const supply = e ? { said: e.said, ceiling: e.said, floor: e.supplyFloor, rungs: e.rungs }
@@ -2274,8 +2363,9 @@ async function api(req, res, url) {
         .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10)
         .map(x => ({ ...hire.publicOf(x),
           // the stage is only allowed to say a driver is coming if one accepted
-          status2: hire.statusOf(x, minute, { today: TODAY(), offer: OFFERS.get(x.id) || null }),
-          outlook: outlookFor(x) })) });
+          status2: hire.statusOf(x, minute, { today: TODAY(),
+            offer: OFFERS.get(x.id) || pooledWith(x) || null }),
+          share: shareOf(x), outlook: outlookFor(x) })) });
   }
   const mRide = p.match(/^\/api\/ride\/([a-f0-9]+)$/);
   if (mRide) {
@@ -2283,18 +2373,8 @@ async function api(req, res, url) {
     if (!who) return send(res, 401, { needsAuth: true });
     const rd = RIDES.get(mRide[1]);
     if (!rd || rd.who !== who) return send(res, 404, { error: 'no such ride' });
-    // If this ride was pooled, she is told that and how many with - never who,
-    // and never where anybody else is going.
-    const inPool = [...OFFERS.values()].find(o => o.riders.length > 1
-      && o.riders.some(r => r.id === rd.id) && o.status !== 'cancelled' && o.status !== 'expired');
-    const share = inPool ? (() => {
-      const me = inPool.riders.find(r => r.id === rd.id);
-      return { with: inPool.riders.length - 1, fareMin: me.fareMin, fareMax: me.fareMax,
-        says: 'You are sharing this with ' + (inPool.riders.length - 1)
-          + (inPool.riders.length === 2 ? ' other person' : ' other people')
-          + ' going the same way. Your share is lower than riding alone, which is the only '
-          + 'reason khaali put you together.' };
-    })() : null;
+    const inPool = pooledWith(rd);
+    const share = shareOf(rd);
     if (req.method === 'DELETE') {
       hire.cancelRide(rd, simNow().getTime());
       journal.append({ t: 'ridegone', id: rd.id, at: rd.cancelledAt });
