@@ -19,6 +19,8 @@ import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
+import * as RD from './road.mjs';
+import * as TR from './traffic.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -2485,6 +2487,96 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   const a = AL.allocate(r.chains, { after: 480 });
   assert.ok(a.recommended != null);
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
+});
+
+console.log('\nthe road: measured where khaali can measure, declared where it cannot');
+
+t('the city has a speed, and it was measured, not typed', () => {
+  const st = RD.stats();
+  assert.ok(st.samples > 100000, 'only ' + st.samples + ' timed segments');
+  assert.ok(st.cells > 300, 'only ' + st.cells + ' cells');
+  assert.ok(st.cityKmh > 12 && st.cityKmh < 30, st.cityKmh + ' km/h city median');
+  // a city where every road is the same speed has not been measured
+  assert.ok(st.fastest > st.slowest * 1.8,
+    'slowest ' + st.slowest + ' vs fastest ' + st.fastest + ' - no spatial signal');
+  assert.ok(/BMTC/.test(st.source), 'a speed with no source is an invented number');
+});
+
+t('a cell nobody has driven says unknown, not a confident guess', () => {
+  const far = RD.speedAt(20.5, 80.5);                   // nowhere near Bengaluru
+  assert.strictEqual(far.quality, 'unknown');
+  assert.strictEqual(far.samples, 0);
+  assert.strictEqual(far.kmh, RD.stats().cityKmh, 'it falls back to the measured median');
+  const known = RD.speedAt(12.97567, 77.57281);         // Majestic
+  assert.strictEqual(known.quality, 'estimated');
+  assert.ok(known.samples >= RD.MIN_SAMPLES);
+});
+
+t('the middle of the city is slower than the edge of it', () => {
+  const majestic = RD.speedAt(12.97567, 77.57281);
+  const outer = RD.speedAt(13.0997, 77.3934);           // Nelamangala
+  assert.strictEqual(majestic.quality, 'estimated');
+  assert.strictEqual(outer.quality, 'estimated');
+  assert.ok(outer.kmh > majestic.kmh,
+    'Nelamangala ' + outer.kmh + ' should beat Majestic ' + majestic.kmh);
+});
+
+t('speed over a route averages by distance, not by cell', () => {
+  // two halves at 10 and 30 km/h is 15 km/h overall, never 20 - the harmonic
+  // mean is the only correct one for a speed averaged over ground
+  const key = (a, b) => Math.round(a / RD.CELL) + ':' + Math.round(b / RD.CELL);
+  const fake = { cells: new Map(), cityKmh: 20, samples: 999 };
+  fake.cells.set(key(12.90, 77.50), { kmh: 10, samples: 100 });
+  fake.cells.set(key(13.10, 77.50), { kmh: 30, samples: 100 });
+  RD.useField(fake);
+  const r = RD.speedBetween(12.90, 77.50, 13.10, 77.50, 2);
+  RD.useField(null);
+  assert.ok(r.kmh > 12 && r.kmh < 18, r.kmh + ' km/h is not the harmonic mean of 10 and 30');
+  assert.ok(RD.stats().samples > 100000, 'the real field came back');
+});
+
+t('the hour is declared, and never claims to be measured', () => {
+  assert.strictEqual(TR.QUALITY, 'simulated');
+  assert.ok(/not a measurement/.test(TR.SOURCE), TR.SOURCE);
+  const p = TR.peak();
+  assert.ok(p.worstFactor < 0.7, 'a peak that is not a peak');
+  assert.ok(p.bestFactor > 1.0);
+  assert.ok([8, 9, 17, 18, 19].includes(p.worstHour), 'worst hour is ' + p.worstHour);
+  // and it interpolates rather than falling off a cliff at the hour mark
+  const a = TR.factorAt(8 * 60 + 59).factor, b = TR.factorAt(9 * 60).factor;
+  assert.ok(Math.abs(a - b) < 0.1, a + ' -> ' + b + ' is a cliff');
+});
+
+t('a measurement times an assumption is an assumption', () => {
+  const measured = RD.speedAt(12.97567, 77.57281);
+  assert.strictEqual(measured.quality, 'estimated');
+  const withHour = TR.apply(measured, 9 * 60);
+  assert.strictEqual(withHour.quality, 'simulated', 'the hour must taint the quality');
+  assert.ok(withHour.kmh < measured.kmh, 'nine in the morning is not free-flow');
+  // ...but unknown stays unknown; it is the worst thing to be
+  assert.strictEqual(TR.apply(RD.speedAt(20.5, 80.5), 9 * 60).quality, 'unknown');
+});
+
+t('the same ride takes longer at nine than at ten at night', () => {
+  const from = { name: 'Majestic', lat: 12.97567, lng: 77.57281 };
+  const to = { name: 'Hoodi', lat: 12.9902, lng: 77.7181 };
+  const at = h => HR.leg('car', from, to, h * 60, 18, x => String(x), x => x);
+  const peak = at(9), night = at(22);
+  assert.ok(peak.min > night.min * 1.4,
+    'peak ' + peak.min + ' min vs night ' + night.min + ' min - traffic is not biting');
+  assert.ok(peak.kmh < night.kmh);
+  assert.strictEqual(peak.speedQuality, 'simulated');
+  assert.ok(/BMTC/.test(peak.speedSource) && /not a measurement/.test(peak.speedSource),
+    'the leg must carry the whole provenance chain: ' + peak.speedSource);
+  // a bike filters through what a car queues in
+  const bike = HR.leg('bike', from, to, 9 * 60, 18, x => String(x), x => x);
+  assert.ok(bike.min < peak.min, 'a bike should beat a car in peak traffic');
+});
+
+t('no vehicle khaali hires travels at an impossible speed', () => {
+  const from = { name: 'a', lat: 13.0997, lng: 77.3934 }, to = { name: 'b', lat: 13.11, lng: 77.40 };
+  const s = HR.speedFor('bike', { at: 3 * 60, from, to });   // 3am, the fastest road, a bike
+  assert.ok(s.kmh <= HR.MAX_KMH, s.kmh + ' km/h through Bengaluru');
 });
 
 console.log('\nthe switch: ride each vehicle for the stretch it has room on');

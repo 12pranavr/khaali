@@ -13,21 +13,41 @@
 //
 // Nothing here talks to a language model. This file is arithmetic.
 
-/** Vehicles for hire. Speeds are city speeds, not free-flow: a car crossing
-    Bengaluru at 22 km/h is the honest figure, and it is what stops a hired
-    ride quietly beating a train on time. */
+import * as _road from './road.mjs';
+import * as _traffic from './traffic.mjs';
+
+/**
+ * Vehicles for hire.
+ *
+ * There is no speed here any more. A car does not have a speed; a ROAD has a
+ * speed, and road.mjs measures it from two hundred thousand timed bus segments.
+ * What a car has is an advantage over the bus that measured the road, because
+ * it does not stop forty times - and a bike has a further advantage, because it
+ * filters through what a car queues in. Those two ratios are the only thing
+ * this file claims, and it says so out loud.
+ */
 export const HIRE = {
   car: {
-    kind: 'car', name: 'Car', seats: 4, kmh: 22, waitMin: 5,
+    kind: 'car', name: 'Car', seats: 4, waitMin: 5,
+    // a car makes no stops, so it beats the bus that measured the road
+    roadFactor: 1.35,
     base: 50, perKm: 16, spread: 0.18, stepFree: true,
     source: 'published four-wheeler city tariff',
+    speedSource: 'BMTC-measured road speed, x1.35 for a vehicle that does not stop',
   },
   bike: {
-    kind: 'bike', name: 'Bike', seats: 1, kmh: 26, waitMin: 3,
+    kind: 'bike', name: 'Bike', seats: 1, waitMin: 3,
+    // ...and a two-wheeler filters through the queue the car sits in
+    roadFactor: 1.75,
     base: 25, perKm: 8, spread: 0.20, stepFree: false,
     source: 'published two-wheeler city tariff',
+    speedSource: 'BMTC-measured road speed, x1.75 for a two-wheeler that filters',
   },
 };
+
+/** Nothing outside khaali's own measurements: a hired vehicle never travels
+    faster than this however empty the road model says the city is. */
+export const MAX_KMH = 60;
 
 export const KINDS = Object.keys(HIRE);
 export const isHire = m => m === 'car' || m === 'bike';
@@ -58,11 +78,32 @@ export function fareFor(kind, km) {
   };
 }
 
-/** How long the ride takes, including waiting for it to turn up. */
-export function minutesFor(kind, km) {
+/**
+ * How fast this vehicle goes over THIS road at THIS hour - measured where
+ * khaali has measured, declared where it has not, and saying which.
+ */
+export function speedFor(kind, { at = null, from = null, to = null } = {}) {
   const h = HIRE[kind];
   if (!h) return null;
-  return h.waitMin + Math.max(1, Math.round(km / h.kmh * 60));
+  const road = (from && to)
+    ? _road.speedBetween(from.lat, from.lng, to.lat, to.lng)
+    : { kmh: _road.field().cityKmh, quality: 'unknown', source: 'no route given; the city median' };
+  const timed = at != null ? _traffic.apply(road, at) : { ...road, factor: 1 };
+  const kmh = Math.min(MAX_KMH, Math.round(timed.kmh * h.roadFactor * 10) / 10);
+  return { kmh, roadKmh: road.kmh, factor: timed.factor != null ? timed.factor : 1,
+    quality: timed.quality, source: h.speedSource + ' · ' + timed.source };
+}
+
+/**
+ * How long the ride takes, including waiting for it to turn up. With no place
+ * and no hour it falls back to the city median road, which is still a measured
+ * number rather than one somebody typed.
+ */
+export function minutesFor(kind, km, opts = {}) {
+  const h = HIRE[kind];
+  if (!h) return null;
+  const s = speedFor(kind, opts);
+  return h.waitMin + Math.max(1, Math.round(km / s.kmh * 60));
 }
 
 /**
@@ -100,7 +141,9 @@ export function pick(kinds = [], opts = {}) {
 export function leg(kind, from, to, startMin, km, hhmm, dayMin) {
   const h = HIRE[kind];
   if (!h) return null;
-  const min = minutesFor(kind, km);
+  // the road she is actually on, at the hour she is actually on it
+  const speed = speedFor(kind, { at: startMin, from, to });
+  const min = h.waitMin + Math.max(1, Math.round(km / speed.kmh * 60));
   const f = fareFor(kind, km);
   return {
     mode: kind, name: h.name, from: from.name, to: to.name,
@@ -109,6 +152,8 @@ export function leg(kind, from, to, startMin, km, hhmm, dayMin) {
     dep: hhmm(dayMin(startMin)), arr: hhmm(dayMin(startMin + min)),
     fare: f.mid, fareMin: f.min, fareMax: f.max, fareEstimated: true,
     wait: h.waitMin, seats: h.seats,
+    kmh: speed.kmh, roadKmh: speed.roadKmh, trafficFactor: speed.factor,
+    speedQuality: speed.quality, speedSource: speed.source,
     fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng,
     // A hired seat is hers by definition. It must speak the same vocabulary
     // every other leg speaks - 'yes' at rank 3 - or the chain's worst-seat
