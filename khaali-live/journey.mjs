@@ -452,8 +452,14 @@ export function trainsBetween(fromIdx, toIdx, after, limit = 12) {
   return TRAINS.filter(t => serves(t, fromIdx, toIdx)).map(t => {
     const d = sMin(t, fromIdx, 'd'), a = sMin(t, toIdx, 'a');
     if (d == null || a == null) return null;
-    return { train: t.no, name: t.name, dep: dayMin(d), arr: dayMin(a),
-      min: ((dayMin(a) - dayMin(d)) + 1440) % 1440 };
+    // Arrival stays on the SAME timeline as departure. Wrapping it at midnight
+    // made a train leaving 22:55 and arriving 00:30 arrive at minute 30 - four
+    // hundred minutes BEFORE it left. allocate.span() then read that journey as
+    // costing minus sixteen hours and recommended it over every train that
+    // actually left sooner, from every afternoon query. hhmm() wraps for
+    // display on its own, so nothing downstream needs the truncation.
+    const dep = dayMin(d), min = ((dayMin(a) - dep) + 1440) % 1440;
+    return { train: t.no, name: t.name, dep, arr: dep + min, min };
   }).filter(Boolean).filter(x => x.dep >= after).sort((a, b) => a.dep - b.dep).slice(0, limit);
 }
 

@@ -755,6 +755,21 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         </div>
       </sc-for>
       <div style="{{ pcNoteStyle }}">{{ pcNote }}</div>
+      <div style="{{ pcBookWrapStyle }}">
+        <button onClick="{{ pcBookGo }}" style="{{ pcBookStyle }}">{{ pcBookLabel }}</button>
+      </div>
+      <div style="{{ pcBookNoteStyle }}">{{ pcBookNote }}</div>
+      <div style="{{ pcBookErrStyle }}">{{ pcBookErr }}</div>
+      <div style="{{ pcPassWrapStyle }}">
+        <img src="{{ pcPassQr }}" style="{{ pcPassQrStyle }}" alt="trip pass" />
+        <div style="flex:1;min-width:200px">
+          <div style="{{ pcPassHeadStyle }}">{{ pcPassHead }}</div>
+          <div style="{{ pcPassSubStyle }}">{{ pcPassSub }}</div>
+          <sc-for list="{{ pcRideRows }}" as="r" hint-placeholder-count="1">
+            <div style="{{ r.style }}">{{ r.t }}</div>
+          </sc-for>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3760,6 +3775,8 @@ class Component extends DCLogic {
   }
   stopVoice(){
     if(this._voice){try{this._voice.pause();}catch(e){}}
+    // the phone's own voice is a second mouth, and stop has to close both
+    if(this._say){try{window.speechSynthesis.cancel();}catch(e){}this._say=null;}
     this._voice=null;this._voiceKey=null;this._voiceLoading=false;
     this._voiceReq=(this._voiceReq||0)+1;
     if(this._pgT){clearInterval(this._pgT);this._pgT=null;}
@@ -5617,11 +5634,102 @@ class Component extends DCLogic {
     }catch(e){this.setState({pcGeoBusy:null,pcErr:'The map did not answer. Try again.'});}
   }
   /** Plan the whole thing: every hop, in order, on one clock. */
+  /**
+   * A custom journey, flattened into one bookable thing.
+   *
+   * The hops are planned one after another by the same engine that plans a
+   * whole journey, so what comes back is legs - and legs are what a trip pass
+   * and a hired ride are made of. The only part that cannot be flattened is a
+   * train: a berth is booked against a PNR, one train at a time, so each train
+   * hop keeps its own button and goes through the class modal like any other.
+   */
+  pcChain(){
+    const res=this.state.pcRes;if(!res||!res.steps||!res.steps.length)return null;
+    const legs=[];res.steps.forEach(st=>(st.legs||[]).forEach(l=>legs.push(l)));
+    const last=res.steps[res.steps.length-1];
+    return {legs,depText:res.steps[0].depText,arrText:last.arrText,fare:res.fare};
+  }
+  /** The train hops, each of which is booked the way a train has always been. */
+  pcTrains(){
+    const res=this.state.pcRes;if(!res||!res.steps)return [];
+    const out=[];
+    res.steps.forEach(st=>{
+      const t=(st.legs||[]).find(l=>l.mode==='train');
+      if(t)out.push({n:st.n,leg:t,from:st.from.name,to:st.to.name});
+    });
+    return out;
+  }
+  /**
+   * Book the custom journey. All of it, as one thing.
+   *
+   * It used to be two buttons - one for the berth, one for everything else -
+   * which is not what a journey is. She built ONE journey out of these hops,
+   * so she books one: the berth carries the PNR, and every bus, metro, car and
+   * bike leg on every other hop rides along on that same ticket, exactly the
+   * way a one-shot journey's trip pass and hired ride do.
+   *
+   * With no train on it there is no PNR to hang it from, so the pass IS the
+   * ticket - the same rule the planner has always used.
+   */
+  async pcBookAll(){
+    const c=this.pcChain();if(!c)return;
+    const trip=this.planTripOf(c);
+    const trains=this.pcTrains();
+    if(!trains.length&&!trip.legs.length&&!trip.rides.length){
+      this.setState({pcBookErr:'There is nothing on this journey to book.'});return;}
+    if(!trains.length)return this.pcBook();
+    const h=trains[0],tl=h.leg;
+    const fi=this.ST.findIndex(x=>x.n===tl.from),ti=this.ST.findIndex(x=>x.n===tl.to);
+    if(fi<0||ti<0){this.setState({pcBookErr:'khaali books berths on its own corridor only. '
+      +'The '+(tl.name||'train')+' hop runs off it, so that hop is bought at the counter.'});return;}
+    this._c={};
+    this.setState({pcBookErr:'',pBookChain:trip,
+      from:fi,to:ti,train:tl.id,allCls:true,picks:[],pax:1,classModal:true,onlyThis:true,hov:null});
+  }
+  /** Book everything on this custom journey that is not a berth: one trip pass
+      for every bus and metro leg across every hop, and each hired ride. */
+  async pcBook(){
+    const c=this.pcChain();if(!c)return;
+    const trip=this.planTripOf(c);
+    if(!trip.legs.length&&!trip.rides.length){this.setState({pcBookErr:'There is nothing to book here but the train.'});return;}
+    if(this._pcBookBusy)return;this._pcBookBusy=true;
+    this.setState({pcBookErr:'',pcBookBusy:true});
+    const date=this.dateIsoFor(this.state.dayIdx||0);
+    let pass=null,rides=[],err='';
+    try{
+      if(trip.legs.length){
+        const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({kind:'trip',legs:trip.legs,date})},9000);
+        const j=await r.json().catch(()=>({}));
+        if(j&&j.ok){pass={...j.pass,qr:j.qr,scanUrl:j.scanUrl,skipped:j.skipped||null,trip};
+          this.passSet('trip:'+j.pass.id,pass);}
+        else err=(j&&j.error)||'khaali could not issue the pass. Nothing was charged.';
+      }
+      // every hired hop is booked on its own; one that fails does not undo the rest
+      for(const ride of trip.rides){
+        try{
+          const r=await this.authFetch('/api/ride',{method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({kind:ride.mode,from:ride.from,to:ride.to,
+              fromAt:ride.fromLat!=null?(ride.fromLat.toFixed(5)+','+ride.fromLng.toFixed(5)):null,
+              toAt:ride.toLat!=null?(ride.toLat.toFixed(5)+','+ride.toLng.toFixed(5)):null,
+              pax:1,pickupMin:ride.depMin,holder:null,date})},9000);
+          const j=await r.json().catch(()=>({}));
+          if(j&&j.ok)rides.push(j.ride); else if(!err)err=(j&&j.error)||'khaali could not book the '+ride.mode+'.';
+        }catch(e){if(!err)err='khaali could not book the '+ride.mode+'.';}
+      }
+    }catch(e){err='khaali could not book that. Nothing was charged.';}
+    if(rides.length){const k='custom:'+(pass?pass.id:Date.now());
+      const m=this.ridesOf();m[k]=rides[0];
+      try{localStorage.setItem('khaali-ride',JSON.stringify(m));}catch(e){}}
+    this._pcBookBusy=false;
+    this.setState({pcBookBusy:false,pcPass:pass,pcRides:rides,pcBookErr:pass||rides.length?'':err});
+  }
   async pcRun(){
     const stops=this.pcList();
     if(stops.some(x=>!x))return this.setState({pcErr:'Fill in every stop first.'});
     if(this._pcBusy)return;this._pcBusy=true;
-    this.setState({pcBusy:true,pcErr:'',pcRes:null,pMapChain:null});
+    // a new plan is a new journey: last one's pass and rides are not this one's
+    this.setState({pcBusy:true,pcErr:'',pcRes:null,pMapChain:null,pcPass:null,pcRides:[],pcBookErr:''});
     try{
       const body={after:this.planAfterMin(),date:this.dateIsoFor(this.state.dayIdx||0),
         profile:this.state.pProfile||'balanced',pax:this.state.pax||1,
@@ -6681,6 +6789,44 @@ class Component extends DCLogic {
         rowStyle:{padding:'12px 0',borderTop:'1px solid var(--k-f0efeb)'},
       })):[],
       pcStepsStyle:{display:S.pcRes?'block':'none',marginTop:8},
+      // ---- booking a custom journey: the pass, the rides, and each train ----
+      pcBookWrapStyle:{display:S.pcRes?'flex':'none',gap:10,alignItems:'center',flexWrap:'wrap',
+        marginTop:14,paddingTop:14,borderTop:'1px solid var(--k-f0efeb)'},
+      pcBookLabel:S.pcBookBusy?'Booking…':'Book this journey',
+      pcBookStyle:(()=>{const c=this.pcChain();const t=this.planTripOf(c||{});
+        const any=this.pcTrains().length||t.legs.length||t.rides.length;
+        return {display:any?'inline-flex':'none',alignItems:'center',border:'none',
+          background:'var(--k-d8385a)',color:'#fff',font:'700 13px/1 Manrope,sans-serif',
+          padding:'13px 18px',borderRadius:7,cursor:'pointer',minHeight:44};})(),
+      pcBookGo:()=>this.pcBookAll(),
+      pcBookNote:(()=>{if(!S.pcRes)return '';
+        const t=this.planTripOf(this.pcChain()||{});const tr=this.pcTrains();
+        const bits=[];
+        if(tr.length)bits.push('the '+tr[0].leg.name+' berth');
+        if(t.legs.length)bits.push('a trip pass for every bus and metro hop');
+        if(t.rides.length)bits.push(t.rides.length===1?('the '+t.rides[0].mode):'both rides');
+        const one='One ticket for the whole way'+(bits.length?': '+bits.join(', ')+'.':'.');
+        return tr.length>1
+          ? one+' khaali books one berth at a time, so the '+tr[1].leg.name+' berth follows this one.'
+          : one;})(),
+      pcBookErr:S.pcBookErr||'',
+      pcBookErrStyle:{display:S.pcBookErr?'block':'none',marginTop:8,
+        font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
+      pcPassWrapStyle:{display:S.pcPass?'flex':'none',gap:14,alignItems:'center',flexWrap:'wrap',
+        marginTop:14,padding:14,borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)'},
+      pcPassQr:S.pcPass?S.pcPass.qr:'',
+      pcPassQrStyle:{display:S.pcPass?'block':'none',flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
+      pcPassHead:S.pcPass?('Trip pass \u00b7 \u20b9'+S.pcPass.fare+' \u00b7 '
+        +(S.pcPass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')):'',
+      pcPassHeadStyle:{font:'700 14px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      pcPassSub:S.pcPass?('Every bus and metro hop on this journey \u00b7 any departure, once \u00b7 the ticket ends when the trip does'
+        +((S.pcPass.skipped&&S.pcPass.skipped.length)
+          ?(' \u00b7 the '+S.pcPass.skipped.map(x=>x.name).join(' and ')+' seat is bought at the counter'):'')):'',
+      pcPassSubStyle:{display:S.pcPass?'block':'none',marginTop:4,
+        font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      pcRideRows:(S.pcRides||[]).map(r=>({
+        t:(r.kind==='bike'?'Bike':'Car')+'  \u00b7  '+r.from+' \u2192 '+r.to+'  \u00b7  '+(r.code||r.id),
+        style:{font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'}})),
       pcNote:S.pcRes?S.pcRes.note:'',
       pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
       pTrafficLabel:S.pTraffic?'Hide traffic':'Show traffic',
@@ -7216,36 +7362,79 @@ class Component extends DCLogic {
     if(/[\u0900-\u097F]/.test(t))return 'hi-IN';
     return this.state.chatVoiceLang||'hi-IN';
   }
+  /** The device's own voice: no key, no network, no credit. Saarthi's second
+      mouth, for when Sarvam cannot answer or the browser will not play an
+      mp3 it was handed. Returns true if the phone actually started talking. */
+  deviceSpeak(text,lang){
+    try{
+      const SS=window.speechSynthesis; if(!SS||!window.SpeechSynthesisUtterance)return false;
+      SS.cancel();
+      const u=new SpeechSynthesisUtterance(String(text).slice(0,480));
+      u.lang=lang||'hi-IN'; u.rate=1;
+      const vs=SS.getVoices()||[];
+      const v=vs.find(x=>x.lang===u.lang)||vs.find(x=>x.lang&&x.lang.slice(0,2)===u.lang.slice(0,2));
+      if(v)u.voice=v;
+      const done=()=>{if(this._say===u){this._say=null;this._voiceKey=null;
+        this.setState({chatSpeak:false,chatPlayKey:null});}};
+      u.onend=done;u.onerror=done;
+      this._say=u;this._voiceKey=text;
+      this.setState({chatSpeak:true,chatPlayKey:text,chatLoadKey:null,chatPlayPct:0});
+      SS.speak(u);
+      return true;
+    }catch(e){return false;}
+  }
+  /** Why Saarthi went quiet. Silence is the one answer a voice must not give. */
+  voiceFailed(why){
+    this._voiceKey=null;this._voiceLoading=false;
+    this.setState({chatLoadKey:null,chatSpeak:false,chatPlayKey:null,chatVoiceNote:why});
+    if(this._noteT)clearTimeout(this._noteT);
+    this._noteT=setTimeout(()=>this.setState({chatVoiceNote:''}),7000);
+  }
   async speakText(text,lang){
     if(this.state.chatMute)return;
     // tapping the same bubble while it plays (or loads) stops it
-    if(this._voiceKey===text&&(this._voice||this._voiceLoading)){this.stopVoice();return;}
+    if(this._voiceKey===text&&(this._voice||this._voiceLoading||this._say)){this.stopVoice();return;}
     this.stopVoice();
     this._voiceKey=text;this._voiceLoading=true;
-    this.setState({chatLoadKey:text});
+    this.setState({chatLoadKey:text,chatVoiceNote:''});
     const my=this._voiceReq;
+    let t=null;
     try{
-      const t=await this.tfetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({text:text,lang:lang||'hi-IN'})},30000).then(x=>x.json());
-      if(my!==this._voiceReq)return;           // superseded or stopped meanwhile
-      this._voiceLoading=false;
-      if(!t.audio||this.state.chatMute){this._voiceKey=null;this.setState({chatLoadKey:null});return;}
-      const a=new Audio('data:'+(t.mime||'audio/mpeg')+';base64,'+t.audio);
-      this._voice=a;
-      this.setState({chatSpeak:true,chatPlayKey:text,chatLoadKey:null,chatPlayPct:0});
-      if(this._pgT)clearInterval(this._pgT);
-      this._pgT=setInterval(()=>{const v=this._voice;
-        if(v&&v.duration)this.setState({chatPlayPct:Math.min(100,v.currentTime/v.duration*100)});},200);
-      const off=()=>{if(this._voice===a){this._voice=null;this._voiceKey=null;this.setState({chatSpeak:false,chatPlayKey:null});
-        // phone-call flow: Saarthi finished talking, so open the mic again
-        if(this._resumeAfterVoice){this._resumeAfterVoice=false;
-          if(this._call&&this.state.chatOpen&&!this.state.chatMute&&!this._rec)
-            setTimeout(()=>{if(this._call&&!this._rec&&this.state.chatOpen)this.toggleRec();},350);
-        }
-      }};
-      a.onended=off;a.onerror=off;
-      a.play().catch(off);
-    }catch(e){if(my===this._voiceReq){this._voiceLoading=false;this._voiceKey=null;this.setState({chatLoadKey:null});}}
+      t=await this.tfetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({text:String(text).slice(0,480),lang:lang||'hi-IN'})},30000).then(x=>x.json());
+    }catch(e){t=null;}
+    if(my!==this._voiceReq)return;               // superseded or stopped meanwhile
+    this._voiceLoading=false;
+    if(this.state.chatMute){this._voiceKey=null;this.setState({chatLoadKey:null});return;}
+    // Sarvam could not speak it - the device still can
+    if(!t||!t.audio){
+      if(this.deviceSpeak(text,lang))return;
+      return this.voiceFailed(t&&t.retryAfter?'Saarthi needs a short breather, try in '+t.retryAfter+'s.'
+        :'Saarthi could not speak that just now. The words are above.');
+    }
+    const a=new Audio('data:'+(t.mime||'audio/mpeg')+';base64,'+t.audio);
+    this._voice=a;
+    this.setState({chatSpeak:true,chatPlayKey:text,chatLoadKey:null,chatPlayPct:0});
+    if(this._pgT)clearInterval(this._pgT);
+    this._pgT=setInterval(()=>{const v=this._voice;
+      if(v&&v.duration)this.setState({chatPlayPct:Math.min(100,v.currentTime/v.duration*100)});},200);
+    const off=()=>{if(this._voice===a){this._voice=null;this._voiceKey=null;this.setState({chatSpeak:false,chatPlayKey:null});
+      // phone-call flow: Saarthi finished talking, so open the mic again
+      if(this._resumeAfterVoice){this._resumeAfterVoice=false;
+        if(this._call&&this.state.chatOpen&&!this.state.chatMute&&!this._rec)
+          setTimeout(()=>{if(this._call&&!this._rec&&this.state.chatOpen)this.toggleRec();},350);
+      }
+    }};
+    a.onended=off;
+    // The mp3 arrived and would not play: a muted tab, a blocked autoplay, a
+    // codec the browser will not take. Whatever it is, it is not a reason for
+    // khaali to say nothing at all - so ask the phone to read it instead.
+    let rescued=false;
+    const rescue=()=>{if(rescued)return;rescued=true;off();
+      if(!this.deviceSpeak(text,lang))
+        this.voiceFailed('Your browser would not play it. Tap the page once, then try again.');};
+    a.onerror=rescue;
+    a.play().catch(rescue);
   }
   async sendChat(speak,textOverride){
     if(!speak){this._call=false;if(this.state.chatCall)this.setState({chatCall:false});}
@@ -8701,7 +8890,7 @@ class Component extends DCLogic {
         background:'var(--k-d8385a)',color:'#fff',font:'700 12px/1 Archivo,Manrope,sans-serif',
         padding:'10px 18px',borderRadius:999,cursor:'pointer',
         boxShadow:'0 6px 16px rgba(158,45,28,.3)'},
-      chatSub:S.chatRec?'Listening\u2026':S.chatBusy?'Thinking\u2026':S.chatSpeak?'Speaking\u2026':'ask in any Indian language',
+      chatSub:S.chatVoiceNote?S.chatVoiceNote:S.chatRec?'Listening\u2026':S.chatBusy?'Thinking\u2026':S.chatSpeak?'Speaking\u2026':'ask in any Indian language',
       chatSubStyle:{font:'600 10px/1.3 Archivo,Manrope,sans-serif',marginTop:3,
         color:(S.chatRec||S.chatBusy||S.chatSpeak)?'#f4efe6':'#aab3d9'},
       chatPulse:{position:'absolute',inset:0,borderRadius:'50%',border:'2px solid #f4efe6',
@@ -8778,7 +8967,7 @@ class Component extends DCLogic {
           linkLabel:'Show me \u2192',
           linkStyle:{display:m.link?'inline-block':'none',font:'700 12px/1 Archivo,Manrope,sans-serif',
             color:'var(--k-fg-d8385a)',cursor:'pointer',padding:'3px 2px'},
-          onSpk:mine?()=>{}:()=>this.speakText(m.content.slice(0,480),this.langOf(m.content)),
+          onSpk:mine?()=>{}:()=>this.speakText(m.content,this.langOf(m.content)),
           onLink:m.link?()=>{try{window.history.pushState({},'',m.link);}catch(e){}
             this.applyUrl();window.scrollTo(0,0);}:()=>{}};
       }),

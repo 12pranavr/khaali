@@ -3037,5 +3037,39 @@ t('a chatbot hands out a car only when the traveller asked for one', () => {
   assert.ok(!/'car'|'bike'/.test(plan), 'the chat planner names a vehicle of its own');
   for (const h of JY.HIRE_MODES) assert.ok(!JY.MODES.includes(h), h + ' is in the default modes');
 });
+
+console.log('\nmidnight: the hour that made every evening answer wrong');
+
+t('a journey that crosses midnight arrives AFTER it leaves', () => {
+  const after = 17 * 60 + 6;                       // she asks a little after five
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'rail', id: 'SBC' }, after, modes: [...JY.MODES] });
+  assert.ok(r.ok && r.chains.length, 'no way from Bangarpet to Majestic at all');
+  for (const c of r.chains) {
+    assert.ok(c.arr >= c.dep, c.depText + ' -> ' + c.arrText + ' arrives before it leaves');
+    assert.ok(AL.span(c, { after }) > 0, c.depText + ' costs her ' + AL.span(c, { after }) + ' minutes');
+  }
+});
+
+t('the evening answer is the next train, not the last one of the night', () => {
+  // The 22:55 train arrived at minute 30, so span() read it as costing minus
+  // sixteen hours and it beat every train that actually left sooner. Asked at
+  // five in the afternoon, khaali offered a departure six hours away.
+  const after = 17 * 60 + 6;
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'rail', id: 'SBC' }, after, modes: [...JY.MODES] });
+  CAP.annotate(r.chains, { trainCap: () => null });
+  const a = AL.allocate(r.chains, { after });
+  const rec = r.chains[a.recommended != null ? a.recommended : 0];
+  assert.ok(rec.dep - after < 180, 'she is asked to wait ' + (rec.dep - after) + ' minutes: ' + rec.depText);
+  const soonest = Math.min(...r.chains.map(c => c.dep));
+  assert.ok(rec.dep - soonest <= 120, 'a train left at ' + Math.floor(soonest/60)+':'+String(soonest%60).padStart(2,'0') + ' and khaali chose ' + rec.depText);
+});
+
+t('an overnight train is still offered, and still sorts last', () => {
+  const after = 21 * 60;                           // nine at night: the 22:55 is the sensible one
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'rail', id: 'SBC' }, after, modes: [...JY.MODES] });
+  assert.ok(r.chains.some(c => c.arr > 1440), 'no journey crosses midnight, so this proves nothing');
+  const arrs = r.chains.map(c => c.arr);
+  assert.deepStrictEqual(arrs, [...arrs].sort((x, y) => x - y), 'the list is not in arrival order');
+});
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
