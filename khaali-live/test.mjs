@@ -25,6 +25,7 @@ import * as PL from './pool.mjs';
 import * as PV from './providers.mjs';
 import * as LD from './load.mjs';
 import * as BL from './busload.mjs';
+import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
@@ -3191,6 +3192,142 @@ t('a simulated leg is worth more than silence and less than a timetable', () => 
   assert.ok(CAP.QUALITY_WEIGHT.counted > CAP.QUALITY_WEIGHT.estimated);
   assert.ok(CAP.QUALITY_WEIGHT.counted < CAP.QUALITY_WEIGHT.exact);
   for (const q of CAP.QUALITY) assert.ok(CAP.QUALITY_WEIGHT[q] != null, q + ' has no weight');
+});
+
+console.log('\nwhat you would have done, and what khaali did instead');
+
+const cleg = (mode, min, occ) => ({ mode, min, cap: { occupancy: occ, quality: 'exact' } });
+const cch = (kind, dep, total, fare, changes, seatWord, legs) => ({ kind, dep, arr: dep + total,
+  totalMin: total, fare, changes,
+  seat: { word: seatWord, rank: { standing: 0, maybe: 1, likely: 2, yes: 3 }[seatWord] }, legs });
+
+t('the obvious route is the direct train, even when it scores worst', () => {
+  // This must not become "the second best answer khaali found" - that would
+  // make the whole comparison circular.
+  const awful = cch('train-through', 520, 90, 300, 0, 'standing', [cleg('train', 90, 0.99)]);
+  awful.alloc = { pressure: { value: 0.98, certainty: 'HIGH' } };
+  const lovely = cch('bus+train', 520, 55, 120, 1, 'yes', [cleg('bus', 20, 0.2), cleg('train', 35, 0.3)]);
+  lovely.alloc = { pressure: { value: 0.09, certainty: 'HIGH' } };
+  const o = CP.obviousOf([lovely, awful], {});
+  assert.strictEqual(o.rule, 'DIRECT_TRAIN');
+  assert.strictEqual(o.chain, awful, 'it picked the nice one, which is not what a person does');
+  assert.match(o.why, /without khaali/);
+});
+
+t('the obvious route falls through in the order a person would say it', () => {
+  const bus = cch('direct|500D', 520, 70, 40, 0, 'maybe', [cleg('bus', 70, 0.5)]);
+  const rail2 = cch('train+train', 520, 60, 150, 1, 'likely', [cleg('train', 30, 0.4), cleg('train', 30, 0.4)]);
+  // a journey with both a direct bus and a train is a rail journey
+  assert.strictEqual(CP.obviousOf([bus, rail2], {}).rule, 'FEWEST_CHANGES_RAIL');
+  assert.strictEqual(CP.obviousOf([bus], {}).rule, 'DIRECT_BUS');
+  const ride = cch('hire:car', 520, 25, 300, 0, 'yes', [cleg('car', 25, 0)]);
+  assert.strictEqual(CP.obviousOf([ride], {}).rule, 'ONLY_A_RIDE');
+  const mix = cch('bus+metro', 520, 50, 60, 1, 'maybe', [cleg('bus', 25, 0.4), cleg('metro', 25, 0.4)]);
+  assert.strictEqual(CP.obviousOf([mix], {}).rule, 'FEWEST_CHANGES');
+  assert.strictEqual(CP.obviousOf([], {}), null);
+});
+
+t('a saving is only ever claimed on an axis that actually improved', () => {
+  // "faster" and "saves" are not decorations.
+  for (let i = 0; i < 120; i++) {
+    const aMin = 40 + (i % 7) * 6, bMin = 40 + (i % 5) * 9;
+    const aFare = 100 + (i % 4) * 30, bFare = 100 + (i % 6) * 20;
+    const seats = ['standing', 'maybe', 'likely', 'yes'];
+    const a = cch('train-through', 520, aMin, aFare, 0, seats[i % 4], [cleg('train', aMin, 0.3 + (i % 7) / 10)]);
+    const b = cch('bus+train', 520, bMin, bFare, 1, seats[(i + 2) % 4],
+      [cleg('bus', 15, 0.2 + (i % 5) / 10), cleg('train', bMin - 15, 0.3 + (i % 3) / 10)]);
+    const d = CP.diff({ chain: a, rule: 'DIRECT_TRAIN', why: 'x', idx: 0 }, { chain: b }, { after: 520 });
+    for (const ax of d.axes) {
+      if (ax.key === 'seat') assert.strictEqual(ax.direction === 'better', ax.delta > 0);
+      else if (ax.direction === 'better') assert.ok(ax.delta < 0, ax.key + ' claims better on ' + ax.delta);
+      else if (ax.direction === 'worse') assert.ok(ax.delta > 0, ax.key + ' claims worse on ' + ax.delta);
+    }
+    const text = CP.lines(d).join(' ');
+    const fasterClaimed = /quicker|faster/.test(text);
+    const m = d.axes.find(x => x.key === 'minutes');
+    if (fasterClaimed && !/quickest way of all/.test(text)) {
+      assert.ok(m && m.direction === 'better', 'claimed quicker on ' + (m && m.delta) + ': ' + text);
+    }
+    if (/cheaper/.test(text)) {
+      const f = d.axes.find(x => x.key === 'fare');
+      assert.ok(f && f.direction === 'better', 'claimed cheaper on ' + (f && f.delta));
+    }
+  }
+});
+
+t('six minutes longer leads with the cost, not with an excuse', () => {
+  const a = cch('train-through', 520, 58, 180, 0, 'likely', [cleg('train', 58, 0.5)]);
+  const b = cch('bus+train', 520, 64, 180, 1, 'likely', [cleg('bus', 20, 0.5), cleg('train', 44, 0.5)]);
+  const d = CP.diff({ chain: a, rule: 'DIRECT_TRAIN', why: 'the direct train', idx: 0 }, { chain: b }, { after: 520 });
+  const first = CP.lines(d)[0];
+  assert.match(first, /^6 minutes longer/, first);
+  assert.strictEqual(d.axes.find(x => x.key === 'minutes').direction, 'worse');
+});
+
+t('minutes do not get the headline just for being the biggest number', () => {
+  // A seat is worth more than four minutes, and minutes are numerically larger
+  // than every other axis, so the weights are what stop them winning by size.
+  const a = cch('train-through', 520, 60, 180, 0, 'standing', [cleg('train', 60, 0.9)]);
+  const b = cch('bus+train', 520, 64, 180, 1, 'yes', [cleg('bus', 20, 0.3), cleg('train', 44, 0.3)]);
+  const d = CP.diff({ chain: a, rule: 'DIRECT_TRAIN', why: 'x', idx: 0 }, { chain: b }, { after: 520 });
+  assert.notStrictEqual(d.headline, 'minutes', 'minutes won on size alone');
+  assert.ok(['seat', 'crowding'].includes(d.headline), d.headline);
+  assert.match(CP.lines(d)[0], /4 minutes longer/, 'and the cost is still in the first sentence');
+});
+
+t('when khaali agrees with the obvious way it says so rather than hiding', () => {
+  // Hiding the panel would train people to read its presence as "khaali did
+  // something clever", which makes the panel an advertisement.
+  const a = cch('train-through', 520, 58, 180, 0, 'likely', [cleg('train', 58, 0.5)]);
+  const d = CP.diff({ chain: a, rule: 'DIRECT_TRAIN', why: 'the direct train', idx: 0 },
+    { chain: a }, { after: 520 });
+  assert.strictEqual(d.same, true);
+  const lines = CP.lines(d);
+  assert.ok(lines.length >= 2, 'the panel is never empty');
+  assert.match(lines[0], /also the way khaali would pick/);
+  assert.match(lines[1], /Nothing here is a detour/);
+});
+
+t('the busiest-stretch axis is absent when there is no map to read', () => {
+  const a = cch('train-through', 520, 58, 180, 0, 'likely', [cleg('train', 58, 0.5)]);
+  const b = cch('bus+train', 520, 64, 180, 1, 'likely', [cleg('bus', 20, 0.5), cleg('train', 44, 0.5)]);
+  const args = { after: 520 };
+  const without = CP.diff({ chain: a, idx: 0 }, { chain: b }, args);
+  assert.ok(!without.axes.some(x => x.key === 'worstSegment'), 'it invented a layer');
+  assert.doesNotMatch(CP.lines(without).join(' '), /busiest stretch/i);
+  // and with one, it appears - reading each leg's own load, so the two routes
+  // can genuinely differ rather than both resolving to the same mode
+  const crowded = cch('train-through', 520, 58, 180, 0, 'likely', [cleg('train', 58, 0.92)]);
+  const easy = cch('bus+train', 520, 64, 180, 1, 'likely', [cleg('bus', 20, 0.2), cleg('train', 44, 0.35)]);
+  const layer = l => LD.bandOf(l.cap.occupancy, 'exact', 'rail');
+  const w = CP.diff({ chain: crowded, idx: 0 }, { chain: easy }, { ...args, layer });
+  const ws = w.axes.find(x => x.key === 'worstSegment');
+  assert.ok(ws, 'the layer was passed and the axis did not appear');
+  assert.strictEqual(ws.obvious, 0.92);
+  assert.strictEqual(ws.pick, 0.35);
+  assert.strictEqual(ws.direction, 'better');
+  assert.match(CP.lines(w).join(' '), /busiest stretch/i);
+});
+
+t('every sentence khaali can produce here is a sentence somebody wrote', () => {
+  // The gap.outlookLines posture: walk the shapes and read all of them.
+  const seats = ['standing', 'maybe', 'likely', 'yes'];
+  let seen = 0;
+  for (let i = 0; i < 60; i++) {
+    const a = cch('train-through', 520, 50 + i, 150 + i * 3, 0, seats[i % 4], [cleg('train', 50 + i, (i % 9) / 10)]);
+    const b = cch('bus+train', 520, 50 + (i * 3) % 40, 140 + (i % 5) * 25, 1, seats[(i + 1) % 4],
+      [cleg('bus', 18, (i % 6) / 10), cleg('train', 30, (i % 4) / 10)]);
+    const d = CP.diff({ chain: a, rule: 'DIRECT_TRAIN', why: 'the direct train', idx: 0 },
+      { chain: b }, { after: 520, fastest: a });
+    for (const line of CP.lines(d)) {
+      seen++;
+      assert.ok(line.length > 5, 'an empty sentence: ' + JSON.stringify(line));
+      assert.doesNotMatch(line, /undefined|NaN|\[object/, line);
+      assert.match(line, /[.!]$/, 'a sentence without an end: ' + line);
+    }
+  }
+  assert.ok(seen > 100, 'only ' + seen + ' sentences reached');
+  assert.match(CP.FOOT, /not a route anyone has measured you taking/);
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');

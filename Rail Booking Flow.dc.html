@@ -1084,6 +1084,33 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb)">{{ pMetroFare }}</div>
   </div>
 
+  <div style="{{ cmpStyle }}">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ cmpHead }}</span>
+      <span style="font:500 12.5px/1.5 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ cmpRule }}</span>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline">
+      <div style="min-width:150px">
+        <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:5px">Normally</div>
+        <div style="font:700 14px/1.3 Archivo,sans-serif;color:var(--k-fg-6a6d75)">{{ cmpObvious }}</div>
+      </div>
+      <div style="min-width:150px">
+        <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--k-fg-d8385a);margin-bottom:5px">khaali</div>
+        <div style="font:700 14px/1.3 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ cmpPick }}</div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-left:auto">
+        <sc-for list="{{ cmpAxes }}" as="a" hint-placeholder-count="3">
+          <span style="{{ a.vStyle }}">{{ a.v }}</span>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <sc-for list="{{ cmpLines }}" as="l" hint-placeholder-count="3">
+        <div style="{{ l.tStyle }}">{{ l.t }}</div>
+      </sc-for>
+    </div>
+    <div style="{{ cmpFootStyle }}">{{ cmpFoot }}</div>
+  </div>
   <div style="{{ pRowsStyle }}">
     <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
       <article onClick="{{ r.onSelect }}" style="{{ r.cardStyle }}">
@@ -7149,6 +7176,7 @@ class Component extends DCLogic {
         }
         const res={kind:'chains',from:F,to:T,chains:j.chains,
           recommended:j.recommended,reason:j.reason,explanation:j.explanation,
+          compare:j.compare||null,
           err:j.chains.length?null:this.planEmptyText(after,by)};
         this.setState({pBusy:false,pRes:res,pAskAns:'',pAskTxt:'',pWant:null});
         // the answer is drawn before she asks for it: the recommended way is on
@@ -8611,6 +8639,58 @@ class Component extends DCLogic {
         // a ticket is a ticket, not a banner: at 1240px a single column
         // stretched every one of them to eleven hundred pixels wide
         pRowsStyle:{display:rows.length?'flex':'none',flexDirection:'column',gap:10},
+
+      /* Normally you would go this way; khaali went that way; here is what
+         changed. The baseline is the OBVIOUS route - the direct train, the one
+         bus that runs - because comparing khaali's pick against khaali's own
+         fastest is khaali marking its own homework.
+
+         Whatever moved is shown, signed both ways. khaali's answer is often
+         slower on purpose, and a panel that led with minutes would make it look
+         like it was failing at exactly the moment it was doing its job. */
+      ...(()=>{
+        const cm=(R&&R.compare)||null;
+        if(!cm)return{cmpStyle:{display:'none'},cmpLines:[],cmpAxes:[],
+          cmpHead:'',cmpFoot:'',cmpFootStyle:{display:'none'},
+          cmpObvious:'',cmpPick:'',cmpRule:''};
+        const MODEW={train:'Train',metro:'Metro',bus:'Bus',car:'Private transport',
+          bike:'Private transport',auto:'Private transport',walk:'Walk'};
+        const say=ms=>(ms||[]).map(m=>MODEW[m]||m).join(', then ')||'\u2014';
+        const tone=d=>d==='better'?{bg:'var(--k-e6f4ec)',fg:'var(--k-fg-14663a)'}
+          :d==='worse'?{bg:'var(--k-fdf3f5)',fg:'var(--k-fg-a71f3d)'}
+            :{bg:'var(--k-f1f1ee)',fg:'var(--k-fg-6a6d75)'};
+        const shown=(cm.axes||[]).filter(a=>a.direction!=='same');
+        const fmt=a=>{
+          const n=Math.abs(a.delta);
+          if(a.key==='minutes')return (a.direction==='better'?'\u2212':'+')+Math.round(n)+' min';
+          if(a.key==='fare')return (a.direction==='better'?'\u2212':'+')+'\u20b9'+Math.round(n);
+          if(a.key==='changes')return (a.direction==='better'?'\u2212':'+')+Math.round(n)
+            +(Math.round(n)===1?' change':' changes');
+          if(a.key==='seat')return ['Standing','Seat if lucky','Seat likely','Seat'][a.pick];
+          if(a.key==='crowding')return (a.direction==='better'?'Less':'More')+' crowded';
+          if(a.key==='worstSegment')return Math.round(a.pick*100)+'% at its busiest';
+          return '';
+        };
+        return {
+          cmpStyle:{display:'flex',flexDirection:'column',gap:11,marginTop:14,padding:'15px 17px',
+            borderRadius:14,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)'},
+          cmpHead:cm.same?'khaali agrees with the obvious way':'What khaali changed',
+          cmpRule:cm.why||'',
+          cmpObvious:say(cm.obviousModes),
+          cmpPick:say(cm.pickModes),
+          cmpAxes:shown.map(a=>({
+            k:a.label,v:fmt(a),
+            vStyle:{font:"700 11.5px/1 'JetBrains Mono',monospace",letterSpacing:'.05em',
+              padding:'6px 9px',borderRadius:6,...tone(a.direction)},
+          })),
+          cmpLines:(cm.lines||[]).map(t=>({t,
+            tStyle:{font:'500 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-40434a)'}})),
+          cmpFoot:cm.foot||'',
+          cmpFootStyle:{display:cm.foot?'block':'none',marginTop:2,paddingTop:9,
+            borderTop:'1px solid var(--k-f0efeb)',
+            font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
+        };
+      })(),
       pNoteStyle:{gridColumn:'1/-1',display:rows.length?'block':'none',marginTop:8,
         font:'500 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       // The last mile, offered where she is looking at it. She may have twelve

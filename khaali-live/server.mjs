@@ -57,6 +57,7 @@ import * as hire from './hire.mjs';
 import * as road from './road.mjs';
 import * as load from './load.mjs';
 import * as busload from './busload.mjs';
+import * as compare from './compare.mjs';
 import * as traffic from './traffic.mjs';
 import crypto from 'node:crypto';
 
@@ -2146,8 +2147,32 @@ async function api(req, res, url) {
     const a = allocate.allocate(r.chains, { profile, maxChanges: Number.isFinite(maxChanges) ? maxChanges : null,
       maxWalkKm: Number.isFinite(maxWalkKm) ? maxWalkKm : null,
       after: (after >= 0 && after < 1440) ? after : null, by: (by >= 0 && by < 2880) ? by : null });
+    // What she would have done without khaali, and what changed. The baseline
+    // is the OBVIOUS route - the direct train, the one bus that runs - not
+    // khaali's own fastest, which would be khaali marking its own homework.
+    // The fastest chain is passed in as a third benchmark and appears as a
+    // footnote only.
+    const obvious = compare.obviousOf(a.chains, { after });
+    const picked = a.chains[a.recommended] || a.chains[0];
+    const fastestChain = a.chains.reduce((p, c) =>
+      (c.arr - c.dep) < (p.arr - p.dep) ? c : p, a.chains[0]);
+    const cmp = obvious && picked
+      ? (() => {
+        const d = compare.diff(obvious, { chain: picked }, {
+          after: (after >= 0 && after < 1440) ? after : null,
+          by: (by >= 0 && by < 2880) ? by : null,
+          fastest: fastestChain,
+          // the busiest-stretch axis, read off the same layer the map draws
+          layer: l => (l && l.cap && l.cap.occupancy != null)
+            ? load.bandOf(l.cap.occupancy, l.cap.quality, l.mode === 'train' ? 'rail'
+              : l.mode === 'metro' ? 'metro' : 'bus')
+            : null,
+        });
+        return { ...d, lines: compare.lines(d), foot: compare.FOOT };
+      })()
+      : null;
     const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
-      recommended: a.recommended, reason: a.reason,
+      recommended: a.recommended, reason: a.reason, compare: cmp,
       explanation: allocate.sentence(a.reason) };
     if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);
     return send(res, 200, out);
