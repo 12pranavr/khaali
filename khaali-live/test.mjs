@@ -382,8 +382,8 @@ t('fees come from the server, never from the request', () => {
 });
 
 t('AC fares carry superfast and GST, sleeper does not', () => {
-  assert.strictEqual(S.feesFor('SL', 2, 1000), 20 * 2 + 12);
-  assert.strictEqual(S.feesFor('3A', 2, 1000), 20 * 2 + 15 * 2 + 50 + 12);
+  assert.strictEqual(S.feesFor('SL', 2, 1000), 20 * 2, 'reservation only \u2014 khaali charges no fee of its own');
+  assert.strictEqual(S.feesFor('3A', 2, 1000), 20 * 2 + 15 * 2 + 50);
 });
 
 t('a third hold supersedes the oldest, so a refresh never locks you out', () => {
@@ -733,15 +733,16 @@ t('an any-berth hold joins the pool and is priced at the through fare, no choice
   assert.strictEqual(S.availability('16021', abDate, 'SL', 5, 13).pool, 0, 'released from the pool');
 });
 
-t('a chosen berth carries the choice fee, per traveller, by class', () => {
+t('choosing a berth is free, and costs the same as not choosing one', () => {
   const av = S.availability('16021', abDate, '3A', 5, 6);
   const notLower = b => b.type !== 'LB' && b.type !== 'SLB';   // lowers are not for choosing pre-chart
   const free = av.berths.filter(b => b.k === 'free' && notLower(b)).map(b => b.idx).slice(0, 2);
   const r = S.hold({ train: '16021', date: abDate, cls: '3A', from: 5, to: 6, berthIdxs: free, pax: 2, who: 'ab-2', mode: 'exact' });
   assert.ok(r.ok, r.reason);
-  assert.strictEqual(r.hold.choiceFee, 100, '50 x 2 travellers in 3A');
+  assert.strictEqual(r.hold.choiceFee, 0, 'the berth map is the same query either way');
   assert.strictEqual(r.hold.fees, S.feesFor('3A', 2, r.hold.berthSum, true));
-  assert.ok(r.hold.fees > S.feesFor('3A', 2, r.hold.berthSum, false), 'chosen costs more than any');
+  assert.strictEqual(r.hold.fees, S.feesFor('3A', 2, r.hold.berthSum, false),
+    'picking your own berth costs nothing extra');
   S.release(r.hold.id);
 });
 

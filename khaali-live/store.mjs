@@ -47,17 +47,24 @@ export const MAX_CHOSEN_FRACTION = 0.4;
 export const CHART_BEFORE_MS = 4 * 60 * 60 * 1000;
 
 /** The price of pinning a berth. Per traveller, by class. */
+/** Nothing. Choosing a berth costs khaali the same query as not choosing one,
+    so it is not charged for. Kept as a function because the hold, the seat map
+    and the ticket all still ask, and all three should get the same answer. */
 export function choiceFeeFor(cls) {
-  return cls === '2A' ? 75 : cls === '3A' ? 50 : 25;
+  return 0;
 }
 
-/** Charges are the server's to compute. Reservation and superfast follow the
-    traveller count, GST follows the AC fare, the convenience fee is flat, and
-    a chosen berth adds its fee per traveller. */
+/**
+ * Charges are the server's to compute, and every one of them is a charge the
+ * railway itself makes: reservation and superfast per traveller, GST on the
+ * air-conditioned fare. khaali adds nothing to that - no booking fee, no
+ * convenience fee, nothing for choosing a berth. A fare quoted here is a fare
+ * somebody at a counter would also read out.
+ */
 export function feesFor(cls, pax, berthSum, chosen = false) {
   const ac = cls !== 'SL';
   const gst = ac ? Math.round(berthSum * 0.05) : 0;
-  return 20 * pax + (ac ? 15 * pax : 0) + gst + 12 + (chosen ? choiceFeeFor(cls) * pax : 0);
+  return 20 * pax + (ac ? 15 * pax : 0) + gst + (chosen ? choiceFeeFor(cls) * pax : 0);
 }
 
 /** Holds this identity still has at the payment screen. */

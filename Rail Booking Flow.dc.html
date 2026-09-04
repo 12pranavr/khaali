@@ -2099,11 +2099,6 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
           <button onClick="{{ cfToggleZero }}" style="{{ cfZeroStyle }}">{{ cfZeroLabel }}</button>
 
-          <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--k-f4f3ef)">
-            <span style="font:500 14.5px/1.4 Archivo,sans-serif;color:var(--k-fg-40434a)">{{ cfFeeLabel }}</span>
-            <span style="height:0;border-top:1px dotted var(--k-dedcd6);flex:1;display:block"></span>
-            <span style="font:600 14.5px/1.4 'JetBrains Mono',monospace;color:var(--k-fg-14161a)">{{ cfFeeValue }}</span>
-          </div>
 
           <div style="{{ cfPackStyle }}">
             <span style="width:8px;height:8px;border-radius:999px;background:var(--k-1f9d55,#1a8f4e);display:block;flex:none"></span>
@@ -4295,7 +4290,7 @@ class Component extends DCLogic {
     return cc[key]={free,part,taken,locked};}
   fare(k,km){const C=this.CLS.find(c=>c.k===k);return Math.round((C.base+C.rate*km)/5)*5;}
   typeName(t){return({LB:'Lower berth',MB:'Middle berth',UB:'Upper berth',SLB:'Side lower',SUB:'Side upper'})[t];}
-  choiceFeeFor(c){return c==='2A'?75:c==='3A'?50:25;}
+  choiceFeeFor(c){return 0;}          // choosing a berth is free; see store.mjs
   /** Everything the seat page needs to know about booking without a berth:
       whether it is possible on this journey, what it costs, how many seats
       are left that way, and what charting will make of the coach. */
@@ -9165,7 +9160,7 @@ class Component extends DCLogic {
       const why='Sign in to hold a berth — it comes off the board for everyone else while you pay.';
       return this.setState({authOpen:true,authMode:'in',aErr:why,aPass:'',srvNote:why});}
     this.setState({holdBusy:true,holdErr:null});
-    // reservation, superfast, GST and the convenience fee are the server's
+    // reservation, superfast and GST are the server's - and they are all of it
     // to compute; it ignores anything sent from here
     let r,j;
     try{
@@ -9809,7 +9804,7 @@ class Component extends DCLogic {
     // the choice fee: the server's word once a hold exists, the class rate before
     const chosenFee=srvHold?(srvHold.choiceFee||0):((anyPre||(this.anyInfo().charted))?0:this.choiceFeeFor(S.cls)*nTravC);
     const total=(srvHold&&srvHold.amount!=null)?srvHold.amount
-      :(berthSum+20*nTravC+(S.cls==='SL'?0:15*nTravC)+gst+12+chosenFee);
+      :(berthSum+20*nTravC+(S.cls==='SL'?0:15*nTravC)+gst+chosenFee);
     const hopConf=S.picks.length>0&&S.picks.some(p=>p.seg);
     const allotment=(anyHold||anyPre)?Array.from({length:nPax},(_,i)=>({
         title:this.paxNamesFor(nPax)[i]||('Passenger '+(i+1)),berth:'Any berth',type:'seated at charting',
@@ -10237,7 +10232,8 @@ class Component extends DCLogic {
           modeAnyTitle:'Any berth \u00b7 \u20b9'+money(A.sum),
           modeAnySub:A.anyOk?('We tell you your berth the night before, once everyone has booked.'+(A.seats!=null?' '+A.seats+' seats left this way.':''))
             :'No whole berth is left for this journey this way \u2014 choose a berth, or seat-hop.',
-          modeExactTitle:'Choose my berth \u00b7 +\u20b9'+money(A.fee)+(S.pax>1?' each':''),
+          modeExactTitle:A.fee?('Choose my berth \u00b7 +\u20b9'+money(A.fee)+(S.pax>1?' each':''))
+            :'Choose my berth \u00b7 free',
           modeExactSub:'Pick the exact berth now. It is yours the moment you pay.',
           setModeAny:()=>{if(A.anyOk)this.setState({mode:'any',picks:[],holdErr:null});},
           setModeExact:()=>this.setState({mode:'exact',holdErr:null}),
@@ -10415,13 +10411,10 @@ class Component extends DCLogic {
           {label:'GST',value:gst?R+money(gst):NA},
           ...(chosenFee?[{label:'Berth choice fee'+(nTravC>1?' \u00d7 '+nTravC:''),value:R+money(chosenFee)}]:[]),
         ];
-        const trainSum=total-12;                 // the fee belongs to the booking, not to the train
+        const trainSum=total;                    // every charge on it is the railway's
         const passSum=(q&&passOn)?q.fare:0;
 
-        // one fee per booking. Two bookings, two fees; this is the whole of
-        // the saving and there is nothing else hiding in it.
         const chargeable=1+(passOn?1:0);
-        const save=12*(chargeable-1);
 
         const st={font:'500 14.5px/1.4 Archivo,sans-serif',color:'var(--k-fg-40434a)'};
         const vt={font:"600 14.5px/1.4 'JetBrains Mono',monospace",color:'var(--k-fg-14161a)'};
@@ -10475,14 +10468,13 @@ class Component extends DCLogic {
           faded:{opacity:rideOn?1:.55},
         });
 
-        const grand=R+money(trainSum+passSum+12);
+        const grand=R+money(trainSum+passSum);
         const label=passOn?'Total for the whole journey':'Total payable';
 
         return {
           // the old flat list, kept for the ticket page which still reads it
           fareRows:trainRows.concat(passOn&&q?[{label:'Trip pass',value:R+q.fare}]:[])
-            .concat([{label:'Convenience fee',value:R+'12'},
-              {label,value:grand,k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}])
+            .concat([{label,value:grand,k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}])
             .map(r=>({k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600},...r})),
 
           cfParts:parts,
@@ -10495,13 +10487,18 @@ class Component extends DCLogic {
               :(n+' charge'+(n===1?' does':'s do')+' not apply on this ticket');})(),
           cfToggleZero:()=>this.setState({cfZero:!S.cfZero}),
 
-          cfFeeLabel:'Convenience fee \u00b7 charged once',
-          cfFeeValue:R+'12',
-          cfPackStyle:{display:save?'flex':'none',alignItems:'center',gap:11,
+          cfFeeStyle:{display:'none'},cfFeeLabel:'',cfFeeValue:'',
+          // Nothing is saved by booking together, because nothing was being
+          // added for booking apart. What you get is one ticket instead of
+          // two - worth saying, and not worth dressing up as money.
+          cfPackStyle:{display:chargeable>1?'flex':'none',alignItems:'center',gap:11,
             background:'var(--k-e6f4ec)',borderRadius:14,padding:'13px 16px',
             font:'600 13px/1.45 Archivo,sans-serif',color:'var(--k-fg-14663a)'},
-          cfPackNote:save?('Booked together as one journey, so the '+R+'12 fee is charged once instead of '
-            +chargeable+' times. You save '+R+save+' against booking these separately.'):'',
+          cfPackNote:chargeable>1
+            ?('One ticket for the whole way, and one pass for the rest of it. khaali takes no booking fee, '
+              +'no convenience fee and nothing for choosing a berth \u2014 you pay the railway'
+              +String.fromCharCode(8217)+'s fare and the railway'
+              +String.fromCharCode(8217)+'s charges, and nothing else.'):'',
 
           cfTotalLabel:label,cfTotal:grand,
           // what commit needs to know: only what she kept is bought
