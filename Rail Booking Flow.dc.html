@@ -72,6 +72,34 @@ a{color:var(--k-fg-d8385a);text-decoration:none}a:hover{color:var(--k-fg-a71f3d)
 [style*="Manrope"]{font-family:Archivo,'Manrope',system-ui,sans-serif!important}
 h1[style],h2[style]{font-family:'Cormorant Garamond',Georgia,serif!important;font-weight:600!important;letter-spacing:.005em!important}
 h1.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-weight:700!important;letter-spacing:-.045em!important}
+/* The island. It sits under the header, never over it: --ki-top is measured
+   from the real header on mount, so it follows whatever the header becomes. */
+.ki-wrap{position:fixed;top:var(--ki-top,104px);left:0;right:0;z-index:60;padding:0 14px;
+  display:flex;justify-content:center;pointer-events:none;font-family:Archivo,Helvetica,Arial,sans-serif}
+.ki-pill,.ki-card{pointer-events:auto;background:#0A0A0A;color:#fff;
+  border:1px solid rgba(255,255,255,.10);box-shadow:0 8px 24px rgba(10,10,10,.22);-webkit-font-smoothing:antialiased}
+.ki-pill{border-radius:999px;padding:12px 20px;display:flex;align-items:center;gap:12px;
+  cursor:pointer;max-width:100%;font:inherit;transition:background .18s}
+.ki-pill:hover,.ki-pill:focus-visible{background:#161619;outline:none}
+.ki-card{border-radius:26px;padding:20px 22px;width:100%;max-width:620px;display:flex;
+  flex-direction:column;gap:18px;box-shadow:0 14px 38px rgba(10,10,10,.30)}
+.ki-dot{position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:10px;height:10px}
+.ki-dot i,.ki-dot b{width:9px;height:9px;border-radius:999px;background:#7FB2FF;display:block}
+.ki-dot i{position:absolute;animation:ki-pulse 2.4s ease-out infinite}
+@keyframes ki-pulse{0%{opacity:.55;transform:scale(1)}70%{opacity:0;transform:scale(2.6)}100%{opacity:0;transform:scale(2.6)}}
+@media (prefers-reduced-motion:reduce){.ki-dot i{animation:none}}
+.ki-title{font-size:14.5px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ki-right{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;font-weight:700;color:#9AA6BC;white-space:nowrap}
+.ki-x{margin-left:auto;border:0;background:#1C1C22;width:34px;height:34px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;transition:background .18s}
+.ki-x:hover,.ki-x:focus-visible{background:#26262E;outline:none}
+.ki-dots span{height:9px;border-radius:999px;flex:1;background:#2B2B33}
+.ki-f em{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:9px;font-weight:700;
+  letter-spacing:.12em;color:#6E7787;font-style:normal;white-space:nowrap}
+.ki-go{border:0;background:#fff;color:#0A0A0A;font:700 13px/1 Archivo,sans-serif;
+  padding:11px 16px;border-radius:10px;cursor:pointer;flex:none;white-space:nowrap}
+.ki-go:hover,.ki-go:focus-visible{background:#CFE9E1;outline:none}
+@media (max-width:640px){.ki-wrap{top:var(--ki-top,150px)}.ki-card{border-radius:20px;padding:16px}}
 /* The plan page: the question on the left, and it stays there. */
 .k-planshell{display:grid;grid-template-columns:396px minmax(0,1fr);gap:18px;align-items:start}
 .k-planside{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -594,6 +622,55 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
 </div>
 </sc-if>
+
+<div class="ki-wrap" style="{{ isleWrap }}">
+
+  <div class="ki-pill" onClick="{{ isleOpenIt }}" onKeyDown="{{ isleKey }}" tabindex="0" role="button" aria-label="Open the update" style="{{ islePill }}">
+    <span class="ki-dot"><i style="{{ isleHue }}"></i><b style="{{ isleHue }}"></b></span>
+    <span class="ki-title">{{ isleTitle }}</span>
+    <span class="ki-right">{{ isleRight }}</span>
+  </div>
+
+  <div class="ki-card" role="dialog" aria-modal="false" aria-label="khaali update" style="{{ isleCard }}">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="ki-dot"><i style="{{ isleHue }}"></i><b style="{{ isleHue }}"></b></span>
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        <span style="font-size:17px;font-weight:700;letter-spacing:-.02em">{{ isleTitle }}</span>
+        <span style="font-size:12.5px;font-weight:500;color:#9AA6BC">{{ isleSub }}</span>
+      </div>
+      <div class="ki-x" onClick="{{ isleCloseIt }}" onKeyDown="{{ isleKey }}" tabindex="0" role="button" aria-label="Collapse">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 9l5-5 5 5" stroke="#9AA6BC" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span style="font-size:12.5px;font-weight:600;color:#9AA6BC">{{ islePlabel }}</span>
+        <span style="margin-left:auto;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;font-weight:700">{{ islePctText }}</span>
+      </div>
+      <div class="ki-dots" style="display:flex;gap:6px">
+        <sc-for list="{{ isleDots }}" as="d" hint-placeholder-count="16">
+          <span style="{{ d.style }}"></span>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="{{ isleGridStyle }}">
+      <sc-for list="{{ isleFields }}" as="f" hint-placeholder-count="4">
+        <div class="ki-f" style="display:flex;flex-direction:column;gap:4px;min-width:0">
+          <em>{{ f.k }}</em>
+          <strong style="{{ f.style }}">{{ f.v }}</strong>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="flex:1;min-width:200px;font-size:13.5px;font-weight:500;color:#C8CEDA;line-height:1.45">{{ isleLine }}</span>
+      <span style="{{ isleStatusStyle }}">{{ isleStatus }}</span>
+      <button onClick="{{ isleGo }}" class="ki-go">{{ isleGoLabel }}</button>
+    </div>
+  </div>
+</div>
 
 <div class="k-chatfab" onClick="{{ toggleChat }}" style="{{ chatFab }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg><span>Ask Saarthi</span></div>
 <div style="{{ chatPanel }}">
@@ -3586,9 +3663,17 @@ class Component extends DCLogic {
       if(this.state.stnOpen&&!(t&&t.closest('.k-stnwrap')))
         this.setState({stnOpen:null,fromTxt:null,toTxt:null});};
     document.addEventListener('mousedown',this._sd);
+    // the island must clear the header rather than assume its height
+    this._isleFit=()=>{const h=document.querySelector('.k-topbar');
+      if(h)document.documentElement.style.setProperty('--ki-top',(h.offsetHeight+12)+'px');};
+    this._isleFit();
+    window.addEventListener('resize',this._isleFit);
+    setTimeout(this._isleFit,400);
     this.routeBoot();
     this.srvBoot();}
   componentWillUnmount(){clearInterval(this._t);clearInterval(this._h);clearInterval(this._sp);
+    clearInterval(this._lkT);document.removeEventListener('keydown',this._isleEsc);
+    window.removeEventListener('resize',this._isleFit);
     try{this._es&&this._es.close();}catch(e){}
     if(this._pop)window.removeEventListener('popstate',this._pop);
     document.removeEventListener('mousedown',this._sd);}
@@ -3626,6 +3711,228 @@ class Component extends DCLogic {
     return{state:'run',delay,prog:kmPos/208,visited,
       text:'Crossed '+this.ST[a].n+' \u00b7 next '+this.ST[b].n+', ETA '+this.toHHMM(this.sMin(tr,b,'a')+delay)+' ('+eta+' min)'+(delay?' \u00b7 running '+delay+' min late':' \u00b7 on time')};
   }
+
+  /**
+   * The one thing worth interrupting for, or null.
+   *
+   * Ordered by what it costs to miss it: someone in trouble, then a code
+   * that expires, then a train that will not wait, then a berth that has
+   * just been named, then money, then a pass, then a warning about a train
+   * she stars but is not on today.
+   */
+  islandSignal(){
+    const S=this.state, mins=m=>Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m';
+
+    // 1. someone has asked for help and it has not been stood down
+    const a=S.sosAlert;
+    if(a&&a.status!=='deleted'){
+      const held=a.status==='held';
+      return {kind:'sos',tone:'warn',
+        title:held?'Your SOS is armed':'Help has been told where you are',
+        right:held?'ARMED':'SENT',
+        sub:'khaali SOS · '+String(a.id||'').slice(0,8),
+        plabel:held?'Nothing has been sent yet':'Sent '+(a.channel||'to your people'),
+        pct:held?0.25:1,
+        line:S.sosLine||(held
+          ?'Marked and held on this device. Nothing leaves khaali until you send it.'
+          :'Your location and the moment you marked it are with the people who can act on them.'),
+        status:held?'ARMED':'SENT',statusTone:'warn',
+        fields:[['REFERENCE',String(a.ref||a.id||'').slice(0,8).toUpperCase()],
+          ['STATE',String(a.status||'').toUpperCase()],
+          ['PROOF',a.filed?'FILED':a.hasMedia?'ON DEVICE':'NONE']],
+        go:()=>this.setState({sosOpen:true})};
+    }
+
+    // 2. a one-time code, and the clock on it
+    if(S.lkCode&&S.lkUntil){
+      const left=Math.max(0,Math.ceil((S.lkUntil-Date.now())/1000));
+      if(left>0)return {kind:'otp',tone:'info',
+        title:'Here is your one-time code',right:S.lkCode,
+        sub:'For the document locker \u00b7 simulated, not DigiLocker',
+        plabel:'Good for '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0')+' more',
+        pct:left/300,
+        line:'Type it into the locker tab. khaali never asks you for a code \u2014 it only ever hands you one, so a page that asks is not khaali.',
+        status:'CODE LIVE',statusTone:'info',
+        fields:[['CODE',S.lkCode,'accent'],
+          ['VALID FOR',Math.floor(left/60)+':'+String(left%60).padStart(2,'0')],
+          ['TRIES LEFT',String(S.lkTries!=null?S.lkTries:5)]],
+        go:()=>this.lockerOpen()};
+    }
+
+    // 3. a train she holds a ticket on, running now
+    const live=(S.bookings||[]).filter(b=>b.dayIdx===0&&b.status!=='refunded')
+      .map(b=>({b,tr:this.TRAINS.find(t=>t.no===b.train)}))
+      .filter(x=>x.tr).map(x=>({...x,lv:this.liveOf(x.tr)}))
+      .filter(x=>x.lv.state==='run')[0];
+    if(live){
+      const {b,tr,lv}=live;
+      const pk=(b.picks||[])[0]||{};
+      const board=this.ST[b.from]||{};
+      return {kind:'train',tone:lv.delay?'warn':'ok',
+        title:lv.delay?(tr.no+' is running '+lv.delay+' min late'):(tr.name+' is running'),
+        right:lv.delay?('+'+lv.delay+' min'):'on time',
+        sub:tr.no+' '+tr.name+' \u00b7 live',
+        plabel:'Along the corridor',pct:lv.prog,
+        line:lv.text,
+        status:lv.delay?('DELAYED '+lv.delay+' MIN'):'ON TIME',statusTone:lv.delay?'warn':'ok',
+        fields:[['PLATFORM',board.pf?('Pf '+board.pf):'\u2014'],
+          ['COACH',pk.coach||'\u2014'],
+          ['BERTH',pk.no!=null?String(pk.no):'\u2014'],
+          ['PNR',b.pnr,'accent']],
+        go:()=>this.openTicket(b.pnr)};
+    }
+
+    // 4. the chart named a berth, and she has not seen it
+    const ch=(S.bookings||[]).filter(b=>b.mode==='any'&&b.assigned&&!b.chartSeen)[0];
+    if(ch)return {kind:'chart',tone:'ok',
+      title:'Your berth has been named',right:(ch.berths||[]).join(', '),
+      sub:'Chart prepared for '+ch.train,
+      plabel:'Chart prepared',pct:1,
+      line:'You booked any berth and the chart has just given you one. Nothing to do \u2014 it is already on your ticket.',
+      status:'CONFIRMED',statusTone:'ok',
+      fields:[['BERTH',(ch.berths||[]).join(', ')||'\u2014'],['TRAIN',ch.train],['PNR',ch.pnr,'accent']],
+      go:()=>{this.bstatSet(ch.pnr,{chartSeen:true});
+        this.setState({viewPnr:ch.pnr,bookings:this.bstatApply(this.state.bookings)});this.go('ticket');}};
+
+    // 5. the last thing that happened to a block she placed
+    const nt=(S.notices||[])[0];
+    if(nt)return {kind:'notice',tone:'info',
+      title:nt.t,right:'new',sub:'khaali \u00b7 just now',
+      plabel:'Settled',pct:1,line:nt.sub||'',
+      status:'UPDATE',statusTone:'info',fields:[],
+      go:()=>{this.setState({notices:(this.state.notices||[]).filter(x=>x!==nt)});
+        if(nt.pnr)return this.openTicket(nt.pnr);this.go(nt.page||'wallet');}};
+
+    // 6. money came back
+    const ev=(S.walletEvents||[]).filter(e=>e.amount>0)[0];
+    if(ev)return {kind:'wallet',tone:'ok',
+      title:'\u20b9'+ev.amount+' credited to your wallet',right:'\u20b9'+ev.amount,
+      sub:'khaali wallet',plabel:'Credited',pct:1,
+      line:ev.note+(ev.pnr?' \u00b7 PNR '+ev.pnr:''),
+      status:'CREDITED',statusTone:'ok',
+      fields:[['AMOUNT','\u20b9'+ev.amount,'accent']].concat(ev.pnr?[['PNR',ev.pnr]]:[]),
+      go:()=>this.go('wallet')};
+
+    // 7. a pass that is good today
+    const tp=S.pTripPass;
+    if(tp&&tp.date===this.dateIsoFor(0))return {kind:'pass',tone:'info',
+      title:'Your trip pass is good today',right:'\u20b9'+tp.fare,
+      sub:'Bus and metro \u00b7 spent when the trip is',
+      plabel:'Ready to scan',pct:1,
+      line:'Show the code at the gate. It is spent on the trip it was bought for, and on nothing else.',
+      status:'ACTIVE',statusTone:'info',
+      fields:[['FARE','\u20b9'+tp.fare,'accent'],['COVERS',(tp.covers||[]).map(m=>m==='bmtc'?'BMTC':'Metro').join(' + ')]],
+      go:()=>this.go('plan')};
+
+    // 8. a train she stars is not running
+    const favNos=this.favs();
+    for(const no of favNos){
+      for(let d=0;d<7;d++){
+        const cx=this.cxOf(no,d);
+        if(!cx)continue;
+        const x=this.TRAINS.find(t=>t.no===no);
+        return {kind:'alert',tone:'warn',
+          title:no+' is cancelled',right:'\u2605 starred',
+          sub:(x?x.name:no)+' \u00b7 service alert',
+          plabel:'Not running',pct:0,
+          line:(cx.reason||'Operational reasons')+' — this service is cancelled. You star this train, so khaali tells you before you go looking for it.',
+          status:'CANCELLED',statusTone:'warn',
+          fields:[['TRAIN',no],['WHEN',(()=>{try{return new Date(this.dateIsoFor(d)+'T00:00:00')
+            .toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return '';}})()]],
+          go:()=>this.go('favorites')};
+      }
+    }
+    return null;
+  }
+
+  // ------------------------------------------------- the one-time code --
+  /** Ask the locker for a sign-in code, and hand the traveller the code
+    * rather than asking her for one. The locker tab is opened on the same
+    * sign-in, so the number on the island is the number it wants. */
+  async lockerCode(){
+    if(this._lkBusy)return;this._lkBusy=true;
+    try{
+      const r=await fetch('/api/locker/otp',{method:'POST'});
+      const j=await r.json();
+      if(!j||!j.ok)throw new Error('no code');
+      this.setState({lkSid:j.sid,lkCode:j.code,lkTries:5,
+        lkUntil:Date.now()+(j.msLeft||300000),isleOpen:true});
+      clearInterval(this._lkT);
+      this._lkT=setInterval(()=>{
+        const u=this.state.lkUntil;
+        if(!u||u<=Date.now()){clearInterval(this._lkT);
+          return this.setState({lkSid:null,lkCode:null,lkUntil:null});}
+        this.setState({lkTick:(this.state.lkTick||0)+1});
+      },1000);
+      this.lockerOpen();
+    }catch(e){
+      this.setState({notices:[{t:'The locker did not answer',
+        sub:'No code was made, so nothing is waiting to expire. Try again.',page:'wallet'}]
+        .concat(this.state.notices||[]).slice(0,6)});
+    }finally{this._lkBusy=false;}
+  }
+  lockerOpen(){
+    const sid=this.state.lkSid;
+    try{window.open('/digilocker'+(sid?('?sid='+encodeURIComponent(sid)):''),'_blank');}catch(e){}
+  }
+
+  /** The island's bindings. Nothing here decides what to say - that is the
+    * ladder's job - only how the one chosen thing is drawn. */
+  islandBindings(){
+    const S=this.state, sig=this.islandSignal();
+    const gone={display:'none'};
+    if(!sig)return {isleWrap:gone,islePill:gone,isleCard:gone,isleDots:[],isleFields:[],
+      isleTitle:'',isleRight:'',isleSub:'',isleLine:'',isleStatus:'',isleStatusStyle:gone,
+      islePlabel:'',islePctText:'',isleGoLabel:'',isleGridStyle:gone,isleHue:{},
+      isleOpenIt:()=>{},isleCloseIt:()=>{},isleGo:()=>{},isleKey:()=>{}};
+
+    const open=!!S.isleOpen;
+    const HUE={warn:'#F0C96B',ok:'#7FE0AE',info:'#7FB2FF'}[sig.tone]||'#7FB2FF';
+    const TONE={warn:{bg:'#F7EDD8',fg:'#7A5210'},ok:{bg:'#DDF0E6',fg:'#14603B'},
+      info:{bg:'#E9EEF6',fg:'#1B3A6B'}}[sig.statusTone||'info']||{bg:'#E9EEF6',fg:'#1B3A6B'};
+    const N=16, pct=Math.max(0,Math.min(1,sig.pct||0));
+    const label={sos:'Open SOS',otp:'Open the locker',train:'Open your ticket',
+      chart:'Open your ticket',notice:'Take me there',wallet:'Open the wallet',
+      pass:'Show the pass',alert:'See your stars'}[sig.kind]||'Show me';
+
+    return {
+      isleWrap:{},
+      islePill:{display:open?'none':'flex'},
+      isleCard:{display:open?'flex':'none'},
+      isleHue:{background:HUE},
+      isleTitle:sig.title,isleRight:sig.right,isleSub:sig.sub,
+      islePlabel:sig.plabel,islePctText:Math.round(pct*100)+'%',
+      isleDots:Array.from({length:N},(_,i)=>({style:{height:9,borderRadius:999,flex:1,
+        background:i/N<pct?'#ffffff':'#2B2B33'}})),
+      isleGridStyle:{display:(sig.fields||[]).length?'grid':'none',
+        gridTemplateColumns:'repeat(auto-fit,minmax(78px,1fr))',gap:14,
+        background:'#15151A',borderRadius:16,padding:'15px 17px'},
+      isleFields:(sig.fields||[]).map(f=>({k:f[0],v:f[1],
+        style:{fontSize:16,fontWeight:700,letterSpacing:'-.015em',
+          color:f[2]==='accent'?HUE:'#ffffff',overflowWrap:'anywhere'}})),
+      isleLine:sig.line,
+      isleStatus:sig.status,
+      isleStatusStyle:{display:sig.status?'inline-block':'none',flex:'none',
+        font:"700 10px/1 'JetBrains Mono',ui-monospace,monospace",letterSpacing:'.1em',
+        padding:'6px 10px',borderRadius:6,whiteSpace:'nowrap',
+        background:TONE.bg,color:TONE.fg},
+      isleGoLabel:label,
+      isleOpenIt:()=>this.islandOpen(),
+      isleCloseIt:()=>this.islandClose(),
+      isleGo:()=>{this.islandClose();try{sig.go();}catch(e){}},
+      // a pill you can reach with a keyboard is a pill you can reach at all
+      isleKey:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();
+        this.setState({isleOpen:!this.state.isleOpen});}},
+    };
+  }
+  islandOpen(){
+    this.setState({isleOpen:true});
+    if(!this._isleEsc){
+      this._isleEsc=e=>{if(e.key==='Escape'&&this.state.isleOpen)this.islandClose();};
+      document.addEventListener('keydown',this._isleEsc);
+    }
+  }
+  islandClose(){this.setState({isleOpen:false});}
 
   rng(s){let a=s>>>0;return()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
   toMin(s){return parseInt(s.slice(0,2))*60+parseInt(s.slice(3,5));}
@@ -9698,6 +10005,7 @@ class Component extends DCLogic {
       chatKey:e=>{if(e.key==='Enter')this.sendChat();},
       sendChat:()=>this.sendChat(),
       chatQ:S.chatQ||'',
+      ...this.islandBindings(),
       chatFab:{position:'fixed',right:22,bottom:22,zIndex:40,display:S.chatOpen?'none':'flex',
         alignItems:'center',gap:9,background:'var(--k-d8385a)',color:'#fff',
         font:'700 14px/1 Archivo,Manrope,sans-serif',padding:'15px 22px',borderRadius:999,
@@ -10154,7 +10462,10 @@ class Component extends DCLogic {
                 ?('Linked: '+linked.join(', ')+'. khaali holds a date of birth for each, and nothing else.')
                 :'Nobody is linked yet. Open the locker to connect a traveller, so a lower berth can be given on proof rather than on a tick-box.',
               profLockerBtn:linked.length?'Open the locker \u2192':'Connect a locker \u2192',
-              profLocker:()=>{window.open('/digilocker','_blank');},
+              // a code is made here and shown on the island, so the traveller
+              // reads it in khaali and types it into the locker - never the
+              // other way round
+              profLocker:()=>this.lockerCode(),
             };})(),
           profErr:S.pErr||'',
           profErrStyle:{display:S.pErr?'block':'none',marginBottom:8,padding:'10px 13px',
