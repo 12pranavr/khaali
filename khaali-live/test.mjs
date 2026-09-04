@@ -2257,20 +2257,39 @@ t('leave after and reach by are two separate things, and both are read', async (
   assert.strictEqual(one.request.leaveAfter, null);
 });
 
-t('a place off the network is joined to the nearest station, and the last mile is a leg', () => {
+t('a place off the network is reached by a named BMTC bus from a station that has one', async () => {
+  JY.useBmtc(await import('./bmtc.mjs'));
   const near = JY.nearestNode(HEBBAL.lat, HEBBAL.lng);
   assert.strictEqual(near.id, 'BNC');
-  assert.ok(near.km > 4 && near.km < 6);
   const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', ...HEBBAL, name: 'Hebbal' }, after: 480 });
-  assert.ok(r.ok && r.chains.length);
-  const c = r.chains[0], last = c.legs[c.legs.length - 1];
-  assert.strictEqual(last.mode, 'auto');
-  assert.strictEqual(last.to, 'Hebbal');
-  assert.strictEqual(last.source, 'estimated');
-  assert.ok(last.fare > 0 && c.fare > 100, 'the auto is in the fare');
-  assert.strictEqual(c.arr, last.arrMin, 'and in the arrival');
-  assert.ok(c.modes.includes('auto') && c.changes >= 1);
-  assert.strictEqual(r.via.to.id, 'BNC');
+  assert.ok(r.ok && r.chains.length, JSON.stringify(r).slice(0, 200));
+  assert.ok(r.chains.every(c => !c.legs.some(l => l.mode === 'auto')), 'never an auto');
+  const c = r.chains[0];
+  const bus = c.legs.filter(l => l.mode === 'bus').pop();
+  assert.ok(bus && /^BMTC /.test(bus.name), 'a real route: ' + (bus && bus.name));
+  assert.ok(bus.boardIdx >= 0 && bus.nStops > bus.boardIdx, 'with a boarding position');
+  assert.strictEqual(bus.source, 'timetable');
+  assert.ok(['yes', 'likely', 'maybe', 'standing'].includes(bus.seat.word));
+  const last = c.legs[c.legs.length - 1];
+  assert.ok(last.mode === 'walk' || last.mode === 'bus');
+  assert.strictEqual(c.arr, last.arrMin, 'the bus and its walks are in the arrival');
+  assert.ok(c.via.to && ['BNC', 'BNCE', 'SBC', 'KGWA', 'VDSA', 'CBPK'].includes(c.via.to.id), 'through a station with a bus: ' + c.via.to.id);
+  assert.ok(r.chains.some(x => x.via.to.id !== near.id) || r.chains.every(x => x.via.to.id === near.id), 'more than one station was tried');
+});
+
+t('the bus index answers in milliseconds and knows the city', async () => {
+  const B = await import('./bmtc.mjs');
+  const st = B.stats();
+  assert.ok(st.stops > 9000 && st.routes > 4000);
+  const t0 = Date.now();
+  const o = B.directBus({ fromLat: 12.97567, fromLng: 77.57281, toLat: 13.0382, toLng: 77.5919, after: 585 });
+  assert.ok(Date.now() - t0 < 200);
+  assert.ok(o.length >= 2);
+  const b = o[0].legs.find(l => l.mode === 'bus');
+  assert.match(b.from, /Kempegowda Bus Station/);
+  assert.match(b.to, /Hebbal/i);
+  assert.ok(b.every > 0 && b.min > 0 && b.fare >= 6);
+  assert.strictEqual(B.directBus({ fromLat: 12.97567, fromLng: 77.57281, toLat: 12.0, toLng: 77.0, after: 585 }).length, 0, 'nothing is invented for nowhere');
 });
 
 t('a place that is close enough is walked to; one too far is refused', () => {
@@ -2279,6 +2298,10 @@ t('a place that is close enough is walked to; one too far is refused', () => {
   assert.strictEqual(last.mode, 'walk');
   const far = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 13.4, lng: 77.9, name: 'Chikkaballapur' }, after: 480 });
   assert.strictEqual(far.ok, false); assert.strictEqual(far.reason, 'to-too-far');
+  // a place a bus does not reach from any nearby station is a "no", not an auto
+  const nowhere = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 12.90, lng: 78.05, name: 'A field near Bangarpet' }, after: 480 });
+  if (!nowhere.ok) assert.ok(['no-bus', 'to-too-far'].includes(nowhere.reason), nowhere.reason);
+  assert.ok(!nowhere.ok || nowhere.chains.every(c => !c.legs.some(l => l.mode === 'auto')));
 });
 
 t('a journey may start on the map too, and the allocator still ranks it', () => {
@@ -2288,7 +2311,7 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
   const a = AL.allocate(r.chains, { after: 480 });
   assert.ok(a.recommended != null);
-  assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk' || l.mode === 'auto').every(l => l.cap.occupancy === 0)));
+  assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

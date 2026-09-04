@@ -4994,7 +4994,7 @@ class Component extends DCLogic {
     this.setState({pSayBusy:true,pSayNote:''});
     try{
       const r=await this.tfetch('/api/intent',{method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({text})},15000);
+        body:JSON.stringify({text})},30000);
       const j=await r.json();
       if(!j||!j.ok)throw new Error('no');
       const st={pSayBusy:false,pSayNote:j.understood?('Understood: '+j.understood):'',pSayProvider:j.provider};
@@ -5352,7 +5352,8 @@ class Component extends DCLogic {
           title:l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m '+'\u00b7'+' about '+l.min+' min')
             :l.mode==='auto'?(l.name+' '+'\u00b7'+' about '+l.km+' km, '+l.min+' min '+'\u00b7'+' \u20b9'+l.fare+' estimated')
             :l.mode==='train'?(l.name+' '+'\u00b7'+' '+l.id)
-            :l.mode==='bus'?(l.name+' '+'\u00b7'+' every '+l.every+' min')
+            :l.mode==='bus'?(l.name+' '+'\u00b7'+' every '+l.every+' min'
+              +(l.nStops?' '+'\u00b7'+' board at stop '+(l.boardIdx+1)+' of '+l.nStops:''))
             :(l.line+' '+'\u00b7'+' every '+l.every+' min'),
           sub:l.mode==='walk'?((l.entrance?l.entrance.n+' of ':'')+l.to)
             :(l.from+' '+'\u2192'+' '+l.to+(l.dep?('  '+l.dep+' '+'\u2192'+' '+l.arr):'')),

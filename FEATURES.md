@@ -1355,16 +1355,25 @@ thin - three trains and a bus every half hour - and the tool shows exactly
 that. The same engine runs on a network that does not exist in the tests,
 where a busy train beside an empty bus gives the result you would expect.
 
-### Anywhere
+### Anywhere - and the last mile is a named bus
 
 A journey may start or end anywhere on the map, not only at a station khaali
 knows. Type "Hebbal" - or say "I need to go from Bangarpet to Hebbal" - and
-the place is found on OpenStreetMap (keyless, via Photon), joined to the
-nearest station or stop within 15 km, and the last mile becomes its own leg:
-a walk under 1.2 km, otherwise an auto or local bus with an estimated fare,
-in the time, in the price, and drawn on the map in its own colour. The card
-says which station it goes through and how far. A place farther than any
-station khaali knows is refused with the distance, not guessed.
+the place is found on OpenStreetMap (keyless, via Photon). Then the nearest
+five stations are tried, and for each one khaali looks for a **direct BMTC
+bus** from a stop within 700 m of the station to a stop within 700 m of the
+place: which route, from which stop, boarding at what position, how often it
+runs, and so whether there will be a seat. The station with the bus beats
+the station that is merely nearest. The walks to and from the stops are legs
+of their own, in the time and on the map.
+
+`bmtc.mjs` reads `bmtc.json`: BMTC's own published timetable boiled down to
+9,875 stops and 4,358 routes with their stop sequences, median run times and
+headways (GTFS via github.com/Vonter/bmtc-gtfs, ODbL). A search takes
+milliseconds. When no direct bus reaches a place from any nearby station,
+the page says so and names the stations it tried. It never says "take an
+auto": a planner that has the whole bus timetable and answers with an auto
+has not done its job.
 
 **Leave after** and **Reach by** are two separate things, and both count:
 the clock starts at one, the search is cut off at the other, and each has

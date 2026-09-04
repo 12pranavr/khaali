@@ -190,13 +190,18 @@ export async function parseIntent(text, { llm = null, geocode = null } = {}) {
   const raw = String(text || '').slice(0, 400);
   const local = parseLocally(raw);
   let fromModel = null, provider = 'local';
-  if (llm) {
-    try {
-      const out = await llm([{ role: 'system', content: INTENT_SYSTEM }, { role: 'user', content: raw }], { json: true, maxTokens: 300, temperature: 0 });
-      const m = String(out || '').match(/\{[\s\S]*\}/);
-      if (m) { fromModel = JSON.parse(m[0]); provider = 'model'; }
-    } catch { fromModel = null; }
+  // the model and the map are asked at the same time: the grammar already
+  // knows which places to look up, and neither should wait for the other
+  const early = {};
+  const lookups = [];
+  if (geocode) for (const side of ['from', 'to']) {
+    const txt = side === 'from' ? (local.origin && local.origin.text) : (local.destination && local.destination.text);
+    if (txt && !resolvePlace(txt)) lookups.push(geocode(txt).then(g => { early[side] = g; }).catch(() => {}));
   }
+  const modelP = llm ? llm([{ role: 'system', content: INTENT_SYSTEM }, { role: 'user', content: raw }], { json: true, maxTokens: 300, temperature: 0 })
+    .then(out => { const m = String(out || '').match(/\{[\s\S]*\}/); if (m) { fromModel = JSON.parse(m[0]); provider = 'model'; } })
+    .catch(() => { fromModel = null; }) : Promise.resolve();
+  await Promise.all([modelP, ...lookups]);
   // merge: the model fills gaps; the local read is never overwritten on time or modes it found
   const merged = { ...(fromModel || {}) };
   if (local.origin) merged.origin = local.origin; else if (!merged.origin) merged.origin = null;
@@ -219,7 +224,7 @@ export async function parseIntent(text, { llm = null, geocode = null } = {}) {
       const txt = side === 'from' ? (r.origin && r.origin.text) : (r.destination && r.destination.text);
       if (!txt || resolved[side]) continue;
       try {
-        const g = await geocode(txt);
+        const g = early[side] !== undefined ? early[side] : await geocode(txt);
         if (g && Number.isFinite(g.lat) && Number.isFinite(g.lng)) resolved[side] = { kind: 'place', id: g.lat.toFixed(5) + ',' + g.lng.toFixed(5), name: g.name || txt, lat: g.lat, lng: g.lng };
       } catch { /* unresolved stays unresolved */ }
     }
@@ -296,7 +301,7 @@ export function summary(chain, reason, alternatives = []) {
   const leg = l => ({ mode: l.mode, name: l.name || l.line || null, from: l.from, to: l.to, dep: l.dep || null, arr: l.arr || null,
     minutes: l.min, seat: l.seat ? l.seat.word : null, seatWhy: l.seat ? l.seat.why : null,
     km: l.km || null, fare: l.fare != null ? l.fare : null,
-    howFull: (l.mode === 'walk' || l.mode === 'auto') ? 'n/a' : l.cap && l.cap.occupancy != null ? Math.round(l.cap.occupancy * 100) + '%' : 'unknown',
+    howFull: l.mode === 'walk' ? 'n/a' : l.cap && l.cap.occupancy != null ? Math.round(l.cap.occupancy * 100) + '%' : 'unknown',
     capacityQuality: l.cap ? l.cap.quality : 'unknown', simulated: l.source === 'simulated' });
   return {
     recommended: chain ? { leaves: chain.depText, arrives: chain.arrText, totalMinutes: chain.totalMin, fare: chain.fare,

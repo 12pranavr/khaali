@@ -42,6 +42,8 @@ import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
 import * as sim from './sim.mjs';
+import * as bmtc from './bmtc.mjs';
+journey.useBmtc(bmtc);
 import * as metro from './metro.mjs';
 import crypto from 'node:crypto';
 
@@ -731,7 +733,7 @@ async function api(req, res, url) {
   if (p === '/api/health') {
     return send(res, 200, {
       ok: true, up: Math.round(process.uptime()),
-      sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size,
+      sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size, bmtc: bmtc.stats(),
       intel: { intent: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'local', explain: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'template', ask: SARVAM_KEY ? 'sarvam' : OPENAI_KEY ? 'openai' : 'template' },
     });
   }
@@ -1309,8 +1311,14 @@ async function api(req, res, url) {
       // the same inventory the seat map and the booking page read
       counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } },
     });
-    if (!r.ok) return send(res, 400, { ...r, error: r.reason === 'to-too-far' || r.reason === 'from-too-far'
-      ? 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.' : r.reason });
+    if (!r.ok) {
+      const msg = r.reason === 'to-too-far' || r.reason === 'from-too-far'
+        ? 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.'
+        : r.reason === 'no-bus'
+          ? 'khaali found no direct BMTC bus between ' + [...(r.tried.from || []), ...(r.tried.to || [])].slice(0, 3).map(t => t.name).join(', ') + ' and that place. It will not guess at an auto.'
+          : r.reason;
+      return send(res, 400, { ...r, error: msg });
+    }
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
     capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
@@ -1324,7 +1332,7 @@ async function api(req, res, url) {
     const a = allocate.allocate(r.chains, { profile, maxChanges: Number.isFinite(maxChanges) ? maxChanges : null,
       maxWalkKm: Number.isFinite(maxWalkKm) ? maxWalkKm : null,
       after: (after >= 0 && after < 1440) ? after : null, by: (by >= 0 && by < 2880) ? by : null });
-    const out = { ok: true, chains: a.chains, date, modes, profile, via: r.via || null,
+    const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
       recommended: a.recommended, reason: a.reason,
       explanation: allocate.sentence(a.reason) };
     if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);

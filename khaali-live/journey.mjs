@@ -488,69 +488,109 @@ function summarise(c) {
 
 
 // ------------------------------------------------------------- anywhere --
-/** How far a person will walk before they would rather take an auto. */
+/** How far a person will walk before they would rather take a bus. */
 export const WALK_MAX_KM = 1.2;
 /** How far from anything khaali knows a place may be before we say so. */
 export const REACH_MAX_KM = 15;
-export const AUTO_KMH = 18;
-export const autoFare = k => Math.round(30 + 12 * k);
+/** How many nearby stations to try for a bus: the nearest one is not always
+    the one with a bus to where she is going. */
+export const NODES_TO_TRY = 5;
 
-/** The nearest station or stop to a point, of any kind, or null. */
-export function nearestNode(lat, lng, within = REACH_MAX_KM) {
-  let best = null;
+let _bmtc = null;
+async function bmtc() { if (!_bmtc) _bmtc = await import('./bmtc.mjs'); return _bmtc; }
+/** Loaded once at boot by the server, so the sync planner can use it. */
+export function useBmtc(mod) { _bmtc = mod; }
+
+/** The nearest stations or stops to a point, of any kind, nearest first. */
+export function nearestNodes(lat, lng, n = NODES_TO_TRY, within = REACH_MAX_KM) {
+  const all = [];
   const take = (kind, id, name, p) => {
     const d = km({ lat, lng }, p);
-    if (d <= within && (!best || d < best.km)) best = { kind, id, name, lat: p.lat, lng: p.lng, km: Math.round(d * 100) / 100 };
+    if (d <= within) all.push({ kind, id, name, lat: p.lat, lng: p.lng, km: Math.round(d * 100) / 100 });
   };
   ST.forEach((st, i) => take('rail', st.c, st.n, GEO[i]));
   STOPS.forEach(m => take('metro', m.id, m.n, m));
-  return best;
+  return all.sort((a, b) => a.km - b.km).slice(0, n);
 }
+export function nearestNode(lat, lng, within = REACH_MAX_KM) { return nearestNodes(lat, lng, 1, within)[0] || null; }
 
-/** The leg between a point and the station that serves it. */
-function mileLeg(from, to, startMin, kmv) {
-  const walk = kmv <= WALK_MAX_KM;
-  const min = walk ? Math.max(1, Math.round(kmv / WALK_KMH * 60)) : Math.round(kmv / AUTO_KMH * 60) + 5;
-  return { mode: walk ? 'walk' : 'auto', name: walk ? 'Walk' : 'Auto or local bus',
-    from: from.name, to: to.name, km: kmv, min, depMin: startMin, arrMin: startMin + min,
-    dep: hhmm(dayMin(startMin)), arr: hhmm(dayMin(startMin + min)),
-    fare: walk ? 0 : autoFare(kmv), source: 'estimated',
+const walkLeg = (from, to, startMin, kmv) => {
+  const min = Math.max(1, Math.round(kmv / WALK_KMH * 60));
+  return { mode: 'walk', name: 'Walk', from: from.name, to: to.name, km: kmv, min, depMin: startMin, arrMin: startMin + min,
+    dep: hhmm(dayMin(startMin)), arr: hhmm(dayMin(startMin + min)), fare: 0, source: 'measured',
     fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng, seat: null };
+};
+
+/**
+ * The miles between a point and a station: a walk if it is short, otherwise
+ * a BMTC bus with its walks - a real route, a real stop, a boarding position.
+ * `after` is when she is at `from`. Returns { legs, min, fare } or null when
+ * nothing direct runs - and null means null, not "take an auto".
+ */
+export function mile(from, to, after, kmv) {
+  if (kmv <= WALK_MAX_KM) { const l = walkLeg(from, to, after, kmv); return { legs: [l], min: l.min, fare: 0, walk: true }; }
+  if (!_bmtc) return null;
+  const opts = _bmtc.directBus({ fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng, after, within: 0.7, limit: 1 });
+  if (!opts.length) return null;
+  const o = opts[0];
+  o.legs.forEach(l => { if (l.mode === 'walk') { if (l.from === 'here') l.from = from.name; if (l.to === 'there') l.to = to.name; } });
+  return { legs: o.legs, min: o.arrive - after, fare: o.fare, bus: o.legs.find(l => l.mode === 'bus') };
 }
 
 /**
  * journeys(), but either end may be { kind:'place', lat, lng, name }.
- * The place is joined to its nearest station by a walk or an auto, and that
- * leg is part of the journey - in the time, the fare, and on the map.
+ * Every nearby station is tried, and a journey is built through each one
+ * that can actually be reached - by foot or by a named bus. The station
+ * with the bus beats the station that is merely nearest.
  */
 export function journeysAnywhere(req) {
   const { from, to } = req;
-  const F = from.kind === 'place' ? nearestNode(from.lat, from.lng) : null;
-  const T = to.kind === 'place' ? nearestNode(to.lat, to.lng) : null;
-  if (from.kind === 'place' && !F) return { ok: false, reason: 'from-too-far' };
-  if (to.kind === 'place' && !T) return { ok: false, reason: 'to-too-far' };
-  const first = F ? mileLeg({ name: from.name || 'Start', lat: from.lat, lng: from.lng }, F, req.after || 0, F.km) : null;
-  const lastMin = T ? mileLeg({ name: T.name, lat: T.lat, lng: T.lng }, { name: to.name || 'Destination', lat: to.lat, lng: to.lng }, 0, T.km).min : 0;
-  const inner = journeys({ ...req,
-    from: F ? { kind: F.kind, id: F.id } : from,
-    to: T ? { kind: T.kind, id: T.id } : to,
-    after: first ? first.arrMin : (req.after || 0),
-    by: req.by != null ? req.by - lastMin : null });
-  if (!inner.ok) return inner;
-  const chains = inner.chains.map(c => {
-    const legs = c.legs.slice();
-    let dep = c.dep, arr = c.arr, fare = c.fare;
-    if (first) { legs.unshift(first); dep = first.depMin; fare += first.fare; }
-    if (T) {
-      const last = mileLeg({ name: T.name, lat: T.lat, lng: T.lng }, { name: to.name || 'Destination', lat: to.lat, lng: to.lng }, c.arr, T.km);
-      legs.push(last); arr = last.arrMin; fare += last.fare;
-    }
-    const modes = legs.filter(l => l.mode !== 'walk').map(l => l.mode);
-    return { ...c, legs, dep, arr, fare, modes,
-      totalMin: ((arr - dep) + 1440) % 1440,
-      depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr)),
-      changes: Math.max(0, modes.length - 1),
-      via: { from: F ? { ...F } : null, to: T ? { ...T } : null } };
+  const Fs = from.kind === 'place' ? nearestNodes(from.lat, from.lng) : [null];
+  const Ts = to.kind === 'place' ? nearestNodes(to.lat, to.lng) : [null];
+  if (from.kind === 'place' && !Fs.length) return { ok: false, reason: 'from-too-far' };
+  if (to.kind === 'place' && !Ts.length) return { ok: false, reason: 'to-too-far' };
+  const fromPt = { name: from.name || 'Start', lat: from.lat, lng: from.lng };
+  const toPt = { name: to.name || 'Destination', lat: to.lat, lng: to.lng };
+  const out = []; const tried = { from: [], to: [] }; let anyMile = false;
+  Fs.forEach(F => {
+    const first = F ? mile(fromPt, F, req.after || 0, F.km) : null;
+    if (F) tried.from.push({ ...F, reached: !!first, by: first ? (first.walk ? 'walk' : first.bus.name) : null });
+    if (F && !first) return;
+    Ts.forEach(T => {
+      // a rough allowance for the last mile, so reach-by is honest before the bus is known
+      const lastGuess = T ? (T.km <= WALK_MAX_KM ? Math.round(T.km / WALK_KMH * 60) : Math.round(T.km / 15 * 60) + 15) : 0;
+      const inner = journeys({ ...req,
+        from: F ? { kind: F.kind, id: F.id } : from,
+        to: T ? { kind: T.kind, id: T.id } : to,
+        after: first ? (req.after || 0) + first.min : (req.after || 0),
+        by: req.by != null ? req.by - lastGuess : null });
+      if (!inner.ok) return;
+      inner.chains.forEach(c => {
+        const legs = c.legs.slice();
+        let dep = c.dep, arr = c.arr, fare = c.fare;
+        if (first) { legs.unshift(...first.legs); dep = req.after || 0; fare += first.fare; }
+        if (T) {
+          const last = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km);
+          if (!last) return;
+          legs.push(...last.legs); arr = c.arr + last.min; fare += last.fare;
+          if (req.by != null && arr > req.by) return;
+        }
+        anyMile = true;
+        const modes = legs.filter(l => l.mode !== 'walk').map(l => l.mode);
+        out.push({ ...c, legs, dep, arr, fare, modes,
+          kind: c.kind + (F ? '|' + F.id : '') + (T ? '|' + T.id : ''),
+          totalMin: ((arr - dep) + 1440) % 1440,
+          depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr)),
+          changes: Math.max(0, modes.length - 1),
+          via: { from: F ? { kind: F.kind, id: F.id, name: F.name, km: F.km } : null, to: T ? { kind: T.kind, id: T.id, name: T.name, km: T.km } : null } });
+      });
+    });
   });
-  return { ok: true, chains, via: { from: F, to: T } };
+  Ts.forEach(T => { if (T) { const m = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, req.after || 0, T.km); tried.to.push({ ...T, reached: !!m, by: m ? (m.walk ? 'walk' : m.bus.name) : null }); } });
+  if (!out.length && (Fs[0] || Ts[0])) return { ok: false, reason: 'no-bus', tried };
+  // the same shape through the same stations at the same times is one choice
+  const seen = new Set();
+  const chains = out.filter(c => { const k = c.kind + '|' + c.dep + '|' + c.arr; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.arr - b.arr).slice(0, 14);
+  return { ok: true, chains, tried };
 }
