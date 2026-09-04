@@ -2141,6 +2141,19 @@ async function api(req, res, url) {
         if (!l.fromKind) { l.fromKind = bmtc.stopKind(l.from); l.toKind = bmtc.stopKind(l.to); }
       }
     }));
+    // ...and wears its load as a colour. The band is decided HERE, with the
+    // same ladder every map reads, so the client never re-invents a threshold
+    // - the exact drift that load.mjs was written to end.
+    r.chains.forEach(c => c.legs.forEach(l => {
+      if (!l.cap || l.cap.occupancy == null) return;
+      const key = l.mode === 'train' ? 'rail' : l.mode === 'metro' ? 'metro'
+        : l.mode === 'bus' ? 'bus' : null;
+      if (!key) return;
+      const b = load.bandOf(l.cap.occupancy,
+        l.cap.quality === 'mixed' ? 'exact' : l.cap.quality, key);
+      l.cap.band = b.band; l.cap.colour = b.colour;
+      l.cap.texture = b.texture; l.cap.word = b.word;
+    }));
     const profile = allocate.PROFILES.includes(q.get('profile')) ? q.get('profile') : 'balanced';
     const maxChanges = q.get('maxChanges') != null && q.get('maxChanges') !== '' ? parseInt(q.get('maxChanges'), 10) : null;
     const maxWalkKm = q.get('maxWalkKm') ? parseFloat(q.get('maxWalkKm')) : null;
