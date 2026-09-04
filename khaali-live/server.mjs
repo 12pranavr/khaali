@@ -1355,6 +1355,107 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true, ...out });
   }
 
+  // A journey she describes herself: A to B to C to D, and she says which
+  // vehicle for which hop.
+  //
+  // Every stop is planned with the SAME engine the one-shot planner uses -
+  // there is no second router here and no second set of fares. What is new is
+  // only that the clock carries: leg two leaves when leg one lands, so a slow
+  // first hop moves every departure after it, and a leg she asked for that
+  // nothing can serve is named rather than silently dropped.
+  if (p === '/api/custom' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const stops = Array.isArray(b.stops) ? b.stops.slice(0, 8) : [];
+    if (stops.length < 2) return send(res, 400, { ok: false, error: 'A journey needs at least two places.' });
+    const endOf = st => {
+      const kind = st && st.kind === 'metro' ? 'metro' : st && st.kind === 'place' ? 'place' : 'rail';
+      if (kind !== 'place') return st && st.id ? { kind, id: String(st.id) } : null;
+      const pt = pointOf(st.id);
+      return pt ? { kind: 'place', ...pt, name: String(st.name || 'a place on the map').slice(0, 80) } : null;
+    };
+    const ends = stops.map(endOf);
+    const bad = ends.findIndex(x => !x);
+    if (bad >= 0) return send(res, 400, { ok: false, error: 'khaali does not know stop ' + (bad + 1) + '.' });
+
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
+    const pax = Math.max(1, Math.min(6, parseInt(b.pax, 10) || 1));
+    const needs = Array.isArray(b.needs) ? b.needs.map(x => String(x).slice(0, 20)) : [];
+    const profile = allocate.PROFILES.includes(b.profile) ? b.profile : 'balanced';
+    const start = (b.after >= 0 && b.after < 1440) ? Math.floor(b.after) : 0;
+    const legModes = Array.isArray(b.modes) ? b.modes : [];
+    const clean = m => {
+      const list = (Array.isArray(m) ? m : []).map(x => String(x).trim()).filter(x => journey.ALL_MODES.includes(x));
+      return list.length ? list : [...journey.MODES];
+    };
+
+    const trainCap = (no, fi, ti) => {
+      if (!(fi >= 0 && ti >= 0)) return null;
+      const k = store.countsFor(String(no), date, 'SL', fi, ti);
+      return { free: k.free, total: k.free + k.part + k.taken + k.locked };
+    };
+
+    // where a stop actually is, so a hop she asked to drive can be measured
+    const whereIs = (end, st) => {
+      if (end.kind === 'place') return { name: st.name || 'a place', lat: end.lat, lng: end.lng };
+      if (end.kind === 'rail') { const i = ST.findIndex(x => x.c === end.id);
+        return i >= 0 ? { name: ST[i].n, lat: GEO[i].lat, lng: GEO[i].lng } : null; }
+      const m = metro.STOPS.find(x => x.id === end.id);
+      return m ? { name: m.n, lat: m.lat, lng: m.lng } : null;
+    };
+
+    const out = [], legs = [];
+    let at = start, fare = 0, anySimulated = false;
+    for (let i = 0; i < ends.length - 1; i++) {
+      const modes = clean(legModes[i]);
+      const r = journey.journeysAnywhere({ from: ends[i], to: ends[i + 1], after: at, modes, needs, pax,
+        counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } } });
+      // She may name a vehicle for a hop and mean it. The guided planner keeps a
+      // hired ride to the last mile on purpose; a journey she drew herself is
+      // her saying which vehicle, and khaali does not argue with that.
+      const asked = modes.filter(m => journey.HIRE_MODES.includes(m));
+      if (asked.length) {
+        const A = whereIs(ends[i], stops[i]), B = whereIs(ends[i + 1], stops[i + 1]);
+        const rides = A && B ? asked.map(k => journey.rideChain(k, A, B, at, { pax, needs })).filter(Boolean) : [];
+        if (rides.length) {
+          if (!r.ok || !r.chains) { r.ok = true; r.chains = rides; }
+          else r.chains = r.chains.concat(rides);
+        }
+      }
+      if (!r.ok || !r.chains.length) {
+        return send(res, 200, { ok: false, failedAt: i, reason: r.reason || 'nothing-runs',
+          stops: stops.map((s, n) => ({ ...s, n })), done: out,
+          error: 'khaali could not get from stop ' + (i + 1) + ' to stop ' + (i + 2)
+            + (modes.length < journey.ALL_MODES.length ? ' with the modes you chose for that hop.' : '.') });
+      }
+      capacity.annotate(r.chains, { trainCap });
+      r.chains.forEach(c => c.legs.forEach(l => {
+        if (l.mode === 'bus' && !l.path && l.fromLat && l.toLat) {
+          try { l.path = bmtc.pathForRoute(l.id, l.fromLat, l.fromLng, l.toLat, l.toLng); } catch { l.path = null; }
+        }
+      }));
+      const a = allocate.allocate(r.chains, { profile, after: at });
+      const pick = r.chains[a.recommended != null ? a.recommended : 0];
+      out.push({ n: i, from: stops[i], to: stops[i + 1], modes,
+        depText: pick.depText, arrText: pick.arrText, totalMin: pick.totalMin,
+        fare: pick.fare, seat: pick.seat, changes: pick.changes,
+        alternatives: r.chains.length - 1,
+        reason: a.reason, explanation: allocate.sentence(a.reason),
+        legs: pick.legs });
+      legs.push(...pick.legs);
+      fare += pick.fare;
+      if (pick.simulated) anySimulated = true;
+      // the clock carries: the next hop cannot leave before this one lands
+      at = pick.arr;
+    }
+    const dep = out.length ? out[0].legs[0].depMin : start;
+    return send(res, 200, { ok: true, date, profile,
+      stops: stops.map((s, n) => ({ ...s, n })),
+      steps: out, legs, fare,
+      totalMin: ((at - dep) + 1440) % 1440,
+      simulated: anySimulated,
+      note: 'Each hop is planned by the same engine as a one-shot journey, and each one leaves when the one before it lands.' });
+  }
+
   if (p === '/api/plan') {
     const kindOf = k => k === 'metro' ? 'metro' : k === 'place' ? 'place' : 'rail';
     const fk = kindOf(q.get('fromKind')), tk = kindOf(q.get('toKind'));

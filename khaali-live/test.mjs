@@ -2489,6 +2489,47 @@ t('a journey may start on the map too, and the allocator still ranks it', () => 
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk').every(l => l.cap.occupancy === 0)));
 });
 
+console.log('\na journey she draws herself');
+
+t('a named vehicle can be a whole hop, which the guided planner will not do', () => {
+  const A = { name: 'Majestic', lat: 12.97567, lng: 77.57281 };
+  const B = { name: 'Hoodi', lat: 12.9902, lng: 77.7181 };
+  const c = JY.rideChain('car', A, B, 9 * 60);
+  assert.ok(c, 'she asked for a car and khaali refused to understand');
+  assert.strictEqual(c.legs.length, 1);
+  assert.strictEqual(c.legs[0].mode, 'car');
+  assert.strictEqual(c.changes, 0);
+  assert.ok(c.fare > 0 && c.legs[0].fareMin < c.legs[0].fareMax, 'still a range, still an estimate');
+  assert.strictEqual(c.legs[0].source, 'estimated');
+  // ...but the limits she is not asked about still hold
+  const far = { name: 'far', lat: 13.60, lng: 78.20 };
+  assert.strictEqual(JY.rideChain('car', A, far, 9 * 60), null, 'a 90 km taxi is not a hop');
+  assert.strictEqual(JY.rideChain('bike', A, B, 9 * 60, { pax: 3 }), null, 'three on a bike');
+  assert.strictEqual(JY.rideChain('bike', A, B, 9 * 60, { needs: ['step-free'] }), null);
+  assert.strictEqual(JY.rideChain('rocket', A, B, 9 * 60), null);
+});
+
+t('a hop she drew still obeys the hour', () => {
+  const A = { name: 'Majestic', lat: 12.97567, lng: 77.57281 };
+  const B = { name: 'Hoodi', lat: 12.9902, lng: 77.7181 };
+  const peak = JY.rideChain('car', A, B, 9 * 60), night = JY.rideChain('car', A, B, 22 * 60);
+  assert.ok(peak.totalMin > night.totalMin,
+    'peak ' + peak.totalMin + ' vs night ' + night.totalMin + ' - the road model is not reaching a custom hop');
+});
+
+t('the walk from a platform to the line is not a mode she has to enable', () => {
+  // somebody standing at Whitefield asking for the metro used to be told
+  // nothing runs, because every metro chain began with a train
+  const r = JY.journeys({ from: { kind: 'rail', id: 'WFD' }, to: { kind: 'metro', id: 'KGWA' },
+    after: 8 * 60, modes: ['metro'] });
+  assert.ok(r.ok && r.chains.length, 'no metro-only way off the Whitefield platform');
+  const c = r.chains.find(x => x.kind === 'metro-from-rail');
+  assert.ok(c, r.chains.map(x => x.kind).join(','));
+  assert.ok(c.legs.some(l => l.mode === 'walk'), 'the 1.7 km nobody mentions');
+  assert.ok(c.legs.some(l => l.mode === 'metro'));
+  assert.ok(!c.legs.some(l => l.mode === 'train'), 'she is already at the station');
+});
+
 console.log('\nthe road: measured where khaali can measure, declared where it cannot');
 
 t('the city has a speed, and it was measured, not typed', () => {

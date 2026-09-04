@@ -680,6 +680,10 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     </div>
     <div style="{{ pHireNoteStyle }}">{{ pHireNote }}</div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Your own</span>
+      <div onClick="{{ pcToggle }}" style="{{ pcToggleStyle }}">{{ pcToggleLabel }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
       <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="8">
         <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
@@ -705,6 +709,56 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <span style="{{ pStepBox }}">{{ pStepTick }}</span>
         <span style="font:600 13px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
       </div>
+    </div>
+  </div>
+
+  <div style="{{ pcWrapStyle }}">
+    <div style="{{ pcLeadStyle }}">{{ pcLead }}</div>
+    <sc-for list="{{ pcRows }}" as="r" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">
+        <div style="{{ r.dotStyle }}"></div>
+        <div style="{{ r.labelStyle }}">{{ r.label }}</div>
+        <div style="flex:1;min-width:0;position:relative">
+          <input value="{{ r.txt }}" onChange="{{ r.onTxt }}" onFocus="{{ r.onFocus }}" placeholder="Station, stop, or anywhere on the map" style="width:100%;height:42px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 13.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
+          <div style="{{ r.panel }}">
+            <sc-for list="{{ r.rows }}" as="o" hint-placeholder-count="5">
+              <div onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <div onClick="{{ r.onDrop }}" style="{{ r.dropStyle }}">&times;</div>
+      </div>
+    </sc-for>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0 14px">
+      <sc-for list="{{ pcHops }}" as="h" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span style="width:54px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ h.label }}</span>
+          <sc-for list="{{ h.chips }}" as="c" hint-placeholder-count="6">
+            <div onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.l }}</div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div onClick="{{ pcAdd }}" style="{{ pcAddStyle }}">{{ pcAddLabel }}</div>
+      <button onClick="{{ pcRun }}" style="{{ pcRunStyle }}">{{ pcRunLabel }}</button>
+    </div>
+    <div style="{{ pcErrStyle }}">{{ pcErr }}</div>
+    <div style="{{ pcHeadStyle }}">{{ pcHead }}</div>
+    <div style="{{ pcStepsStyle }}">
+      <sc-for list="{{ pcSteps }}" as="s" hint-placeholder-count="3">
+        <div style="{{ s.rowStyle }}">
+          <div style="{{ s.titleStyle }}">{{ s.title }}</div>
+          <div style="{{ s.whenStyle }}">{{ s.when }}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+            <sc-for list="{{ s.legs }}" as="g" hint-placeholder-count="2">
+              <span style="{{ g.style }}">{{ g.t }}</span>
+            </sc-for>
+          </div>
+          <div style="{{ s.altStyle }}">{{ s.alt }}</div>
+        </div>
+      </sc-for>
+      <div style="{{ pcNoteStyle }}">{{ pcNote }}</div>
     </div>
   </div>
 
@@ -5150,6 +5204,67 @@ class Component extends DCLogic {
     this.planLeaflet().then(ok=>{if(!ok)return;
       setTimeout(()=>{if(this.state.pMapChain)this.planPaintMap();else this.planPaintPick();},80);});
   }
+  /* ------------------------------------------------ a journey she draws --
+     The planner above answers "get me from here to there" and chooses the
+     shape itself. This one lets her draw the shape: Bangarpet, then the
+     office, then home, and the vehicle for each hop if she has an opinion.
+     Every hop is planned by the SAME engine - there is no second router and
+     no second set of fares - and the clock carries, so a slow first hop moves
+     everything after it. */
+  pcList(){
+    const s=this.state.pcStops;
+    return (s&&s.length>=2)?s:[{k:'rail',id:'BWT'},{k:'metro',id:'KGWA'},null];
+  }
+  pcModesList(){const m=this.state.pcModes||[];const n=this.pcList().length-1;
+    return Array.from({length:n},(_,i)=>m[i]||[]);}
+  pcSet(i,patch){const l=this.pcList().slice();l[i]=patch;this.setState({pcStops:l,pcOpen:null,pcRes:null});}
+  pcAdd(){const l=this.pcList().slice();if(l.length>=8)return;
+    const m=this.pcModesList().slice();m.push([]);
+    l.push(null);this.setState({pcStops:l,pcModes:m,pcRes:null});}
+  pcDrop(i){const l=this.pcList().slice();if(l.length<=2)return;
+    const m=this.pcModesList().slice();m.splice(Math.min(i,m.length-1),1);
+    l.splice(i,1);this.setState({pcStops:l,pcModes:m,pcRes:null});}
+  pcToggleMode(i,k){const m=this.pcModesList().slice();
+    const set=new Set(m[i]||[]);if(set.has(k))set.delete(k);else set.add(k);
+    m[i]=[...set];this.setState({pcModes:m,pcRes:null});}
+  /** A place typed into a custom stop, found on the map. */
+  async pcGeocode(i,q){
+    this.setState({pcGeoBusy:i});
+    try{
+      const r=await this.tfetch('/api/geocode?q='+encodeURIComponent(q),null,10000);
+      const j=await r.json();
+      if(!j||!j.ok||!j.found){this.setState({pcGeoBusy:null,pcErr:'khaali could not find '+q+' on the map.'});return;}
+      const p={...j.place,near:j.near};
+      this.planAddPlace(p);
+      this.setState({pcGeoBusy:null,pcErr:''});
+      this.pcSet(i,{k:'place',id:p.id});
+    }catch(e){this.setState({pcGeoBusy:null,pcErr:'The map did not answer. Try again.'});}
+  }
+  /** Plan the whole thing: every hop, in order, on one clock. */
+  async pcRun(){
+    const stops=this.pcList();
+    if(stops.some(x=>!x))return this.setState({pcErr:'Fill in every stop first.'});
+    if(this._pcBusy)return;this._pcBusy=true;
+    this.setState({pcBusy:true,pcErr:'',pcRes:null,pMapChain:null});
+    try{
+      const body={after:this.planAfterMin(),date:this.dateIsoFor(this.state.dayIdx||0),
+        profile:this.state.pProfile||'balanced',pax:this.state.pax||1,
+        needs:this.state.pStep?['step-free']:[],
+        stops:stops.map(x=>{const p=this.planPlace(x.k,x.id);return {kind:x.k,id:x.id,name:p?p.n:x.id};}),
+        modes:this.pcModesList()};
+      const r=await this.tfetch('/api/custom',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify(body)},20000);
+      const j=await r.json();
+      if(!j||!j.ok){this.setState({pcBusy:false,pcErr:(j&&j.error)||'khaali could not work that one out.',
+        pcFailedAt:j?j.failedAt:null});this._pcBusy=false;return;}
+      this.setState({pcBusy:false,pcRes:j,pcErr:'',pcFailedAt:null});
+      // the whole thing, drawn as one journey
+      this.planSelect({kind:'custom',legs:j.legs,dep:j.legs[0].depMin,arr:j.legs[j.legs.length-1].arrMin,
+        fare:j.fare,depText:j.steps[0].depText,arrText:j.steps[j.steps.length-1].arrText,
+        totalMin:j.totalMin,simulated:j.simulated},-1);
+    }catch(e){this.setState({pcBusy:false,pcErr:'khaali could not reach the planner. Try again.'});}
+    this._pcBusy=false;
+  }
   planPlace(k,id){return this.planPlaces().find(p=>p.k===k&&p.id===id)||null;}
   /** The metro is fetched once; until it lands the page plans trains only. */
   planBoot(){
@@ -6064,6 +6179,109 @@ class Component extends DCLogic {
       pPickNoteStyle:{display:S.pPick?'block':'none',marginTop:9,padding:'10px 12px',borderRadius:8,
         background:'var(--k-fdf3f5)',font:'600 12.5px/1.55 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
       // the paper: names and roads by default, or the quiet grey for a route read alone
+      // ---- a journey she draws herself ----
+      pcOn:!!S.pcOn,
+      pcToggleLabel:S.pcOn?'✕  Close the custom journey':'+  Build a custom journey',
+      pcToggle:()=>this.setState({pcOn:!S.pcOn,pcRes:null,pcErr:''}),
+      pcToggleStyle:{cursor:'pointer',display:'inline-flex',alignItems:'center',minHeight:38,
+        padding:'9px 16px',borderRadius:999,font:'700 13px/1 Manrope,sans-serif',
+        border:'1px solid '+(S.pcOn?'var(--k-14161a)':'var(--k-dedcd6)'),
+        background:S.pcOn?'var(--k-14161a)':'var(--k-fff)',color:S.pcOn?'#fff':'var(--k-fg-40434a)'},
+      pcWrapStyle:{display:S.pcOn?'block':'none',marginTop:14,background:'var(--k-fff)',
+        border:'1px solid var(--k-e6e5e0)',borderRadius:13,padding:'16px 18px'},
+      pcLead:'Every stop in order, and the vehicle for each hop if you have a view. Each hop leaves when the one before it lands.',
+      pcLeadStyle:{font:'500 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginBottom:14},
+      pcRows:this.pcList().map((st,i)=>{
+        const p=st?this.planPlace(st.k,st.id):null;
+        const txt=(S.pcTxt&&S.pcTxt[i]!=null)?S.pcTxt[i]:(p?p.n:'');
+        const open=S.pcOpen===i;
+        const q=String(txt).trim().toLowerCase();
+        const rows=this.planPlaces()
+          .filter(x=>!q||x.n.toLowerCase().indexOf(q)>=0||x.id.toLowerCase().indexOf(q)>=0)
+          .slice(0,6)
+          .map(x=>({n:x.n,c:x.k==='rail'?x.c:x.k==='place'?'MAP':'METRO',
+            row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--k-f4f3ef)'},
+            nStyle:{flex:1,font:'600 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:x.k==='rail'?'var(--k-fg-d8385a)':x.k==='place'?'var(--k-fg-8a8a84)':'#8C2877'},
+            onPick:()=>{const t=(S.pcTxt||[]).slice();t[i]=null;this.setState({pcTxt:t});this.pcSet(i,{k:x.k,id:x.id});}}))
+          .concat((((S.pStops||{})['c'+i])||[]).slice(0,4).map(bs=>({n:bs.name+(bs.hint?' · '+bs.hint:''),c:bs.station?'BUS STN':'BUS STOP',
+            row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--k-f4f3ef)'},
+            nStyle:{flex:1,font:'600 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'#1f6fd0'},
+            onPick:()=>{this.planAddPlace({id:bs.id,name:bs.name,lat:bs.lat,lng:bs.lng,near:null,stop:true});
+              const t=(S.pcTxt||[]).slice();t[i]=null;this.setState({pcTxt:t});this.pcSet(i,{k:'place',id:bs.id});}})))
+          .concat(q.length>=3?[{n:(S.pcGeoBusy===i?'Looking for ':'Search the map for ')+'“'+String(txt).trim()+'”',c:'MAP',
+            row:{display:'flex',alignItems:'baseline',gap:10,padding:'9px 12px',cursor:'pointer'},
+            nStyle:{flex:1,font:'700 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
+            cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)'},
+            onPick:()=>this.pcGeocode(i,String(txt).trim())}]:[]);
+        return {
+          label:i===0?'Start':(i===this.pcList().length-1?'End':('Stop '+(i+1))),
+          labelStyle:{width:54,flex:'none',font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.12em',
+            textTransform:'uppercase',color:'var(--k-fg-8a8a84)'},
+          dotStyle:{width:11,height:11,borderRadius:'50%',flex:'none',
+            background:i===0?'#2fa866':(i===this.pcList().length-1?'var(--k-d8385a)':'var(--k-14161a)')},
+          txt,
+          onTxt:e=>{const t=(S.pcTxt||[]).slice();t[i]=e.target.value;
+            this.setState({pcTxt:t,pcOpen:i});this.planStopSearch('c'+i,e.target.value);},
+          onFocus:()=>{this.planBoot();this.setState({pcOpen:i});},
+          rows,
+          panel:{display:open?'block':'none',position:'absolute',top:'calc(100% + 5px)',left:0,right:0,zIndex:40,
+            background:'var(--k-fff)',border:'1px solid var(--k-dedcd6)',borderRadius:9,
+            boxShadow:'0 12px 32px rgba(0,0,0,.16)',maxHeight:250,overflowY:'auto'},
+          onDrop:()=>this.pcDrop(i),
+          dropStyle:{display:this.pcList().length>2?'inline-flex':'none',cursor:'pointer',flex:'none',
+            width:30,height:30,alignItems:'center',justifyContent:'center',borderRadius:8,
+            border:'1px solid var(--k-dedcd6)',color:'var(--k-fg-8a8a84)',font:'700 14px/1 Manrope,sans-serif'},
+        };
+      }),
+      pcHops:this.pcModesList().map((sel,i)=>({
+        label:'by',
+        chips:[['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car','Car'],['bike','Bike']].map(([k,l])=>{
+          const on=k?sel.includes(k):sel.length===0;
+          const hire=k==='car'||k==='bike';
+          return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
+            else this.pcToggleMode(i,k);},
+            style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Manrope,sans-serif',minHeight:30,
+              display:'inline-flex',alignItems:'center',
+              border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
+              background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
+              color:on?'#fff':'var(--k-fg-40434a)'}};}),
+      })),
+      pcAdd:()=>this.pcAdd(),
+      pcAddLabel:'+  Add a stop',
+      pcAddStyle:{display:this.pcList().length<8?'inline-flex':'none',cursor:'pointer',alignItems:'center',minHeight:34,
+        padding:'8px 14px',borderRadius:999,font:'700 12px/1 Manrope,sans-serif',
+        border:'1px dashed var(--k-d4d3ce)',background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
+      pcRun:()=>this.pcRun(),
+      pcRunLabel:S.pcBusy?'Working out every hop…':'Plan this journey',
+      pcRunStyle:{border:'none',background:'var(--k-d8385a)',color:'#fff',minHeight:46,
+        font:'800 14px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:9,cursor:'pointer',
+        opacity:S.pcBusy?.6:1},
+      pcErr:S.pcErr||'',
+      pcErrStyle:{display:S.pcErr?'block':'none',marginTop:12,padding:'12px 14px',borderRadius:9,
+        background:'var(--k-fdf3f5)',font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+      pcHead:S.pcRes?(Math.floor(S.pcRes.totalMin/60)+'h '+String(S.pcRes.totalMin%60).padStart(2,'0')+'m  ·  ₹'+S.pcRes.fare
+        +'  ·  '+S.pcRes.steps.length+(S.pcRes.steps.length===1?' hop':' hops')):'',
+      pcHeadStyle:{display:S.pcRes?'block':'none',marginTop:16,font:'800 19px/1.2 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+      pcSteps:S.pcRes?S.pcRes.steps.map(st=>({
+        title:(st.n+1)+'.  '+st.from.name+'  →  '+st.to.name,
+        titleStyle:{font:'700 13.5px/1.4 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+        when:st.depText+' → '+st.arrText+'  ·  '+st.totalMin+' min  ·  ₹'+st.fare
+          +'  ·  '+(st.seat&&st.seat.word==='yes'?'you sit':st.seat?st.seat.word:''),
+        whenStyle:{font:'600 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:2},
+        legs:st.legs.filter(l=>l.mode!=='walk').map(l=>({
+          t:(l.name||l.line||l.mode),
+          style:{font:'700 10px/1 Manrope,sans-serif',letterSpacing:'.03em',padding:'5px 8px',borderRadius:5,color:'#fff',
+            background:l.mode==='train'?'var(--k-d8385a)':l.mode==='metro'?'#8C2877':l.mode==='bus'?'#1f6fd0'
+              :l.mode==='car'?'#0f8a7e':l.mode==='bike'?'#c9701a':'var(--k-8a8a84)'}})),
+        alt:st.alternatives?(st.alternatives+' other way'+(st.alternatives===1?'':'s')+' khaali found for this hop'):'',
+        altStyle:{display:st.alternatives?'block':'none',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:3},
+        rowStyle:{padding:'12px 0',borderTop:'1px solid var(--k-f0efeb)'},
+      })):[],
+      pcStepsStyle:{display:S.pcRes?'block':'none',marginTop:8},
+      pcNote:S.pcRes?S.pcRes.note:'',
+      pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
       pTrafficLabel:S.pTraffic?'Hide traffic':'Show traffic',
       togglePTraffic:()=>{this.setState({pTraffic:!S.pTraffic});
         setTimeout(()=>{if(S.pTraffic)this.planClearTraffic();else this.planTraffic();},0);},

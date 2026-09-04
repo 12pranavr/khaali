@@ -559,6 +559,20 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
   if (from.kind === 'rail' && to.kind === 'metro') {
     const destNear = railNear(STOPS[toMetro].lat, STOPS[toMetro].lng, 1.0);
 
+    // A0. already at Whitefield: walk to the line and ride it. No train at all.
+    //
+    // This is the journey this whole module was written for - the 1.7 km nobody
+    // mentions, and the stop 150 m away that is not the namesake. It was only
+    // ever reachable AFTER a train, so somebody standing at Whitefield asking
+    // for the metro was told nothing runs. A walk is not a mode she has to
+    // enable; it is how a person gets from a platform to a platform.
+    if (use('metro') && fromRail === WFD) {
+      const p = plan({ arriveAt: after, needs, to: to.id });
+      if (p.ok) out.push({ kind: 'metro-from-rail',
+        legs: p.legs.map(l => metroLegOut(l, b.stop.id)),
+        dep: after, arr: p.arrive, fare: p.fare.qr, plan: p });
+    }
+
     // A. train to Whitefield, then the metro
     if (use('train') && use('metro') && fromRail !== WFD) {
       trainsBetween(fromRail, WFD, after).forEach(t => {
@@ -748,6 +762,29 @@ export function mile(from, to, after, kmv, opts = {}) {
   if (opts.maxHireKm != null && kmv > opts.maxHireKm) return null;
   const l = hire.leg(kind, from, to, after, kmv, hhmm, dayMin);
   return { legs: [l], min: l.min, fare: l.fare, ride: l };
+}
+
+/**
+ * A whole hop in a hired vehicle, as a chain in its own right.
+ *
+ * The guided planner will not do this, and should not: there, a car exists to
+ * close a last mile nothing else reaches, and the cap and the hire penalty are
+ * what stop it becoming a taxi with a train ticket stapled to it.
+ *
+ * A journey she has built herself is a different question. If she says "car
+ * from the office to home", that is not khaali choosing a car over a bus - it
+ * is khaali being told, and refusing would be pretending not to understand.
+ */
+export function rideChain(kind, from, to, after, { pax = 1, needs = [] } = {}) {
+  if (!hire.HIRE[kind]) return null;
+  if (!hire.allowed([kind], { pax, needs }).length) return null;
+  if (!from || !to || from.lat == null || to.lat == null) return null;
+  const kmv = km(from, to);
+  if (!(kmv > 0) || kmv > hire.HIRE_MAX_KM) return null;
+  const l = hire.leg(kind, from, to, after, kmv, hhmm, dayMin);
+  return { kind: 'hire:' + kind, legs: [l], dep: l.depMin, arr: l.arrMin,
+    fare: l.fare, modes: [kind], totalMin: l.min,
+    depText: l.dep, arrText: l.arr, changes: 0, seat: l.seat, simulated: false };
 }
 
 /**
