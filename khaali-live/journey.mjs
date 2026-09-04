@@ -810,6 +810,15 @@ export function milesFor(from, to, after, kmv, opts = {}) {
   return kinds.map(k => mile(from, to, after, kmv, { ...opts, only: k })).filter(Boolean);
 }
 
+/** Where an end actually is, whatever kind of end it is. */
+export function pointOfEnd(end) {
+  if (!end) return null;
+  if (end.kind === 'place') return (end.lat == null) ? null : { name: end.name || 'there', lat: end.lat, lng: end.lng };
+  if (end.kind === 'rail') { const i = railIdx(end.id); return i < 0 ? null : { name: ST[i].n, lat: GEO[i].lat, lng: GEO[i].lng }; }
+  if (end.kind === 'metro') { const m = STOPS.find(x => x.id === end.id); return m ? { name: m.n, lat: m.lat, lng: m.lng } : null; }
+  return null;
+}
+
 /**
  * journeys(), but either end may be { kind:'place', lat, lng, name }.
  * Every nearby station is tried, and a journey is built through each one
@@ -843,6 +852,39 @@ export function journeysAnywhere(req) {
   const fromOpts = { ...mileOpts, maxHireKm: capOf(Fs) };
   const toOpts = { ...mileOpts, maxHireKm: capOf(Ts) };
   const out = []; const tried = { from: [], to: [] }; let anyMile = false;
+
+  // Sometimes the whole journey IS one bus. Every journey used to be routed
+  // through a railway or a metro station and then closed at each end, so
+  // Majestic to Koramangala - one direct BMTC bus, ten rupees, no train
+  // anywhere near it - came back as "no bus runs there". The city is not a
+  // set of last miles hanging off a rail corridor.
+  const A0 = pointOfEnd(from), B0 = pointOfEnd(to);
+  const wants = m => (req.modes || MODES).includes(m);
+  if (A0 && B0 && (wants('bus') || hireKinds.length)) {
+    const straight = km(A0, B0);
+    if (straight > 0.05) milesFor(A0, B0, req.after || 0, straight, mileOpts).forEach(m => {
+      if (!m || m.walk) return;                     // a walk alone is not a journey to offer
+      if (m.bus && !wants('bus')) return;
+      if (m.ride && !hireKinds.includes(m.ride.mode)) return;
+      const dep = req.after || 0, arr = dep + m.min;
+      if (req.by != null && arr > req.by) return;
+      const modes = m.legs.filter(l => l.mode !== 'walk').map(l => l.mode);
+      if (!modes.length) return;
+      const seated = m.legs.filter(l => l.seat && l.seat.rank != null);
+      anyMile = true;
+      out.push({
+        kind: 'direct|' + (m.ride ? m.ride.mode : m.bus ? m.bus.id : 'walk'),
+        legs: m.legs, dep, arr, fare: m.fare, modes,
+        totalMin: ((arr - dep) + 1440) % 1440,
+        depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr)),
+        changes: Math.max(0, modes.length - 1),
+        seat: seated.length ? seated.reduce((p, l) => l.seat.rank < p.seat.rank ? l : p).seat : { word: 'unknown', why: '' },
+        simulated: m.legs.some(l => l.source === 'simulated'),
+        via: { from: null, to: null },
+      });
+    });
+  }
+
   Fs.forEach(F => {
     const firsts = F ? milesFor(fromPt, F, req.after || 0, F.km, fromOpts) : [null];
     if (F) tried.from.push({ ...F, reached: !!firsts.length, by: byOf(firsts[0]) });

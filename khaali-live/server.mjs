@@ -43,6 +43,7 @@ import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
 import * as sim from './sim.mjs';
 import * as bmtc from './bmtc.mjs';
+import * as saarthi from './saarthi.mjs';
 journey.useBmtc(bmtc);
 import * as metro from './metro.mjs';
 import * as hire from './hire.mjs';
@@ -510,6 +511,9 @@ async function sarvam(messages, maxTokens = 4096) {   // 4096 = starter-tier cei
 
 const GREET_TEXT = '\u0928\u092e\u0938\u094d\u0924\u0947! \u092e\u0948\u0902 \u0916\u093e\u0932\u0940 \u0938\u0947 \u0938\u093e\u0930\u0925\u0940 \u092c\u094b\u0932 \u0930\u0939\u093e \u0939\u0942\u0901\u0964 \u092c\u0924\u093e\u0907\u090f, \u0906\u091c \u0915\u0939\u093e\u0901 \u091c\u093e\u0928\u093e \u0939\u0948?';
 const ttsCache = new Map();          // lang|text -> base64 mp3
+/** The last thing the voice said when it refused, so /api/meta and the phone
+    can tell a person the truth instead of shrugging. */
+let ttsBroken = null;
 /** Voice-safe text: no bullets, '=', slashes, brackets or markdown to spell out. */
 function speakable(t) {
   return String(t)
@@ -533,7 +537,21 @@ async function ttsAudio(text, lang) {
     body: JSON.stringify({ text, language_code: lang, model: 'bulbul:v3',
       speech_sample_rate: 22050, output_audio_codec: 'mp3' }),
   }).finally(() => clearTimeout(t));
-  if (!r.ok) throw new Error('tts http ' + r.status);
+  if (!r.ok) {
+    // the provider says WHY - no credits, a retired model, a bad language -
+    // and every one of those needs a different thing done about it, so the
+    // reason travels instead of being flattened into "tts failed"
+    let why = '';
+    try { const e = await r.json(); why = (e && e.error && (e.error.message || e.error.code)) || ''; } catch { /* not json */ }
+    const err = new Error('tts http ' + r.status + (why ? ': ' + why : ''));
+    err.upstream = r.status; err.why = String(why).slice(0, 200);
+    err.code = r.status === 402 ? 'no-credits' : r.status === 401 || r.status === 403 ? 'bad-key'
+      : r.status === 429 ? 'rate-limited' : 'upstream';
+    ttsBroken = { at: Date.now(), code: err.code, why: err.why, upstream: r.status };
+    console.error('[tts]', r.status, err.code, err.why);
+    throw err;
+  }
+  ttsBroken = null;
   const j = await r.json();
   const audio = (j.audios && j.audios[0]) || '';
   if (audio) { ttsCache.set(k, audio); if (ttsCache.size > 80) ttsCache.delete(ttsCache.keys().next().value); }
@@ -627,28 +645,7 @@ function scriptLangOf(t) {
   return null;
 }
 
-const SAARTHI_SYS = () => [
-  'You are Saarthi, the travel copilot inside khaali, a demo rail booking app for the Bangarpet\u2013Mysuru corridor in Karnataka, India.',
-  'CRITICAL: answer in the SAME language AND script the traveller wrote in — Kannada in Kannada script, Tamil in Tamil script, Hinglish in Hinglish. EXCEPTION: if they ASK for another language (for a family member, a friend, anyone), switch to it happily — never refuse a language request; you speak all Indian languages. Be warm and brief.',
-  'Corridor stations (index:code name): ' + ST.map((s, i) => i + ':' + s.c + ' ' + s.n).join(', ') + '.',
-  'Travellers write station names in any script or spelling — match them phonetically: Bangalore/Bengaluru/बेंगलुरु/ಬೆಂಗಳೂರು = index 5 (Bengaluru KSR City); Mysore/Mysuru/मैसूर/ಮೈಸೂರು = index 13 (Mysuru Jn); Whitefield = 1; Bangarpet = 0; Mandya/मंड्या/ಮಂಡ್ಯ = 11. If both stations are clear, DO return the search action — do not ask again.',
-  'khaali sells interval berths: green = berth free for the whole journey; amber = berth occupied for part of the route and free for the rest, priced only for the empty stretch, so it is cheaper. Payment is a simulated QR; this is a prototype, not IRCTC.',
-  'Today is ' + TODAY() + '. Bookings run from today up to 60 days ahead. Relative days: aaj/ivattu/indru/today = today (' + TODAY() + ') \u2014 DO include it as the date, the system answers with today\u2019s running trains; kal/nale/nalaikku = today+1; parso/naadiddu/ellundhaikku = today+2 \u2014 always convert to a concrete YYYY-MM-DD.',
-  'When the traveller asks about trains, seats, prices or availability between two corridor stations, respond ONLY with JSON: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day, resolved against today, otherwise omit it; include "around":"HH:MM" in 24-hour time ONLY when the traveller names a time of day \u2014 morning/subah/belagge/kaalai means AM, evening/shaam/sanje/maalai/raat means PM, so \u201caround 7:30 in the evening\u201d \u2192 "around":"19:30").',
-  'NEVER ask the traveller which date before searching. With no date named, omit the date field and search anyway \u2014 the system picks the first bookable day and tells them which day it used.',
-  'CANCELLATION QUESTIONS (which trains are cancelled / is X cancelled / kya cancel hai / \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"cancellations","from":<index>,"to":<index>,"date":"YYYY-MM-DD"}} \u2014 from/to/date all OPTIONAL (omit for the whole corridor; date defaults to tomorrow; today is allowed).',
-  'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, \u0cb5\u0cc7\u0caf\u0ccd\u0c9f\u0cbf\u0c82\u0c97\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} \u2014 wl REQUIRED (their waitlist position), the rest optional.',
-  'TICKET QUESTIONS (my ticket / meri booking / mera PNR / is my train ok / \u0ca8\u0ca8\u0ccd\u0ca8 \u0c9f\u0cbf\u0c95\u0cc6\u0c9f\u0ccd): respond ONLY with JSON {"say":"","action":{"type":"mybookings"}} \u2014 the system reads the traveller\u2019s real tickets and checks each for cancellation.',
-  // khaali stopped being a rail app some time ago. Saarthi was never told.
-  'khaali is not only trains. It also plans a whole journey across Bengaluru: BMTC buses (the real timetable, 9,875 stops), the Namma Metro Purple Line, the walk between them that nobody mentions, and - only when the traveller asks for one - a hired car or bike for a last mile no bus reaches. A trip pass covers the bus and metro legs of one journey and is spent when they have been ridden. khaali also measures how fast the roads are moving, from BMTC run times.',
-  'JOURNEY QUESTIONS - anything that is not two corridor rail stations. "How do I get to Hebbal", "bus to Majestic", "Bangarpet to Whitefield by metro", "I need to reach Indiranagar by nine", a house, an office, a landmark, a bus stop: respond ONLY with JSON {"say":"","action":{"type":"plan","from":"<their words for the origin>","to":"<their words for the destination>","after":"HH:MM","modes":["train","metro","bus"]}} - "after" ONLY if they named a time; "modes" ONLY if they restricted themselves, and include "car" or "bike" ONLY if they actually asked to hire one. The system plans it properly and answers with real times and fares.',
-  'NEVER state a bus number, a route, a fare, a departure time or how long a road takes from your own knowledge. You do not have that data - the planner does. Return the plan action and let the system answer. If you cannot, say you will look it up rather than guessing.',
-  'khaali cannot book a bus, a metro ride or a cab for anybody, and it takes no payment: it plans and shows. If asked to book, say the booking is done on the page and offer to plan the journey.',
-  'For anything else respond ONLY with JSON: {"say":"<your answer>","action":null}.',
-  'Your "say" text may be READ ALOUD: write plain flowing sentences only \u2014 never bullet lists, dashes, "=" signs, slashes, brackets, tables or markdown of any kind.',
-  'ONGOING CONVERSATIONS: follow-ups inherit context from history. \u201caur parso?\u201d = same route, date today+2. \u201c3AC mein?\u201d = same route and date, cls 3A. \u201cwapas\u201d or \u201creturn\u201d = swap from and to. Resolve them and STILL return the search action \u2014 never ask for information already in the history.',
-  'If a station is not on this corridor, say so and suggest the nearest corridor stations.',
-].join(' ');
+const SAARTHI_SYS = () => saarthi.systemPrompt(TODAY());
 
 // ------------------------------------------------------------------ trains --
 function trainCard(tr, from, to, date, cls) {
@@ -756,7 +753,8 @@ async function api(req, res, url) {
   if (p === '/api/health') {
     return send(res, 200, {
       ok: true, up: Math.round(process.uptime()),
-      sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size, bmtc: bmtc.stats(),
+      sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size,
+      voice: ttsBroken ? { ok: false, ...ttsBroken } : { ok: true, cached: ttsCache.size }, bmtc: bmtc.stats(),
       intel: { intent: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'local', explain: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'template', ask: SARVAM_KEY ? 'sarvam' : OPENAI_KEY ? 'openai' : 'template' },
     });
   }
@@ -2156,7 +2154,10 @@ async function api(req, res, url) {
     try {
       const audio = await ttsAudio(GREET_TEXT, 'hi-IN');
       return send(res, 200, { text: GREET_TEXT, audio, mime: 'audio/mpeg' });
-    } catch (e) { return send(res, 200, { text: GREET_TEXT, audio: '' }); }
+    } catch (e) {
+      // the greeting still arrives as words; only the voice is missing
+      return send(res, 200, { text: GREET_TEXT, audio: '', code: e.code || 'upstream', why: e.why || '' });
+    }
   }
 
   // Voice out: Bulbul v3 reads the answer back in the traveller's language.
@@ -2171,7 +2172,8 @@ async function api(req, res, url) {
     try {
       return send(res, 200, { audio: await ttsAudio(text, lang), mime: 'audio/mpeg' });
     } catch (e) {
-      return send(res, 502, { audio: '', error: 'tts failed' });
+      return send(res, e.upstream === 429 ? 429 : 502,
+        { audio: '', error: 'tts failed', code: e.code || 'upstream', upstream: e.upstream || 0, why: e.why || '' });
     }
   }
 
@@ -2192,34 +2194,7 @@ async function api(req, res, url) {
     try {
       // Few-shot pairs teach intent extraction far better than instructions,
       // especially for inflected Indian-language station names.
-      const SHOTS = [
-        { role: 'user', content: 'ನಾಳೆ ಮೈಸೂರಿನಿಂದ ಬೆಂಗಳೂರಿಗೆ ಸ್ಲೀಪರ್ ಇದೆಯಾ?' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"search","from":13,"to":5,"cls":"SL"}}' },
-        { role: 'user', content: 'parso Bangalore se Mysore jana hai' },
-        { role: 'assistant', content: JSON.stringify({ say: '', action: { type: 'search', from: 5, to: 13, cls: 'SL',
-          date: (() => { const d = new Date(Date.now() + 2 * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })() } }) },
-        { role: 'user', content: 'banglore se mandya jana hai aug 31 ko, kaunse trains hai?' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"search","from":5,"to":11,"cls":"SL","date":"2026-08-31"}}' },
-        { role: 'user', content: 'kal Whitefield se Mandya 3AC me kitna hoga?' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"search","from":1,"to":11,"cls":"3A"}}' },
-        { role: 'user', content: '\u0c87\u0cb5\u0ca4\u0ccd\u0ca4\u0cc1 \u0cac\u0c82\u0c97\u0cbe\u0cb0\u0caa\u0cc7\u0c9f\u0cc6\u0caf\u0cbf\u0c82\u0ca6 \u0cac\u0cc6\u0c82\u0c97\u0cb3\u0cc2\u0cb0\u0cbf\u0c97\u0cc6 \u0caf\u0cbe\u0cb5 \u0c9f\u0ccd\u0cb0\u0cc6\u0cd6\u0ca8\u0ccd \u0c87\u0ca6\u0cc6?' },
-        { role: 'assistant', content: JSON.stringify({ say: '', action: { type: 'search', from: 0, to: 5, cls: 'SL',
-          date: (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })() } }) },
-        { role: 'user', content: 'kal Bangalore se Mysore jana hai' },
-        { role: 'assistant', content: JSON.stringify({ say: '', action: { type: 'search', from: 5, to: 13, cls: 'SL',
-          date: (() => { const d = new Date(Date.now() + 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })() } }) },
-        { role: 'user', content: 'aur 3AC mein kitna hai?' },
-        { role: 'assistant', content: JSON.stringify({ say: '', action: { type: 'search', from: 5, to: 13, cls: '3A',
-          date: (() => { const d = new Date(Date.now() + 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })() } }) },
-        { role: 'user', content: '\u0caf\u0cbe\u0cb5 \u0cb0\u0cc8\u0cb2\u0cc1\u0c97\u0cb3\u0cc1 \u0c95\u0ccd\u0caf\u0cbe\u0ca8\u0ccd\u0cb8\u0cb2\u0ccd \u0c86\u0c97\u0cbf\u0cb5\u0cc6 \u0ca8\u0ccb\u0ca1\u0cbf \u0cb9\u0cc7\u0cb3\u0cbf' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"cancellations"}}' },
-        { role: 'user', content: 'mera ticket check karo, meri train theek hai na?' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"mybookings"}}' },
-        { role: 'user', content: 'meri waiting WL 14 hai Bangalore se Mysore, confirm hogi kya?' },
-        { role: 'assistant', content: '{"say":"","action":{"type":"odds","wl":14,"from":5,"to":13,"cls":"SL"}}' },
-        { role: 'user', content: 'yeh amber wali seat sasti kyun hai?' },
-        { role: 'assistant', content: '{"say":"Kyunki woh berth aapke route ke sirf ek hisse mein khaali hai — aap sirf us khaali stretch ka daam dete ho, poore safar ka nahi. Isliye woh green (poora raasta khaali) berth se sasti hai.","action":null}' },
-      ];
+      const SHOTS = saarthi.shots();
       const users = hist.filter(m => m.role === 'user');
       const lastUser = users[users.length - 1];
       const asked = lastUser ? requestedLangOf(lastUser.content) : null;

@@ -7365,22 +7365,66 @@ class Component extends DCLogic {
   /** The device's own voice: no key, no network, no credit. Saarthi's second
       mouth, for when Sarvam cannot answer or the browser will not play an
       mp3 it was handed. Returns true if the phone actually started talking. */
-  deviceSpeak(text,lang){
+  /** The device's voices arrive after the page does, so the first person to
+      tap Listen would otherwise be told the phone cannot speak. Wait for them
+      once, briefly. */
+  deviceVoices(){
+    const SS=window.speechSynthesis;
+    if(!SS)return Promise.resolve([]);
+    const now=SS.getVoices()||[];
+    if(now.length)return Promise.resolve(now);
+    if(this._voicesP)return this._voicesP;
+    this._voicesP=new Promise(res=>{
+      let done=false;
+      const finish=()=>{if(done)return;done=true;res(SS.getVoices()||[]);};
+      try{SS.addEventListener('voiceschanged',finish,{once:true});}catch(e){SS.onvoiceschanged=finish;}
+      setTimeout(finish,1500);
+    });
+    return this._voicesP;
+  }
+  async deviceSpeak(text,lang){
     try{
       const SS=window.speechSynthesis; if(!SS||!window.SpeechSynthesisUtterance)return false;
+      const vs=await this.deviceVoices();
+      const want=lang||'hi-IN';
+      const fam=x=>x&&x.lang?x.lang.replace('_','-').slice(0,2).toLowerCase():'';
+      const v=vs.find(x=>x.lang&&x.lang.replace('_','-')===want)
+        ||vs.find(x=>fam(x)===want.slice(0,2).toLowerCase())||null;
+      // Windows ships US English and nothing else. Handed Devanagari, Chrome
+      // does not refuse: it reports start, then end, in a few milliseconds,
+      // having said nothing at all. So khaali does not pretend - an Indian
+      // script with no Indian voice is a no, and the note says why.
+      const indic=/[\u0900-\u0DFF]/.test(String(text));
+      if(!v&&indic)return false;
+      if(!v&&!vs.length)return false;
       SS.cancel();
+      if(SS.paused){try{SS.resume();}catch(e){}}       // Chrome parks the queue
       const u=new SpeechSynthesisUtterance(String(text).slice(0,480));
-      u.lang=lang||'hi-IN'; u.rate=1;
-      const vs=SS.getVoices()||[];
-      const v=vs.find(x=>x.lang===u.lang)||vs.find(x=>x.lang&&x.lang.slice(0,2)===u.lang.slice(0,2));
+      u.lang=v?v.lang:want; u.rate=1;
       if(v)u.voice=v;
       const done=()=>{if(this._say===u){this._say=null;this._voiceKey=null;
         this.setState({chatSpeak:false,chatPlayKey:null});}};
-      u.onend=done;u.onerror=done;
-      this._say=u;this._voiceKey=text;
-      this.setState({chatSpeak:true,chatPlayKey:text,chatLoadKey:null,chatPlayPct:0});
-      SS.speak(u);
-      return true;
+      // a browser that will not speak fires onerror, or nothing at all; either
+      // way khaali must find out rather than show a stop button over silence
+      // speech runs at roughly a dozen characters a second; anything that
+      // finishes far faster than that never made a sound
+      const least=Math.min(2500,Math.max(220,String(text).slice(0,480).length*22));
+      const t0=Date.now();
+      return await new Promise(res=>{
+        let settled=false;
+        const ok=()=>{if(settled)return;settled=true;res(true);};
+        const bad=()=>{if(settled)return;settled=true;done();res(false);};
+        u.onstart=()=>{};                       // starting proves nothing here
+        u.onend=()=>{const quick=Date.now()-t0<least;done();
+          if(quick)bad(); else ok();};
+        u.onerror=bad;
+        this._say=u;this._voiceKey=text;
+        this.setState({chatSpeak:true,chatPlayKey:text,chatLoadKey:null,chatPlayPct:0});
+        SS.speak(u);
+        // still going after a moment: it is really speaking
+        setTimeout(()=>{ if(!settled&&(SS.speaking||SS.pending))ok(); },900);
+        setTimeout(()=>{ if(!settled)bad(); },Math.max(1600,least+400));
+      });
     }catch(e){return false;}
   }
   /** Why Saarthi went quiet. Silence is the one answer a voice must not give. */
@@ -7408,8 +7452,9 @@ class Component extends DCLogic {
     if(this.state.chatMute){this._voiceKey=null;this.setState({chatLoadKey:null});return;}
     // Sarvam could not speak it - the device still can
     if(!t||!t.audio){
-      if(this.deviceSpeak(text,lang))return;
+      if(await this.deviceSpeak(text,lang))return;
       return this.voiceFailed(t&&t.retryAfter?'Saarthi needs a short breather, try in '+t.retryAfter+'s.'
+        :(t&&t.code==='no-credits')?'Saarthi\u2019s voice service is out of credit, and this device has no Indian voice installed. The words are above.'
         :'Saarthi could not speak that just now. The words are above.');
     }
     const a=new Audio('data:'+(t.mime||'audio/mpeg')+';base64,'+t.audio);
@@ -7430,8 +7475,8 @@ class Component extends DCLogic {
     // codec the browser will not take. Whatever it is, it is not a reason for
     // khaali to say nothing at all - so ask the phone to read it instead.
     let rescued=false;
-    const rescue=()=>{if(rescued)return;rescued=true;off();
-      if(!this.deviceSpeak(text,lang))
+    const rescue=async()=>{if(rescued)return;rescued=true;off();
+      if(!await this.deviceSpeak(text,lang))
         this.voiceFailed('Your browser would not play it. Tap the page once, then try again.');};
     a.onerror=rescue;
     a.play().catch(rescue);
@@ -7477,13 +7522,22 @@ class Component extends DCLogic {
         const g=await this.tfetch('/api/greet',null,9000).then(r=>r.json());
         if(g.text)this.setState({chatOpen:true,
           chatMsgs:(this.state.chatMsgs||[]).concat([{role:'assistant',content:g.text}])});
-        if(g.audio&&!this.state.chatMute){
-          await new Promise(res=>{
-            const a=new Audio('data:audio/mpeg;base64,'+g.audio);
-            this._voice=a;this.setState({chatSpeak:true});
-            const fin=()=>{if(this._voice===a){this._voice=null;this.setState({chatSpeak:false});}res();};
-            a.onended=fin;a.onerror=fin;a.play().catch(fin);
-          });
+        if(!this.state.chatMute){
+          if(g.audio){
+            let played=false;
+            await new Promise(res=>{
+              const a=new Audio('data:audio/mpeg;base64,'+g.audio);
+              this._voice=a;this.setState({chatSpeak:true});
+              const fin=()=>{if(this._voice===a){this._voice=null;this.setState({chatSpeak:false});}res();};
+              a.onended=()=>{played=true;fin();};
+              a.onerror=fin;a.play().then(()=>{played=true;}).catch(fin);
+            });
+            // the mp3 never arrived at the speaker: the phone still can
+            if(!played)await this.deviceSpeak(g.text,'hi-IN');
+          }else{
+            // no voice from Sarvam - hello is the one thing that must be said
+            await this.deviceSpeak(g.text,'hi-IN');
+          }
         }
       }catch(e){}
     }

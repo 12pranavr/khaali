@@ -21,6 +21,7 @@ import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
 import * as RD from './road.mjs';
 import * as TR from './traffic.mjs';
+import * as SA from './saarthi.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -3071,5 +3072,147 @@ t('an overnight train is still offered, and still sorts last', () => {
   const arrs = r.chains.map(c => c.arr);
   assert.deepStrictEqual(arrs, [...arrs].sort((x, y) => x - y), 'the list is not in arrival order');
 });
+console.log('\nSaarthi: what it has been told khaali is');
+
+t('the brief opens with both halves of khaali, not just the trains', () => {
+  const p = SA.systemPrompt('2026-09-04');
+  const opening = p.slice(0, 420);
+  assert.match(opening, /books train berths/i);
+  assert.match(opening, /plans whole journeys/i);
+  assert.match(opening, /BMTC/);
+  assert.match(opening, /Metro/i);
+  // the old brief called khaali "a demo rail booking app for the corridor"
+  // in its first breath, and everything downstream inherited that
+  assert.ok(!/^You are Saarthi[^.]*rail booking app/i.test(p), 'khaali is not introduced as a rail app');
+});
+
+t('it is forbidden from turning a place away for being off the corridor', () => {
+  const p = SA.systemPrompt('2026-09-04');
+  // the exact instruction that produced "Kodigehalli Gate corridor mein nahi hai"
+  assert.ok(!p.includes('If a station is not on this corridor, say so and suggest the nearest corridor stations'),
+    'the refusal instruction is gone');
+  assert.match(p, /never say a place "is not on this corridor"/i);
+  assert.match(p, /never offer a corridor station as a substitute/i);
+  assert.match(p, /A PLACE YOU DO NOT RECOGNISE IS A PLAN, NEVER A REFUSAL/);
+  assert.match(p, /9,875/, 'it is told how many bus stops khaali actually holds');
+});
+
+t('the worked examples teach journeys as loudly as they teach trains', () => {
+  const shots = SA.shots(Date.parse('2026-09-04T06:00:00+05:30'));
+  const acts = shots.filter(m => m.role === 'assistant').map(m => JSON.parse(m.content).action).filter(Boolean);
+  const plans = acts.filter(a => a.type === 'plan');
+  const searches = acts.filter(a => a.type === 'search');
+  assert.ok(plans.length >= 4, 'journeys are shown, not only described: ' + plans.length);
+  assert.ok(plans.length >= searches.length - 1,
+    'and roughly as often as train searches (' + plans.length + ' vs ' + searches.length + ')');
+  // every example must be a shape the server actually handles
+  const known = ['search', 'plan', 'cancellations', 'odds', 'mybookings'];
+  acts.forEach(a => assert.ok(known.includes(a.type), 'unknown action taught: ' + a.type));
+  shots.filter(m => m.role === 'assistant').forEach(m => { JSON.parse(m.content); });
+});
+
+t('the bus stop that was refused is now a worked example', () => {
+  const shots = SA.shots();
+  const i = shots.findIndex(m => m.role === 'user' && /Kodigehalli Gate/i.test(m.content));
+  assert.ok(i >= 0, 'the question that broke it is in the brief');
+  const a = JSON.parse(shots[i + 1].content).action;
+  assert.strictEqual(a.type, 'plan');
+  assert.match(a.to, /Kodigehalli Gate/);
+  assert.strictEqual(a.from, 'Bangarpet');
+});
+
+t('a mode is only ever taught when the traveller named one', () => {
+  const shots = SA.shots();
+  const plans = [];
+  shots.forEach((m, i) => {
+    if (m.role !== 'assistant') return;
+    const a = JSON.parse(m.content).action;
+    if (a && a.type === 'plan') plans.push({ a, said: (shots[i - 1] || {}).content || '' });
+  });
+  plans.forEach(({ a, said: raw }) => {
+    if (!a.modes) return;
+    const said = raw.toLowerCase();
+    a.modes.forEach(m => {
+      const named = { bus: /bus|ಬಸ್/, metro: /metro|ಮೆಟ್ರೋ/, train: /train|metro|ರೈಲು/, car: /cab|car|taxi/, bike: /bike/ }[m];
+      assert.ok(named && named.test(said), 'taught "' + m + '" from: ' + said);
+    });
+  });
+  // a hired ride is never volunteered
+  const free = plans.filter(({ a }) => !a.modes || !a.modes.some(m => m === 'car' || m === 'bike'));
+  assert.ok(free.length >= 3, 'most journeys are taught without a cab');
+});
+
+t('Saarthi can say what the website does', () => {
+  const p = SA.systemPrompt('2026-09-04');
+  assert.ok(SA.PAGES.length >= 8);
+  SA.PAGES.forEach(([name, path]) => {
+    assert.ok(p.includes(name), 'the brief lists ' + name);
+    assert.ok(p.includes(path), 'and where it is: ' + path);
+  });
+  assert.match(p, /trip pass/i);
+  assert.match(p, /SOS/);
+  assert.match(p, /cannot book a bus, a metro ride or a cab/i, 'and is honest about what it cannot do');
+});
+
+t('the brief still knows the corridor and the day', () => {
+  const p = SA.systemPrompt('2026-09-04');
+  assert.match(p, /Today is 2026-09-04/);
+  assert.match(p, /0:BWT Bangarpet/);
+  assert.match(p, /13:MYS Mysuru Jn/);
+  assert.match(p, /interval berths/i);
+  const shots = SA.shots(Date.parse('2026-09-04T06:00:00+05:30'));
+  const dated = shots.filter(m => m.role === 'assistant').map(m => JSON.parse(m.content).action)
+    .filter(a => a && a.date);
+  assert.ok(dated.length >= 3);
+  dated.forEach(a => assert.match(a.date, /^2026-09-0[456]$/, 'dates are resolved against the day given: ' + a.date));
+});
+
+t('a journey across the city can be one bus, with no station in it', async () => {
+  JY.useBmtc(await import('./bmtc.mjs'));
+  const kora = { kind: 'place', lat: 12.94087, lng: 77.62502, name: 'Koramangala Bus Station' };
+  // Majestic to Koramangala is a direct BMTC route. khaali used to route every
+  // journey through a railway or metro station and close the ends, so this
+  // came back as "no bus runs there" while the bus was in its own timetable.
+  const r = JY.journeysAnywhere({ from: { kind: 'metro', id: 'KGWA' }, to: kora, after: 600, modes: ['bus'] });
+  assert.ok(r.ok && r.chains.length, 'a direct bus is a journey: ' + (r.reason || ''));
+  const c = r.chains[0];
+  const bus = c.legs.find(l => l.mode === 'bus');
+  assert.ok(bus && /^BMTC /.test(bus.name));
+  assert.ok(!c.legs.some(l => l.mode === 'train' || l.mode === 'metro'), 'and needs no train to justify itself');
+  assert.ok(c.fare > 0 && c.fare < 60);
+  assert.ok(c.totalMin > 0 && c.totalMin < 180);
+  assert.ok(c.seat && c.seat.word, 'it still answers the seat question');
+});
+
+t('a direct bus is never offered to someone who ruled buses out', () => {
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'rail', id: 'SBC' },
+    after: 480, modes: ['train'] });
+  assert.ok(r.ok && r.chains.length);
+  assert.ok(!r.chains.some(c => c.modes.includes('bus')), 'train only means train only');
+  assert.ok(!r.chains.some(c => c.modes.some(m => m === 'car' || m === 'bike')), 'and nothing is hired unasked');
+});
+
+t('an end knows where it is, whichever kind of end it is', () => {
+  const rail = JY.pointOfEnd({ kind: 'rail', id: 'BWT' });
+  assert.ok(rail && Math.abs(rail.lat - 12.99) < 0.2 && /Bangarpet/.test(rail.name));
+  const metro = JY.pointOfEnd({ kind: 'metro', id: 'KGWA' });
+  assert.ok(metro && Math.abs(metro.lng - 77.57) < 0.1);
+  const place = JY.pointOfEnd({ kind: 'place', lat: 13.1, lng: 77.6, name: 'somewhere' });
+  assert.strictEqual(place.lat, 13.1);
+  assert.strictEqual(JY.pointOfEnd({ kind: 'rail', id: 'NOPE' }), null);
+  assert.strictEqual(JY.pointOfEnd(null), null);
+});
+
+t('Saarthi is forbidden from inventing a starting point', () => {
+  const p = SA.systemPrompt('2026-09-04');
+  assert.match(p, /NEVER INVENT A STARTING POINT/);
+  const shots = SA.shots();
+  const i = shots.findIndex(m => m.role === 'user' && /^book me a cab to Hebbal$/.test(m.content));
+  assert.ok(i >= 0, 'the destination-only question is a worked example');
+  const reply = JSON.parse(shots[i + 1].content);
+  assert.strictEqual(reply.action, null, 'it asks instead of planning from nowhere');
+  assert.ok(reply.say && reply.say.length > 8);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
