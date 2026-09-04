@@ -619,6 +619,10 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <symbol id="ktk-bus" viewBox="0 0 24 24"><path fill="currentColor" d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v9.5a2.5 2.5 0 0 1-1.5 2.3V20a1 1 0 0 1-2 0v-1H7.5v1a1 1 0 0 1-2 0v-2.2A2.5 2.5 0 0 1 4 15.5V6Zm2 1v5h12V7H6Zm1.5 9a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm9 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z"/></symbol>
   <symbol id="ktk-metro" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8 2 4.5 2.6 4.5 6.5v8A3.5 3.5 0 0 0 8 18l-2 2.6v.4h12v-.4L16 18a3.5 3.5 0 0 0 3.5-3.5v-8C19.5 2.6 16 2 12 2Zm-5.5 5h11v4.5h-11V7Zm2 8.5A1.25 1.25 0 1 1 8.5 13a1.25 1.25 0 0 1 0 2.5Zm7 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></symbol>
   <symbol id="ktk-walk" viewBox="0 0 24 24"><path fill="currentColor" d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM9.8 8.9 7 11.2l1.3 1.6 2.1-1.7.7 3-2.6 2.6L6 22h2.4l2.3-4.4 2.6 2.1L14.5 22h2.3l-1.6-5.6-2.3-1.9 1-3.6c.9 1.2 2.3 2 4.1 2.1v-2c-1.6-.1-2.7-1-3.3-2.1l-1-1.6c-.5-.8-1.5-1.1-2.4-.8L9.8 8.9Z"/></symbol>
+  <symbol id="ktk-seat" viewBox="0 0 24 24"><path fill="currentColor" d="M6 3a2 2 0 0 1 2 2v7h6.5a2 2 0 0 1 2 1.7l.8 5.3H15l-.6-4H7a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2Zm12 8a2 2 0 0 1 2 2v8h-2v-8h-1.2l-.3-2H18Z"/></symbol>
+  <symbol id="ktk-swap" viewBox="0 0 24 24"><path fill="currentColor" d="M7.5 3.5 11 7H8.5v9.5h-2V7H4l3.5-3.5Zm9 17L13 17h2.5V7.5h2V17H20l-3.5 3.5Z"/></symbol>
+  <symbol id="ktk-clock" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 3v5.1l3.3 2-1 1.7L11 13V7h2Z"/></symbol>
+  <symbol id="ktk-fare" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h12v2h-3.6c.5.5.9 1.2 1.1 2H18v2h-2.5c-.4 2.4-2.4 4-5 4h-.6l5.9 5.6-1.4 1.4L6.6 14v-2h3.9c1.6 0 2.8-.8 3.2-2H6V8h7.7c-.4-1.2-1.6-2-3.2-2H6V4Z"/></symbol>
   <symbol id="ktk-car" viewBox="0 0 24 24"><path fill="currentColor" d="M5.8 5.5A2 2 0 0 1 7.7 4h8.6a2 2 0 0 1 1.9 1.5L19.4 10H21v2h-1v6.5a1.5 1.5 0 0 1-3 0V18H7v.5a1.5 1.5 0 0 1-3 0V12H3v-2h1.6l1.2-4.5ZM7.4 6l-.9 4h11l-.9-4H7.4ZM7 13.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm10 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/></symbol>
 </svg>
 <div class="k-mono" style="background:#ececee;color:#111113;min-height:100vh">
@@ -891,19 +895,33 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
           <div style="{{ r.odStyle }}">
             <div style="min-width:0">
+              <div style="{{ r.codeStyle }}">{{ r.fromCode }}</div>
               <div style="{{ r.bigStyle }}">{{ r.dep }}</div>
               <div style="{{ r.placeStyle }}">{{ r.fromName }}</div>
+              <div style="{{ r.dayStyle }}">{{ r.dayText }}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;min-width:72px">
-              <div style="{{ r.lnStyle }}"></div>
-              <div style="{{ r.midIcStyle }}"><svg width="14" height="14"><use href="{{ r.iconRef }}"></use></svg></div>
-              <div style="{{ r.lnStyle }}"></div>
+            <div style="{{ r.arcWrapStyle }}">
+              <svg width="104" height="38" viewBox="0 0 104 38" style="display:block;overflow:visible">
+                <path d="M3 30 Q52 4 101 30" fill="none" stroke="{{ r.arcStroke }}" stroke-width="1.6" stroke-linecap="round"></path>
+                <circle cx="3" cy="30" r="2.6" fill="{{ r.arcStroke }}"></circle>
+                <circle cx="101" cy="30" r="2.6" fill="{{ r.arcStroke }}"></circle>
+              </svg>
+              <div style="{{ r.arcDurStyle }}">{{ r.dur }}</div>
             </div>
             <div style="min-width:0;text-align:right">
+              <div style="{{ r.codeStyle }}">{{ r.toCode }}</div>
               <div style="{{ r.bigStyle }}">{{ r.arr }}</div>
               <div style="{{ r.placeStyle }}">{{ r.toName }}</div>
+              <div style="{{ r.dayStyle }}">{{ r.dayText }}</div>
             </div>
           </div>
+          <div style="{{ r.rule }}"></div>
+        </div>
+
+        <div style="{{ r.badgeRowStyle }}">
+          <sc-for list="{{ r.badges }}" as="b" hint-placeholder-count="2">
+            <span style="{{ b.style }}"><svg width="13" height="13"><use href="{{ b.ref }}"></use></svg>{{ b.l }}</span>
+          </sc-for>
         </div>
 
         <div style="{{ r.trkWrap }}">
@@ -922,7 +940,10 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="{{ r.factsWrap }}">
           <sc-for list="{{ r.facts }}" as="f" hint-placeholder-count="4">
             <div style="min-width:0">
-              <div style="{{ f.kStyle }}">{{ f.k }}</div>
+              <div style="{{ f.kRowStyle }}">
+                <svg width="12" height="12" style="flex:none"><use href="{{ f.ref }}"></use></svg>
+                <span style="{{ f.kStyle }}">{{ f.k }}</span>
+              </div>
               <div style="{{ f.vStyle }}">{{ f.v }}</div>
             </div>
           </sc-for>
@@ -6009,6 +6030,16 @@ class Component extends DCLogic {
     const line=bits.join(' \u00b7 ');
     return line.charAt(0).toUpperCase()+line.slice(1);
   }
+  /** The code on the platform board: BWT, SBC, KGWA. Null when the place is
+      a bus stop or a pin on the map, because inventing one would be a lie on
+      something shaped like a ticket. */
+  planCode(nm){
+    if(!nm)return null;
+    const st=(this.ST||[]).find(x=>x.n===nm);
+    if(st)return st.c;
+    const m=(this.state.pMetro||[]).find(x=>x.n===nm);
+    return m?m.id:null;
+  }
   planModes(){
     const m=this.state.pModes;
     return (!m||!m.length)?[...this.NET]:m;
@@ -6595,6 +6626,34 @@ class Component extends DCLogic {
         icStyle:{width:32,height:32,borderRadius:10,flex:'none',display:'flex',alignItems:'center',
           justifyContent:'center',background:M0.c,color:'#fff',font:'700 13px/1 Manrope,sans-serif'},
         iconRef:'#ktk-'+({train:'train',metro:'metro',bus:'bus',walk:'walk',car:'car',bike:'car',auto:'car'}[(ride[0]||{}).mode]||'train'),
+        // ---- route badges: the one place colour is allowed to shout ----
+        badges:ride.slice(0,4).map(l=>{
+          const M=MODE[l.mode]||MODE.train;
+          const label=l.mode==='metro'?'Purple Line'
+            :l.mode==='train'?String(l.id||'')
+            :l.mode==='bus'?String(l.id||'').replace(/^BMTC /,'')
+            :M.n;
+          return {l:label,
+            ref:'#ktk-'+({train:'train',metro:'metro',bus:'bus',car:'car',bike:'car',auto:'car'}[l.mode]||'train'),
+            style:{display:'inline-flex',alignItems:'center',gap:7,background:M.c,color:'#fff',
+              padding:'6px 11px 6px 8px',borderRadius:999,
+              font:'800 11.5px/1 Manrope,sans-serif',letterSpacing:'.01em',maxWidth:'100%',
+              overflow:'hidden',whiteSpace:'nowrap'}};
+        }),
+        badgeRowStyle:{display:'flex',gap:7,flexWrap:'wrap',padding:'12px 16px 0'},
+        // ---- codes above the times, dates under the places ----
+        fromCode:this.planCode(stops[0])||'',
+        toCode:this.planCode(stops[stops.length-1])||'',
+        codeStyle:{font:'700 11px/1 Manrope,sans-serif',letterSpacing:'.13em',color:fg2,marginBottom:6},
+        dayStyle:{font:'600 11px/1.35 Manrope,sans-serif',color:fg2,marginTop:3,opacity:.85},
+        dayText:(()=>{try{const d=new Date(this.dateIsoFor(S.dayIdx||0)+'T00:00:00');
+          return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return '';}})(),
+        // ---- the arc, and the time it takes, under it ----
+        arcWrapStyle:{position:'relative',flex:'none',width:104,height:38},
+        arcStroke:isRec?ONINK2:'var(--k-dedcd6)',
+        arcDurStyle:{position:'absolute',left:0,right:0,top:19,textAlign:'center',
+          font:'700 11.5px/1 Manrope,sans-serif',color:fg2,fontVariantNumeric:'tabular-nums'},
+        rule:{height:1,background:isRec?'rgba(255,255,255,.14)':'var(--k-e6e5e0)',margin:'14px 0 0'},
         whoStyle:{font:'600 10.5px/1.3 Manrope,sans-serif',color:fg2},
         whoText:isRec?('Recommended of '+chains.length):ride.map(l=>MODE[l.mode].n).join(', then ').toLowerCase(),
         nmStyle:{font:'800 13.5px/1.35 Manrope,sans-serif',color:fg,letterSpacing:'-.01em',
@@ -6638,10 +6697,11 @@ class Component extends DCLogic {
         // ---- the four numbers a pass carries ----
         factsWrap:{display:isRec?'grid':'none',gap:'10px 14px',padding:'0 18px 14px',
           gridTemplateColumns:'repeat(auto-fit,minmax(78px,1fr))'},
-        facts:[{k:'Seat',v:sk.short||sk.t},
-          {k:'Changes',v:String(c.changes)},
-          {k:'Door to door',v:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m'},
-          {k:'Total',v:'\u20b9'+c.fare}].map(x=>({...x,
+        facts:[{k:'Seat',v:sk.short||sk.t,ref:'#ktk-seat'},
+          {k:'Changes',v:String(c.changes),ref:'#ktk-swap'},
+          {k:'Door to door',v:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m',ref:'#ktk-clock'},
+          {k:'Total',v:'\u20b9'+c.fare,ref:'#ktk-fare'}].map(x=>({...x,
+          kRowStyle:{display:'flex',alignItems:'center',gap:6,color:ONINK2},
           kStyle:{font:'600 10px/1 Manrope,sans-serif',color:ONINK2},
           vStyle:{font:'800 13.5px/1.3 Manrope,sans-serif',color:ONINK,marginTop:3,letterSpacing:'-.01em',
             overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}})),
