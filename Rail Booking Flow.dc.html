@@ -768,6 +768,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:6px;display:flex;gap:4px">
         <button onClick="{{ pickPlan }}" style="{{ pPlanTab }}">Plan it for me</button>
         <button onClick="{{ pickBuild }}" style="{{ pBuildTab }}">Build my own</button>
+        <button onClick="{{ pickMap }}" style="{{ pMapTab }}">Pick on the map</button>
       </div>
 
       <sc-if value="{{ pIsPlan }}" hint-placeholder-val="{{ true }}">
@@ -905,6 +906,37 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     </div>
     <div style="{{ pSayNoteStyle }}">{{ pSayNote }}</div>
   </div>
+      </sc-if>
+
+      <sc-if value="{{ pIsMap }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <span style="font:700 19px/1.2 Archivo,sans-serif;letter-spacing:-.025em;color:var(--k-fg-14161a)">Where are you, and where to?</span>
+            <span style="font:500 13.5px/1.45 Archivo,sans-serif;color:var(--k-fg-6a6d75)">Let the phone say, or put a finger on the map. khaali names the point back to you and plans from there — no station required.</span>
+          </div>
+
+          <sc-for list="{{ pEnds }}" as="e" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:13px 14px;border-radius:14px;background:var(--k-fafaf8);border:1px solid var(--k-f0efeb)">
+              <div style="display:flex;align-items:baseline;gap:9px">
+                <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--k-fg-8a8a84)">{{ e.cap }}</span>
+                <span style="{{ e.armedStyle }}">{{ e.armed }}</span>
+              </div>
+              <span style="font:700 15.5px/1.3 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a);overflow-wrap:anywhere">{{ e.name }}</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <div onClick="{{ e.onHere }}" style="{{ e.hereStyle }}">{{ e.hereLabel }}</div>
+                <div onClick="{{ e.onPin }}" style="{{ e.pinStyle }}">{{ e.pinLabel }}</div>
+              </div>
+            </div>
+          </sc-for>
+
+          <div id="k-pickmap" class="k-planpick" style="height:320px;border-radius:14px;position:relative;z-index:0;overflow:hidden;border:1px solid var(--k-e6e5e0)"></div>
+          <div style="{{ pPickNoteStyle }}">{{ pPickNote }}</div>
+          <div style="{{ pGeoNoteStyle }}">{{ pGeoNote }}</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px">
+            <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
+          </div>
+          <div onClick="{{ pSearch }}" style="border-radius:14px;background:var(--k-14161a);color:#fff;font:700 15px/1 Archivo,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:15px 0">Search from here</div>
+        </div>
       </sc-if>
 
       <sc-if value="{{ pIsBuild }}" hint-placeholder-val="{{ false }}">
@@ -1099,21 +1131,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="{{ r.openPanel }}">
           <span style="font:700 15.5px/1.2 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-14161a)">Every step of it</span>
 
-          <div style="{{ r.mapWrap }}">
-                    <svg viewBox="{{ r.mapBox }}" width="100%" height="104" style="display:block;overflow:visible">
-                      <path d="{{ r.gWalk.d }}" style="{{ r.gWalk.style }}" fill="none" stroke="{{ r.gWalk.c }}" stroke-width="{{ r.gWalk.w }}" stroke-dasharray="{{ r.gWalk.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
-                      <path d="{{ r.gCar.d }}" style="{{ r.gCar.style }}" fill="none" stroke="{{ r.gCar.c }}" stroke-width="{{ r.gCar.w }}" stroke-dasharray="{{ r.gCar.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
-                      <path d="{{ r.gBus.d }}" style="{{ r.gBus.style }}" fill="none" stroke="{{ r.gBus.c }}" stroke-width="{{ r.gBus.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-                      <path d="{{ r.gMetro.d }}" style="{{ r.gMetro.style }}" fill="none" stroke="{{ r.gMetro.c }}" stroke-width="{{ r.gMetro.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-                      <path d="{{ r.gTrain.d }}" style="{{ r.gTrain.style }}" fill="none" stroke="{{ r.gTrain.c }}" stroke-width="{{ r.gTrain.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-                      <circle style="{{ r.p0s }}" cx="{{ r.p0x }}" cy="{{ r.p0y }}" r="5.5" fill="{{ r.p0f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                      <circle style="{{ r.p1s }}" cx="{{ r.p1x }}" cy="{{ r.p1y }}" r="5.5" fill="{{ r.p1f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                      <circle style="{{ r.p2s }}" cx="{{ r.p2x }}" cy="{{ r.p2y }}" r="5.5" fill="{{ r.p2f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                      <circle style="{{ r.p3s }}" cx="{{ r.p3x }}" cy="{{ r.p3y }}" r="5.5" fill="{{ r.p3f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                      <circle style="{{ r.p4s }}" cx="{{ r.p4x }}" cy="{{ r.p4y }}" r="5.5" fill="{{ r.p4f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                      <circle style="{{ r.p5s }}" cx="{{ r.p5x }}" cy="{{ r.p5y }}" r="5.5" fill="{{ r.p5f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-                    </svg>
-                        </svg>
+          <div class="k-jmap" style="{{ r.jmapStyle }}"></div>
+          <div style="{{ r.jmapBarStyle }}">
+            <span style="{{ r.jmapNoteStyle }}">{{ r.jmapNote }}</span>
+            <div onClick="{{ togglePTraffic }}" style="{{ pTrafficStyle }}">{{ pTrafficLabel }}</div>
+            <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
           </div>
 
           <div style="display:flex;flex-direction:column">
@@ -1202,13 +1224,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
       </div>
 
-  <div class="{{ pMapClass }}" style="{{ pMapStyle }}"><div id="k-planmap" style="width:100%;height:100%"></div></div>
-  <div style="{{ pMapPlainWrapStyle }}">
-    <div onClick="{{ togglePTraffic }}" style="{{ pTrafficStyle }}">{{ pTrafficLabel }}</div>
-    <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
-  </div>
   <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
-  <div style="{{ pMapNoteStyle }}">{{ pMapNote }}</div>
     </div>
   </div>
 </div>
@@ -5835,9 +5851,9 @@ class Component extends DCLogic {
         :'Nothing khaali can plan through is within reach of that point. Try somewhere closer to the city.'});
       // the pin appears where she pointed, named. A pin she dragged is already
       // where she wants it and the map stays exactly where she left it.
-      const map=this._pmap;
-      if(map&&!this.state.pMapChain){
-        this.planPaintPins(map);
+      const map=this._kmap;
+      if(map){
+        this.planPaintPicker();
         if(!dragged)try{map.setView([p.lat,p.lng],Math.max(map.getZoom(),14),{animate:true});}catch(e){}
       }
     }catch(e){this.setState({pPick:null,pGeoBusy:null,pGeoNote:'The map did not answer. Try again.'});}
@@ -5864,10 +5880,11 @@ class Component extends DCLogic {
       that a click on the map now means something. */
   planPick(which){
     if(this.state.pPick===which)return this.setState({pPick:null});
-    this.setState({pPick:which,pGeoNote:'',pOpen:null,pMapOpen:true});
+    // arming a pin opens the tab that has a map on it, rather than sending her
+    // past every result to find one at the bottom of the page
+    this.setState({pPick:which,pGeoNote:'',pOpen:null,pTab:'map',pcOn:false});
     this.planBoot();
-    this.planLeaflet().then(ok=>{if(!ok)return;
-      setTimeout(()=>{if(this.state.pMapChain)this.planPaintMap();else this.planPaintPick();},80);});
+    this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintPicker(),90);});
   }
   /* ------------------------------------------------------------ track --
      What is happening to her right now, in one place: the train she is on and
@@ -6784,11 +6801,19 @@ class Component extends DCLogic {
     this._ptile.addTo(map);
     this._ptile.bringToBack();
   }
+  /** The route's map: the one inside whichever journey is open. There is only
+    * ever one open, so there is only ever one of these - it simply moves. */
+  planRouteHost(){
+    const all=[...document.querySelectorAll('.k-jmap')];
+    return all.find(e=>e.offsetParent!==null&&e.clientHeight>40)||null;
+  }
   planMapEl(){
-    const el=document.getElementById('k-planmap');
+    const el=this.planRouteHost();
     if(!el||!window.L)return null;
     const L=window.L;
-    if(this._pmap&&this._pmapEl!==el){try{this._pmap.remove();}catch(e){}this._pmap=null;}
+    if(this._pmap&&this._pmapEl!==el){try{this._pmap.remove();}catch(e){}
+      try{this._pmapEl.className='k-jmap';}catch(e){}
+      this._pmap=null;this._pmapSig=null;this._ppins=[];}
     if(!this._pmap){
       this._pmap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
       this._pmapEl=el;
@@ -6802,6 +6827,41 @@ class Component extends DCLogic {
       });
     }
     return this._pmap;
+  }
+  /** The picker's map. Its own instance, because it is open at a different
+    * time and for a different reason than the route's. */
+  planPickMapEl(){
+    const el=document.getElementById('k-pickmap');
+    if(!el||!window.L||el.offsetParent===null)return null;
+    const L=window.L;
+    // leaving the tab takes the element out of the page; coming back builds a
+    // new one, and a map still bound to the old node paints onto nothing
+    if(this._kmap&&this._kmapEl!==el){try{this._kmap.remove();}catch(e){}
+      this._kmap=null;this._kpins=[];}
+    if(!this._kmap){
+      this._kmapEl=el;
+      this._kmap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
+      this.planBase(this._kmap);
+      // on this tab a tap always means something: whichever end is armed, or
+      // the start if she has armed neither
+      this._kmap.on('click',e=>{
+        if(!e||!e.latlng)return;
+        this.planUsePoint(this.state.pPick||'from',e.latlng.lat,e.latlng.lng);
+      });
+    }
+    return this._kmap;
+  }
+  /** The city, her two ends, and a tap that places one. */
+  planPaintPicker(){
+    const map=this.planPickMapEl();if(!map)return;
+    const L=window.L;
+    this.planPaintPins(map);
+    const at=(this._kpins||[]).map(m=>m.getLatLng());
+    const fit=()=>{try{map.invalidateSize(false);
+      if(at.length>1)map.fitBounds(L.latLngBounds(at).pad(0.35),{animate:false,maxZoom:14});
+      else if(at.length===1)map.setView(at[0],13);
+      else map.setView([12.9767,77.5713],11);}catch(e){}};
+    fit();setTimeout(fit,90);setTimeout(fit,340);
   }
   /** Where a chosen end actually is, whichever kind it is. */
   planCoordOf(p){
@@ -6821,8 +6881,9 @@ class Component extends DCLogic {
    */
   planPaintPins(map){
     const L=window.L;if(!L||!map)return;
-    if(this._ppins)this._ppins.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
-    this._ppins=[];
+    const key=(map===this._kmap)?'_kpins':'_ppins';
+    if(this[key])this[key].forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    this[key]=[];
     const S=this.state;
     const ends=[['from',this.planPlace(S.pFromK||'rail',S.pFromId||'BWT'),'#2fa866','A'],
       ['to',this.planPlace(S.pToK||'metro',S.pToId||'KGWA'),'#d8385a','B']];
@@ -6845,7 +6906,7 @@ class Component extends DCLogic {
       mk.on('dragend',()=>{this._pdrag=false;
         const ll=mk.getLatLng();
         this.planUsePoint(which,ll.lat,ll.lng,null,{dragged:true});});
-      this._ppins.push(mk);
+      this[key].push(mk);
     });
   }
   /**
@@ -6923,7 +6984,7 @@ class Component extends DCLogic {
     else setTimeout(()=>{try{map.invalidateSize(false);}catch(e){}},80);
   }
   planPaintMap(){
-    const c=this.state.pMapChain,el=document.getElementById('k-planmap');
+    const c=this.state.pMapChain,el=this.planRouteHost();
     if(!c||!el||!window.L)return;
     const L=window.L;
     const map=this.planMapEl();
@@ -7195,6 +7256,17 @@ class Component extends DCLogic {
         fromSaarthiStyle:{display:S.pLead===ci?'inline-block':'none',
           font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
           background:'#E9EEF6',color:'#1B3A6B',padding:'6px 10px',borderRadius:6},
+        // ---- the route, drawn on the ground it covers, inside the journey
+        // it belongs to. Only the open one has a host, so only the open one
+        // is drawn - there is one map and it follows the reader.
+        jmapStyle:{display:open?'block':'none',height:230,borderRadius:14,
+          position:'relative',zIndex:0,overflow:'hidden',
+          border:'1px solid var(--k-e6e5e0)',background:'var(--k-f1f1ee)'},
+        jmapBarStyle:{display:open?'flex':'none',alignItems:'center',gap:8,
+          flexWrap:'wrap',marginTop:-6},
+        jmapNote:c.simulated?'The dashed bus leg has no published timetable and is simulated.':'',
+        jmapNoteStyle:{flex:1,minWidth:160,font:'500 11.5px/1.5 Archivo,sans-serif',
+          color:'var(--k-fg-8a8a84)'},
         // ---- where this way sits on the shared clock ----
         trackLeft:((c.dep-AXt0)/AXwin*100).toFixed(2)+'%',
         trackWidth:(Math.max(c.totalMin,1)/AXwin*100).toFixed(2)+'%',
@@ -7317,7 +7389,9 @@ class Component extends DCLogic {
           border:(isRec?'2px solid var(--k-d8385a)':'1px solid '+(isSel?'var(--k-d8385a)':'var(--k-e6e5e0)')),
           boxShadow:isSel?'0 0 0 3px rgba(216,56,90,.16)':'none',
           borderRadius:11,padding:'18px 20px',marginBottom:12,position:'relative',cursor:'pointer'},
-        onSelect:()=>this.planSelect(c,ci),
+        // a journey you have chosen to look at is a journey you want drawn:
+        // selecting opens it, which is where its map lives
+        onSelect:()=>{this.planSelect(c,ci);this.setState({pOpenIdx:ci});},
         onMapNote:isSel?'On the map':'',
         onMapNoteStyle:{display:isSel?'inline-block':'none',
           font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.09em',textTransform:'uppercase',
@@ -7381,7 +7455,8 @@ class Component extends DCLogic {
         legTitleStyle:{font:'700 13px/1.35 Archivo,sans-serif',color:fg},
         legSubStyle:{font:'600 12px/1.5 Archivo,sans-serif',color:fg2},
         toggleLabel:open?'Hide the legs':'See every leg',
-        onToggle:()=>{this.planSelect(c,ci);this.setState({pOpenIdx:open?null:ci});},
+        onToggle:e=>{if(e&&e.stopPropagation)e.stopPropagation();
+          this.planSelect(c,ci);this.setState({pOpenIdx:open?null:ci});},
         onChoose:()=>{
           this.planSelect(c,ci);
           // what the ticket will need to remember about the rest of the way
@@ -7946,17 +8021,45 @@ class Component extends DCLogic {
       // ---- plan it for me, or build my own ----
       // The same switch the options drawer used to hide. Two ways of asking
       // the same question, so they sit next to each other and only one shows.
-      pIsPlan:!S.pcOn, pIsBuild:!!S.pcOn,
-      pickPlan:()=>this.setState({pcOn:false}),
-      pickBuild:()=>{this.pcList();this.setState({pcOn:true,pcRes:null,pcErr:''});},
-      pPlanTab:{border:'none',flex:1,cursor:'pointer',borderRadius:15,padding:'13px 0',
-        font:'700 14.5px/1 Archivo,sans-serif',
-        background:S.pcOn?'transparent':'var(--k-14161a)',
-        color:S.pcOn?'var(--k-fg-6a6d75)':'#fff'},
-      pBuildTab:{border:'none',flex:1,cursor:'pointer',borderRadius:15,padding:'13px 0',
-        font:'700 14.5px/1 Archivo,sans-serif',
-        background:S.pcOn?'var(--k-14161a)':'transparent',
-        color:S.pcOn?'#fff':'var(--k-fg-6a6d75)'},
+      // Three ways to ask the same question: let khaali plan it, chain the
+      // stops yourself, or say where you are by pointing at it.
+      ...(()=>{
+        const tab=S.pTab||(S.pcOn?'build':'plan');
+        const T=k=>({border:'none',flex:1,cursor:'pointer',borderRadius:15,padding:'12px 6px',
+          font:'700 13.5px/1.2 Archivo,sans-serif',
+          background:tab===k?'var(--k-14161a)':'transparent',
+          color:tab===k?'#fff':'var(--k-fg-6a6d75)'});
+        return {
+          pIsPlan:tab==='plan', pIsBuild:tab==='build', pIsMap:tab==='map',
+          pPlanTab:T('plan'), pBuildTab:T('build'), pMapTab:T('map'),
+          pickPlan:()=>this.setState({pTab:'plan',pcOn:false,pPick:null}),
+          pickBuild:()=>{this.pcList();this.setState({pTab:'build',pcOn:true,pcRes:null,pcErr:'',pPick:null});},
+          pickMap:()=>{this.planBoot();this.setState({pTab:'map',pcOn:false});
+            this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintPicker(),110);});},
+        };
+      })(),
+
+      // ---- the two ends, on the tab where you point at them ----
+      pEnds:[['from','Start',this.planPlace(S.pFromK||'rail',S.pFromId||'BWT')],
+        ['to','Destination',this.planPlace(S.pToK||'metro',S.pToId||'KGWA')]].map(([k,cap,p])=>{
+        const armed=S.pPick===k, busy=S.pGeoBusy===k;
+        const btn=on=>({cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6,
+          padding:'9px 13px',borderRadius:999,font:'700 12.5px/1 Archivo,sans-serif',minHeight:38,
+          border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),
+          background:on?'var(--k-14161a)':'var(--k-fff)',color:on?'#fff':'var(--k-fg-40434a)'});
+        return {cap,
+          name:p?p.n:'Not set',
+          armed:armed?'TAP THE MAP':'',
+          armedStyle:{display:armed?'inline-block':'none',
+            font:"700 9.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
+            background:'#E9EEF6',color:'#1B3A6B',padding:'4px 8px',borderRadius:5},
+          hereLabel:busy?'Finding you\u2026':'\u25c9 Use my live location',
+          onHere:()=>this.planLocate(k),
+          hereStyle:{...btn(false),opacity:busy?.6:1},
+          pinLabel:armed?'\u25cf Stop pinning':'\u25cf Pin on the map',
+          onPin:()=>this.planPick(k),
+          pinStyle:btn(armed)};
+      }),
 
       // ---- the shared clock, written out ----
       pAxis:chains.length?[0,.25,.5,.75,1].map(f=>({label:this.toHHMM(Math.round(AXt0+AXwin*f))})):[],
@@ -8872,16 +8975,18 @@ class Component extends DCLogic {
         this._autoRan=true;this.setState({pAutoSearch:false});
         setTimeout(()=>this.planSearch(),120);}
       if(S0.page!=='plan')this._autoRan=false;   // and a fresh link resets it too
-      if(S0.page==='plan'&&S0.pMapChain&&this._pmapSig!==this.planMapSig(S0.pMapChain))
+      if(S0.page==='plan'&&S0.pTab==='map')
+        this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintPicker(),60);});
+      if(S0.page==='plan'&&S0.pMapChain&&S0.pOpenIdx!=null
+         &&(this._pmapSig!==this.planMapSig(S0.pMapChain)||this._pmapEl!==this.planRouteHost()))
         this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
       // A route that is no longer the answer must come OFF the map. The box
       // stays open once she has used it, so without this a failed or changed
       // search leaves the previous journey drawn under a new question - which
       // is worse than showing nothing, because it looks like an answer.
-      else if(S0.page==='plan'&&!S0.pMapChain&&this._pmapSig)
+      else if(S0.page==='plan'&&(!S0.pMapChain||S0.pOpenIdx==null)&&this._pmapSig)
         this.planClearRoute();
-      else if(S0.page==='plan'&&!S0.pMapChain&&S0.pPick&&!this._pickView)
-        this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintPick(),60);});
+
       if(S0.page!=='plan')this._pmapSig=null;}
     {const S0=this.state;
       if(S0.page==='bookings'&&this._ordPage!==true){this._ordPage=true;this.loadOrders();}
