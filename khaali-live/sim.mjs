@@ -77,7 +77,7 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
       const people = (k, l) => base.get(k) * crushOf(l) + (loads.get(k) || 0);
       const refresh = () => cands.forEach(c => {
         c.legs.forEach(l => {
-          if (l.mode === 'walk' || !l.cap) return;
+          if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
           const k = vehicleKey(l, headway);
           if (!base.has(k)) base.set(k, l.cap.occupancy == null ? 0.5 : l.cap.occupancy);
           if (!seen.has(k)) seen.set(k, l);
@@ -89,7 +89,7 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
       });
       refresh();
       // a vehicle that cannot take the next slice is not a choice
-      const full = (c, slice) => c.legs.some(l => l.mode !== 'walk' && l.cap && people(vehicleKey(l, headway), l) + slice > crushOf(l));
+      const full = (c, slice) => c.legs.some(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap && people(vehicleKey(l, headway), l) + slice > crushOf(l));
       // one decision per slice, so a bucket of two hundred does not all pile
       // onto one bus and the next slice sees what the last one did
       let left = count;
@@ -101,13 +101,13 @@ export function simulate({ candidates, n = 10000, start = 480, end = 540, profil
         if (mode === 'baseline') pick = open.reduce((p, c) => span(c, { after: t }) < span(p, { after: t }) ? c : p);
         else { const a = allocate(open, { profile, after: t }); pick = a.recommended != null ? open[a.recommended] : open[0]; }
         pick.legs.forEach(l => {
-          if (l.mode === 'walk' || !l.cap) return;
+          if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
           const k = vehicleKey(l, headway);
           loads.set(k, (loads.get(k) || 0) + slice);
         });
         refresh();
         // did this slice stand: any leg past its seats
-        const stands = pick.legs.some(l => l.mode !== 'walk' && l.cap && people(vehicleKey(l, headway), l) > seatsOf(l));
+        const stands = pick.legs.some(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap && people(vehicleKey(l, headway), l) > seatsOf(l));
         if (stands) standing += slice;
         totalSpan += span(pick, { after: t }) * slice;
         assigned += slice;

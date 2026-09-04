@@ -605,6 +605,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="{{ pSayNoteStyle }}">{{ pSayNote }}</div>
   </div>
 
+  <div style="{{ pGeoNoteStyle }}">{{ pGeoNote }}</div>
   <div class="k-searchgrid" style="margin-top:20px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px;display:grid;grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr) auto auto;gap:12px;align-items:end">
     <div class="k-stnwrap" style="min-width:0;position:relative">
       <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">From</div>
@@ -660,15 +661,18 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </sc-for>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">When</span>
-      <div style="display:flex;align-items:center">
-        <div onClick="{{ onWhenAfter }}" style="{{ pWhenAfterStyle }}">Leave after</div>
-        <div onClick="{{ onWhenBy }}" style="{{ pWhenByStyle }}">Reach by</div>
-      </div>
-      <sc-for list="{{ pTimeChips }}" as="t" hint-placeholder-count="6">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
+      <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="8">
         <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
       </sc-for>
-      <span style="font:500 11.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ pWhenHint }}</span>
+      <input type="time" value="{{ pAfterVal }}" onChange="{{ setPAfterVal }}" style="{{ pAfterCustomStyle }}"></input>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Reach by</span>
+      <sc-for list="{{ pByChips }}" as="t" hint-placeholder-count="7">
+        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+      </sc-for>
+      <input type="time" value="{{ pByVal }}" onChange="{{ setPByVal }}" style="{{ pByCustomStyle }}"></input>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Rank by</span>
@@ -4874,12 +4878,31 @@ class Component extends DCLogic {
 
   /** Everywhere khaali can plan from or to: the corridor, and the line. */
   planPlaces(){
-    if(this._pp)return this._pp;
+    if(this._pp)return this._pp.concat(this.state.pCustom||[]);
     const rail=this.ST.map((s,i)=>({k:'rail',id:s.c,i,n:s.n,sub:'Railway station',c:s.c}));
     const metro=(this.state.pMetro||[]).map((m,mi)=>({k:'metro',id:m.id,mi,n:m.n,
       sub:'Namma Metro \u00b7 Purple Line',c:m.id,kn:m.kn}));
     this._pp=rail.concat(metro);
-    return this._pp;
+    return this._pp.concat(this.state.pCustom||[]);
+  }
+  /** A place off the network, found on the map and remembered for the pickers. */
+  planAddPlace(p){
+    const cur=(this.state.pCustom||[]).filter(x=>x.id!==p.id);
+    const near=p.near?('nearest: '+p.near.name+', '+p.near.km+' km'):'';
+    cur.unshift({k:'place',id:p.id,n:p.name,sub:'On the map'+(near?' \u00b7 '+near:''),c:'MAP',lat:p.lat,lng:p.lng,near:p.near||null});
+    this.setState({pCustom:cur.slice(0,12)});
+  }
+  async planGeocode(which,q){
+    this.setState({pGeoBusy:which});
+    try{
+      const r=await this.tfetch('/api/geocode?q='+encodeURIComponent(q),null,10000);
+      const j=await r.json();
+      if(!j||!j.ok||!j.found){this.setState({pGeoBusy:null,pGeoNote:'khaali could not find '+q+' on the map.'});return;}
+      const p={...j.place,near:j.near};
+      this.planAddPlace(p);
+      this.setState(which==='from'?{pFromK:'place',pFromId:p.id,pTxtF:null,pOpen:null,pGeoBusy:null,pGeoNote:''}
+        :{pToK:'place',pToId:p.id,pTxtT:null,pOpen:null,pGeoBusy:null,pGeoNote:''});
+    }catch(e){this.setState({pGeoBusy:null,pGeoNote:'The map did not answer. Try again.'});}
   }
   planPlace(k,id){return this.planPlaces().find(p=>p.k===k&&p.id===id)||null;}
   /** The metro is fetched once; until it lands the page plans trains only. */
@@ -4916,11 +4939,9 @@ class Component extends DCLogic {
   /** "Leave after" and "Reach by" are one control with two meanings, and the
       meaning changes what the engine searches for - not what the list is
       filtered by afterwards. */
-  planWhen(){return this.state.pWhen==='by'?'by':'after';}
-  planTimeVal(){const v=this.state.pTime;
-    if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}
-    return null;}
-  planByMin(){return this.planWhen()==='by'?this.planTimeVal():null;}
+  planMinOf(v){if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}return null;}
+  planTimeVal(){return this.planMinOf(this.state.pTime);}
+  planByMin(){return this.planMinOf(this.state.pBy);}
   /** A time chosen from words, because a native time picker on a phone is a
       three-column slot machine and nobody wants one to say "after nine". */
   planSegStyle(on,left){
@@ -4929,21 +4950,31 @@ class Component extends DCLogic {
       borderRadius:left?'999px 0 0 999px':'0 999px 999px 0',marginLeft:left?0:-1,
       background:on?'var(--k-14161a)':'var(--k-fff)',color:on?'#fff':'var(--k-fg-14161a)'};
   }
-  planTimeChips(){
-    const cur=this.state.pTime, which=this.planWhen();
+  /** Leave after and Reach by are two separate things, and both count: the
+      clock starts at one and the search is cut off at the other. Each has
+      its chips and a custom time. */
+  planTimeChips(which){
+    const S=this.state;
+    const cur=which==='after'?S.pTime:S.pBy;
+    const customOn=which==='after'?!!S.pAfterCustom:!!S.pByCustom;
     const opts=which==='after'
-      ?[['','Now'],['06:00','6 am'],['08:00','8 am'],['09:00','9 am'],['12:00','Noon'],['17:00','5 pm'],['20:00','8 pm']]
-      :[['09:00','9 am'],['10:00','10 am'],['12:00','Noon'],['18:00','6 pm'],['22:00','10 pm']];
-    return opts.map(([v,l])=>({l,on:(cur||'')===v,
-      onClick:()=>this.setState({pTime:v}),
+      ?[['','Now'],['06:00','6 am'],['08:00','8 am'],['09:00','9 am'],['12:00','Noon'],['17:00','5 pm'],['20:00','8 pm'],['custom','Custom']]
+      :[['','Any'],['09:00','9 am'],['10:00','10 am'],['12:00','Noon'],['18:00','6 pm'],['22:00','10 pm'],['custom','Custom']];
+    const preset=opts.filter(o=>o[0]!=='custom').some(o=>o[0]===(cur||''));
+    return opts.map(([v,l])=>{
+      const on=v==='custom'?(customOn||!preset):(!customOn&&(cur||'')===v);
+      return {l,on,
+      onClick:()=>this.setState(v==='custom'
+        ?(which==='after'?{pAfterCustom:true}:{pByCustom:true})
+        :(which==='after'?{pTime:v,pAfterCustom:false}:{pBy:v,pByCustom:false})),
       style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
         font:'700 12.5px/1 Manrope,sans-serif',
-        border:'1px solid '+((cur||'')===v?'var(--k-d8385a)':'var(--k-dedcd6)'),
-        background:(cur||'')===v?'var(--k-d8385a)':'var(--k-fff)',
-        color:(cur||'')===v?'#fff':'var(--k-fg-40434a)'}}));
+        border:'1px solid '+(on?'var(--k-d8385a)':'var(--k-dedcd6)'),
+        background:on?'var(--k-d8385a)':'var(--k-fff)',
+        color:on?'#fff':'var(--k-fg-40434a)'}};});
   }
   planAfterMin(){
-    if(this.planWhen()==='after'){const t=this.planTimeVal();if(t!=null)return t;}
+    const t=this.planTimeVal();if(t!=null)return t;
     if((this.state.dayIdx||0)>0)return 0;            // a future day starts at midnight
     const d=this.simNowDate();return d.getHours()*60+d.getMinutes();
   }
@@ -4968,9 +4999,13 @@ class Component extends DCLogic {
       if(!j||!j.ok)throw new Error('no');
       const st={pSayBusy:false,pSayNote:j.understood?('Understood: '+j.understood):'',pSayProvider:j.provider};
       const R=j.request,V=j.resolved;
+      if(V.from&&V.from.kind==='place')this.planAddPlace(V.from);
+      if(V.to&&V.to.kind==='place')this.planAddPlace(V.to);
       if(V.from){st.pFromK=V.from.kind;st.pFromId=V.from.id;st.pTxtF=null;}
       if(V.to){st.pToK=V.to.kind;st.pToId=V.to.id;st.pTxtT=null;}
-      if(R.timeConstraint){st.pWhen=R.timeConstraint.type==='ARRIVE_BY'?'by':'after';st.pTime=R.timeConstraint.value;}
+      st.pTime='';st.pBy='';
+      if(R.timeConstraint){if(R.timeConstraint.type==='ARRIVE_BY')st.pBy=R.timeConstraint.value;else st.pTime=R.timeConstraint.value;}
+      if(R.leaveAfter)st.pTime=R.leaveAfter;
       st.pModes=R.modes;
       st.pStep=R.needs.includes('step-free');
       st.pProfile=R.profile||'balanced';
@@ -5046,8 +5081,8 @@ class Component extends DCLogic {
     this.setState({pBusy:true,pRes:null,pOpenIdx:null});
     // the whole journey, from the one route that knows about all three modes
     try{
-      const qs='fromKind='+F.k+'&fromId='+encodeURIComponent(F.id)
-        +'&toKind='+T.k+'&toId='+encodeURIComponent(T.id)
+      const qs='fromKind='+F.k+'&fromId='+encodeURIComponent(F.id)+(F.k==='place'?'&fromName='+encodeURIComponent(F.n):'')
+        +'&toKind='+T.k+'&toId='+encodeURIComponent(T.id)+(T.k==='place'?'&toName='+encodeURIComponent(T.n):'')
         +'&after='+after+(by!=null?'&by='+by:'')
         +'&date='+this.dateIsoFor(S.dayIdx||0)
         +'&modes='+this.planModes().join(',')
@@ -5191,10 +5226,11 @@ class Component extends DCLogic {
             .bindTooltip(l.name+' \u00b7 '+l.from+' \u2192 '+l.to+(l.source==='simulated'?' \u00b7 simulated':''));
           pts.push(...seg);a=seg[0];b=seg[1];
         }
-      }else if(l.mode==='walk'){
-        const p=anyPt(l.from),q=anyPt(l.to);
-        if(p&&q){add(L.polyline([p,q],{color:COL.walk,weight:4,dashArray:'2 8'}))
-          .bindTooltip('Walk '+Math.round((l.km||0)*1000)+' m');pts.push(p,q);a=p;b=q;}
+      }else if(l.mode==='walk'||l.mode==='auto'){
+        const p=(l.fromLat&&l.fromLng)?[l.fromLat,l.fromLng]:anyPt(l.from);
+        const q=(l.toLat&&l.toLng)?[l.toLat,l.toLng]:anyPt(l.to);
+        if(p&&q){add(L.polyline([p,q],{color:l.mode==='auto'?'#2a9d8f':COL.walk,weight:l.mode==='auto'?5:4,dashArray:l.mode==='auto'?'6 8':'2 8'}))
+          .bindTooltip(l.mode==='auto'?('Auto or local bus '+'\u00b7'+' about '+l.km+' km'):('Walk '+Math.round((l.km||0)*1000)+' m'));pts.push(p,q);a=p;b=q;}
       }
       if(a)marks.push({p:a,n:l.from});
       if(b)marks.push({p:b,n:l.to});
@@ -5233,7 +5269,7 @@ class Component extends DCLogic {
         .filter(p=>!(other&&p.k===other.k&&p.id===other.id))
         .filter(p=>!q||p.n.toLowerCase().indexOf(q)>=0||p.id.toLowerCase().indexOf(q)>=0||(p.kn||'').indexOf(txt.trim())>=0)
         .slice(0,7)
-        .map(p=>({n:p.n,c:p.k==='rail'?p.c:'METRO',km:p.k==='rail'?'rail':'metro',
+        .map(p=>({n:p.n,c:p.k==='rail'?p.c:p.k==='place'?'MAP':'METRO',km:p.k==='rail'?'rail':p.k==='place'?'map':'metro',
           row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
             borderBottom:'1px solid var(--k-f4f3ef)'},
           nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
@@ -5241,7 +5277,15 @@ class Component extends DCLogic {
           kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
           onPick:()=>{this.setState(which==='from'
             ?{pFromK:p.k,pFromId:p.id,pTxtF:null,pOpen:null}
-            :{pToK:p.k,pToId:p.id,pTxtT:null,pOpen:null});}}));
+            :{pToK:p.k,pToId:p.id,pTxtT:null,pOpen:null});}}))
+        // anywhere else: ask the map
+        .concat(q.length>=3?[{n:(S.pGeoBusy===which?'Looking for ':'Search the map for ')+'\u201c'+txt.trim()+'\u201d',c:'MAP',km:'',
+          row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
+            background:'var(--k-fafaf8)',borderBottom:'1px solid var(--k-f4f3ef)'},
+          nStyle:{flex:1,font:'700 13px/1.3 Manrope,sans-serif',color:'var(--k-fg-1f3f8f)'},
+          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-1f3f8f)'},
+          kmStyle:{width:44},
+          onPick:()=>this.planGeocode(which,txt.trim())}]:[]);
     };
     const panel=(which)=>({display:S.pOpen===which?'block':'none',position:'absolute',
       top:'calc(100% + 5px)',left:0,minWidth:260,zIndex:90,background:'var(--k-fff)',
@@ -5255,6 +5299,7 @@ class Component extends DCLogic {
     const MODE={train:{c:'var(--k-d8385a)',g:'\u25ac',n:'Train'},
       metro:{c:'#8C2877',g:'\u25cf',n:'Metro'},
       bus:{c:'#1f6fd0',g:'\u25b0',n:'Bus'},
+      auto:{c:'#2a9d8f',g:'\u25b2',n:'Auto'},
       walk:{c:'var(--k-8a8a84)',g:'\u00b7',n:'Walk'}};
     const SEAT={yes:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'You get a seat'},
       likely:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'Seat likely'},
@@ -5305,6 +5350,7 @@ class Component extends DCLogic {
         legs:c.legs.map(l=>({
           dotStyle:{background:(MODE[l.mode]||MODE.walk).c},
           title:l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m '+'\u00b7'+' about '+l.min+' min')
+            :l.mode==='auto'?(l.name+' '+'\u00b7'+' about '+l.km+' km, '+l.min+' min '+'\u00b7'+' \u20b9'+l.fare+' estimated')
             :l.mode==='train'?(l.name+' '+'\u00b7'+' '+l.id)
             :l.mode==='bus'?(l.name+' '+'\u00b7'+' every '+l.every+' min')
             :(l.line+' '+'\u00b7'+' every '+l.every+' min'),
@@ -5430,12 +5476,15 @@ class Component extends DCLogic {
       pSimNote:(S.pSim&&S.pSim.baseline)?('Baseline: everyone takes the way that gets them there soonest. Allocated: each person gets the best way given everyone before them. '
         +S.pSim.n.toLocaleString('en-IN')+' people ready between '+this.toHHMM(S.pSim.start)+' and '+this.toHHMM(S.pSim.end)+', '+(S.pSim.profile)+' profile. Bus loads are estimated, metro loads predicted, train loads counted; the KSRTC leg is simulated.'):'',
       pSimNoteStyle:{display:(S.pSim&&S.pSim.baseline)?'block':'none',marginTop:10,font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
-      pTimeChips:this.planTimeChips(),
-      onWhenAfter:()=>this.setState({pWhen:'after',pTime:''}),
-      onWhenBy:()=>this.setState({pWhen:'by',pTime:'09:00'}),
-      pWhenAfterStyle:this.planSegStyle(this.planWhen()==='after',true),
-      pWhenByStyle:this.planSegStyle(this.planWhen()==='by',false),
-      pWhenHint:this.planWhen()==='after'?'the earliest you can leave':'the latest you can arrive',
+      pAfterChips:this.planTimeChips('after'),
+      pByChips:this.planTimeChips('by'),
+      pAfterVal:S.pTime||'',pByVal:S.pBy||'',
+      setPAfterVal:e=>this.setState({pTime:e.target.value,pAfterCustom:true}),
+      setPByVal:e=>this.setState({pBy:e.target.value,pByCustom:true}),
+      pAfterCustomStyle:{display:S.pAfterCustom?'inline-block':'none',height:34,padding:'0 10px',borderRadius:999,
+        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Manrope,sans-serif',outline:'none'},
+      pByCustomStyle:{display:S.pByCustom?'inline-block':'none',height:34,padding:'0 10px',borderRadius:999,
+        border:'1px solid var(--k-d8385a)',background:'var(--k-fff)',color:'var(--k-fg-14161a)',font:'700 12.5px/1 Manrope,sans-serif',outline:'none'},
       // how to rank: the passenger's own weighting of time, money and comfort
       pProfileChips:[['balanced','Balanced'],['fastest','Fastest'],['cheapest','Cheapest'],['comfortable','Comfortable'],['network','Network-smart']].map(([k,l])=>{
         const on=(S.pProfile||'balanced')===k;
@@ -5462,7 +5511,9 @@ class Component extends DCLogic {
 
       // the head
       pHeadFrom:F?F.n:'',pHeadTo:T?T.n:'',
-      pHeadSub:(F&&T)?((F.k==='rail'?'Railway':'Metro')+' to '+(T.k==='rail'?'railway':'metro')
+      pGeoNote:S.pGeoNote||'',
+      pGeoNoteStyle:{display:S.pGeoNote?'block':'none',marginTop:6,font:'600 12px/1.4 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+      pHeadSub:(F&&T)?(({rail:'Railway',metro:'Metro',place:'Anywhere'})[F.k]+' to '+({rail:'railway',metro:'metro',place:'anywhere on the map'})[T.k]
         +((R&&R.rows&&R.rows.length)?' \u00b7 '+R.rows.length+(R.rows.length===1?' way to go':' ways to go')
           :(R&&R.kind==='metro')?' \u00b7 one ride, no train':'')):'',
 

@@ -9,6 +9,11 @@
 // traveller's watch instead of running five and a half hours behind it.
 process.env.TZ = process.env.TZ || 'Asia/Kolkata';
 
+import dns from 'node:dns';
+// Node tries IPv6 first and, on a host without a working IPv6 route, spends
+// ten seconds failing before it thinks of IPv4. Every outbound call - the
+// geocoder, OpenAI, Sarvam, Supabase - was paying that on a cold start.
+try { dns.setDefaultResultOrder('ipv4first'); } catch { /* older Node */ }
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -409,6 +414,56 @@ function llmFor(job) {
 }
 const explainCache = new Map();
 const simCache = new Map();
+const geoCache = new Map();
+
+// Anywhere: a place name to a point, from OpenStreetMap via Photon (keyless,
+// ODbL). Boxed to Bengaluru and the Kolar corridor so "Hebbal" is the one
+// here. The point is joined to the nearest station khaali knows by journey.mjs.
+async function geocode(q, attempt = 0) {
+  const key = String(q).trim().toLowerCase();
+  if (!key) return null;
+  if (geoCache.has(key)) return geoCache.get(key);
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 12000);
+  let failed = false;
+  try {
+    const u = 'https://photon.komoot.io/api/?limit=5&lang=en&bbox=77.2,12.6,78.4,13.35&q=' + encodeURIComponent(key + ' bengaluru');
+    const r = await fetch(u, { signal: ac.signal, headers: { 'user-agent': 'khaali/1.0 (journey planner)' } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const fs = (j.features || []).filter(x => x.geometry && x.geometry.coordinates);
+    // the one that is actually called what she said, over a road named after it
+    const f = fs.find(x => String((x.properties || {}).name || '').toLowerCase() === key)
+      || fs.find(x => String((x.properties || {}).name || '').toLowerCase().includes(key))
+      || fs[0];
+    if (!f) return null;                        // a miss is never cached: the map may simply have blinked
+    const p = f.properties || {};
+    const out = { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0],
+      name: [p.name, p.district || p.city].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ') || key,
+      kind: p.osm_value || p.type || '', source: 'OpenStreetMap via Photon' };
+    geoCache.set(key, out); if (geoCache.size > 500) geoCache.delete(geoCache.keys().next().value);
+    return out;
+  } catch (e) { failed = true; console.error('geocode', key, attempt, e && e.message); return null; }
+  finally {
+    clearTimeout(t);
+    // the first call after a cold start has failed more than once; one more try is cheap
+    if (failed && attempt === 0) { /* fallthrough below */ }
+  }
+}
+const geocodeOnce = geocode;
+async function geocodeRetry(q) {
+  const a = await geocodeOnce(q, 0);
+  if (a) return a;
+  await new Promise(r => setTimeout(r, 400));
+  return geocodeOnce(q, 1);
+}
+/** "lat,lng" from a query string, or null. */
+function pointOf(id) {
+  const m = String(id || '').match(/^(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  return (lat > 11 && lat < 14.5 && lng > 76.5 && lng < 79) ? { lat, lng } : null;
+}
 
 const NARR_RULES = 'You are khaali, an Indian railway booking product. Write plain, warm, '
   + 'concrete English for an ordinary traveller. Never invent a number: use only the figures given, '
@@ -1161,12 +1216,21 @@ async function api(req, res, url) {
   // Every sensible way from A to B, with what each costs in time, in money and
   // in standing up. The berth counts come from the real inventory, so the seat
   // a train promises is the same seat the booking page will sell.
+  if (p === '/api/geocode') {
+    const qq = String(q.get('q') || '').slice(0, 80);
+    if (!qq.trim()) return send(res, 400, { ok: false, error: 'q is required' });
+    const g = await geocodeRetry(qq);
+    if (!g) return send(res, 200, { ok: true, found: false });
+    const near = journey.nearestNode(g.lat, g.lng);
+    return send(res, 200, { ok: true, found: true, place: { ...g, id: g.lat.toFixed(5) + ',' + g.lng.toFixed(5) }, near });
+  }
+
   // ---- the intelligence layer: sentences in, sentences out, facts untouched ----
   if (p === '/api/intent' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const text = String(b.text || '').slice(0, 400);
     if (!text.trim()) return send(res, 400, { ok: false, error: 'text is required' });
-    const r = await intel.parseIntent(text, { llm: llmFor('intent') });
+    const r = await intel.parseIntent(text, { llm: llmFor('intent'), geocode: geocodeRetry });
     return send(res, 200, r);
   }
   if (p === '/api/explain' && req.method === 'POST') {
@@ -1220,25 +1284,33 @@ async function api(req, res, url) {
   }
 
   if (p === '/api/plan') {
-    const fk = q.get('fromKind') === 'metro' ? 'metro' : 'rail';
-    const tk = q.get('toKind') === 'metro' ? 'metro' : 'rail';
+    const kindOf = k => k === 'metro' ? 'metro' : k === 'place' ? 'place' : 'rail';
+    const fk = kindOf(q.get('fromKind')), tk = kindOf(q.get('toKind'));
     const fid = String(q.get('fromId') || ''), tid = String(q.get('toId') || '');
     if (!fid || !tid) return send(res, 400, { ok: false, error: 'fromId and toId are required' });
+    const endOf = (k, id, name) => {
+      if (k !== 'place') return { kind: k, id };
+      const pt = pointOf(id);
+      return pt ? { kind: 'place', ...pt, name: String(name || 'a place on the map').slice(0, 80) } : null;
+    };
+    const fromEnd = endOf(fk, fid, q.get('fromName')), toEnd = endOf(tk, tid, q.get('toName'));
+    if (!fromEnd || !toEnd) return send(res, 400, { ok: false, error: 'a place needs lat,lng inside Karnataka' });
     const after = parseInt(q.get('after'), 10);
     const by = q.get('by') ? parseInt(q.get('by'), 10) : null;
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('date') || '')) ? q.get('date') : TODAY();
     const modes = String(q.get('modes') || 'train,metro,bus').split(',')
       .map(x => x.trim()).filter(x => journey.MODES.includes(x));
     const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
-    const r = journey.journeys({
-      from: { kind: fk, id: fid }, to: { kind: tk, id: tid },
+    const r = journey.journeysAnywhere({
+      from: fromEnd, to: toEnd,
       after: (after >= 0 && after < 1440) ? after : 0,
       by: (by >= 0 && by < 2880) ? by : null,
       modes, needs,
       // the same inventory the seat map and the booking page read
       counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } },
     });
-    if (!r.ok) return send(res, 400, r);
+    if (!r.ok) return send(res, 400, { ...r, error: r.reason === 'to-too-far' || r.reason === 'from-too-far'
+      ? 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.' : r.reason });
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
     capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
@@ -1252,7 +1324,7 @@ async function api(req, res, url) {
     const a = allocate.allocate(r.chains, { profile, maxChanges: Number.isFinite(maxChanges) ? maxChanges : null,
       maxWalkKm: Number.isFinite(maxWalkKm) ? maxWalkKm : null,
       after: (after >= 0 && after < 1440) ? after : null, by: (by >= 0 && by < 2880) ? by : null });
-    const out = { ok: true, chains: a.chains, date, modes, profile,
+    const out = { ok: true, chains: a.chains, date, modes, profile, via: r.via || null,
       recommended: a.recommended, reason: a.reason,
       explanation: allocate.sentence(a.reason) };
     if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);

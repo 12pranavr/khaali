@@ -2223,5 +2223,73 @@ t('the real corridor: a morning at Bangarpet', () => {
   assert.ok(typeof r.finding === 'string' && r.finding.length > 20);
 });
 
+console.log('\nanywhere: a place on the map, and the words people actually use');
+
+const HEBBAL = { lat: 13.0358, lng: 77.5970 };
+const fakeGeo = async q => /hebbal/i.test(q) ? { ...HEBBAL, name: 'Hebbal, Bengaluru' } : null;
+
+t('"I need to go from Bangarpet to Hebbal" is Bangarpet to Hebbal, not to "go"', async () => {
+  const r = await IN.parseIntent('I need to go from Bangarpet to Hebbal', { geocode: fakeGeo });
+  assert.strictEqual(r.resolved.from.id, 'BWT');
+  assert.strictEqual(r.resolved.to.kind, 'place');
+  assert.strictEqual(r.resolved.to.lat, HEBBAL.lat);
+  assert.deepStrictEqual(r.unresolved, []);
+  assert.match(r.understood, /Hebbal, Bengaluru \(on the map\)/);
+  const noGeo = await IN.parseIntent('I need to go from Bangarpet to Hebbal');
+  assert.ok(noGeo.unresolved.some(u => /hebbal/i.test(u)), 'without a map it says what it could not place');
+  assert.strictEqual(noGeo.request.destination.text, 'hebbal', 'and never "go"');
+});
+
+t('names with or without their spaces', () => {
+  assert.strictEqual(IN.resolvePlace('Indira Nagar').id, 'IDN');
+  assert.strictEqual(IN.resolvePlace('indiranagar').id, 'IDN');
+  assert.strictEqual(IN.resolvePlace('M.G. Road').id, 'MAGR');
+  assert.strictEqual(IN.resolvePlace('White field').id, 'WFD');
+});
+
+t('leave after and reach by are two separate things, and both are read', async () => {
+  const r = await IN.parseIntent('from Bangarpet to Indira Nagar after 8 by 10');
+  assert.strictEqual(r.request.leaveAfter, '08:00');
+  assert.deepStrictEqual(r.request.timeConstraint, { type: 'ARRIVE_BY', value: '10:00' });
+  assert.match(r.understood, /leave after 08:00 .* reach by 10:00/);
+  const one = await IN.parseIntent('I need to reach Majestic by 9');
+  assert.strictEqual(one.resolved.to.id, 'KGWA');
+  assert.strictEqual(one.request.leaveAfter, null);
+});
+
+t('a place off the network is joined to the nearest station, and the last mile is a leg', () => {
+  const near = JY.nearestNode(HEBBAL.lat, HEBBAL.lng);
+  assert.strictEqual(near.id, 'BNC');
+  assert.ok(near.km > 4 && near.km < 6);
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', ...HEBBAL, name: 'Hebbal' }, after: 480 });
+  assert.ok(r.ok && r.chains.length);
+  const c = r.chains[0], last = c.legs[c.legs.length - 1];
+  assert.strictEqual(last.mode, 'auto');
+  assert.strictEqual(last.to, 'Hebbal');
+  assert.strictEqual(last.source, 'estimated');
+  assert.ok(last.fare > 0 && c.fare > 100, 'the auto is in the fare');
+  assert.strictEqual(c.arr, last.arrMin, 'and in the arrival');
+  assert.ok(c.modes.includes('auto') && c.changes >= 1);
+  assert.strictEqual(r.via.to.id, 'BNC');
+});
+
+t('a place that is close enough is walked to; one too far is refused', () => {
+  const r = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 12.9760, lng: 77.5740, name: 'Near Majestic' }, after: 480 });
+  const last = r.chains[0].legs[r.chains[0].legs.length - 1];
+  assert.strictEqual(last.mode, 'walk');
+  const far = JY.journeysAnywhere({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'place', lat: 13.4, lng: 77.9, name: 'Chikkaballapur' }, after: 480 });
+  assert.strictEqual(far.ok, false); assert.strictEqual(far.reason, 'to-too-far');
+});
+
+t('a journey may start on the map too, and the allocator still ranks it', () => {
+  const r = JY.journeysAnywhere({ from: { kind: 'place', lat: 12.9925, lng: 78.1760, name: 'Bangarpet Bus Stand' }, to: { kind: 'metro', id: 'KGWA' }, after: 480 });
+  assert.ok(r.ok && r.chains.length);
+  assert.ok(['walk', 'auto'].includes(r.chains[0].legs[0].mode));
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+  const a = AL.allocate(r.chains, { after: 480 });
+  assert.ok(a.recommended != null);
+  assert.ok(r.chains.every(c => c.legs.filter(l => l.mode === 'walk' || l.mode === 'auto').every(l => l.cap.occupancy === 0)));
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

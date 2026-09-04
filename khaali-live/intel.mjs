@@ -45,6 +45,7 @@ export const ALIASES = {
 };
 
 const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const squash = t => norm(t).replace(/ /g, '');
 
 /** A place from a phrase, or null. Aliases first, then names, then prefixes. */
 export function resolvePlace(text) {
@@ -52,13 +53,16 @@ export function resolvePlace(text) {
   if (!q) return null;
   const P = places();
   const hit = ([k, id]) => { const p = P.find(x => x.kind === k && x.id === id); return p ? { kind: p.kind, id: p.id, name: p.name } : null; };
+  const qs = squash(q);
   if (ALIASES[q]) return hit(ALIASES[q]);
-  for (const a of Object.keys(ALIASES).sort((x, y) => y.length - x.length)) if (q.includes(a)) return hit(ALIASES[a]);
-  const exact = P.find(p => p.words.includes(q));
+  const AK = Object.keys(ALIASES).sort((x, y) => y.length - x.length);
+  for (const a of AK) if (squash(a) === qs) return hit(ALIASES[a]);
+  for (const a of AK) if (q.includes(a) || qs.includes(squash(a))) return hit(ALIASES[a]);
+  const exact = P.find(p => p.words.includes(q) || p.words.some(w => squash(w) === qs));
   if (exact) return { kind: exact.kind, id: exact.id, name: exact.name };
-  const pre = P.find(p => p.words.some(w => w.startsWith(q) || q.startsWith(w)));
-  if (pre) return { kind: pre.kind, id: pre.id, name: pre.name };
-  const inside = P.find(p => p.words.some(w => w.length > 4 && q.includes(w)));
+  const pre = P.find(p => p.words.some(w => w.startsWith(q) || q.startsWith(w) || squash(w).startsWith(qs)));
+  if (pre && qs.length >= 4) return { kind: pre.kind, id: pre.id, name: pre.name };
+  const inside = P.find(p => p.words.some(w => w.length > 4 && (q.includes(w) || qs.includes(squash(w)))));
   return inside ? { kind: inside.kind, id: inside.id, name: inside.name } : null;
 }
 
@@ -69,7 +73,7 @@ export function resolvePlace(text) {
  */
 export function validateIntent(o) {
   const errors = [];
-  const r = { origin: null, destination: null, timeConstraint: null, modes: [...MODES],
+  const r = { origin: null, destination: null, timeConstraint: null, leaveAfter: null, modes: [...MODES],
     preferences: {}, maxChanges: null, needs: [], profile: null };
   if (!o || typeof o !== 'object') return { ok: false, errors: ['not an object'], request: r };
   const txt = v => (v && typeof v === 'object') ? v.text : v;
@@ -89,6 +93,7 @@ export function validateIntent(o) {
     for (const k of ['minimizeWalking', 'minimizeTransfers', 'minimizeCost', 'minimizeTime', 'avoidCrowding', 'wantSeat'])
       if (typeof o.preferences[k] === 'boolean') r.preferences[k] = o.preferences[k];
   }
+  if (typeof o.leaveAfter === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(o.leaveAfter)) r.leaveAfter = o.leaveAfter;
   if (Number.isInteger(o.maxTransfers) && o.maxTransfers >= 0 && o.maxTransfers <= 3) r.maxChanges = o.maxTransfers;
   if (Number.isInteger(o.maxChanges) && o.maxChanges >= 0 && o.maxChanges <= 3) r.maxChanges = o.maxChanges;
   if (o.accessibility && typeof o.accessibility === 'object' && o.accessibility.stepFree === true) r.needs.push('step-free');
@@ -125,19 +130,28 @@ const WORD_TIMES = { noon: '12:00', midday: '12:00', morning: '09:00', evening: 
  * says what it did not understand; that is better than guessing.
  */
 export function parseLocally(text) {
-  const t = ' ' + norm(text) + ' ';
+  // "I need to go from X to Y": the wanting and the going are not places
+  const t = (' ' + norm(text) + ' ')
+    .replace(/ (?:need|want|have|would like|like|going|trying|planning|got) to (?:go|get|travel|head|come)(?= )/g, ' ')
+    .replace(/ (?:i|we) (?:need|want|have|would like|like|must|should) to (?=[a-z])/g, ' ')
+    .replace(/ to (?:go|get|travel|head|come)(?= )/g, ' ')
+    .replace(/\s+/g, ' ');
   const o = { origin: null, destination: null, timeConstraint: null, modes: null, preferences: {}, maxTransfers: null, accessibility: {} };
   // places
-  const from = t.match(/ from ([a-z0-9 ]+?)(?= to | by | before | after | at | and | i | with |,|$)/);
-  const to = t.match(/ (?:to|reach|at|in|be at|get to|going to|reaching) ([a-z0-9 ]+?)(?= by | before | after | from | at | and | i | with | without | with |,|$)/);
+  const STOPW = '(?= to | by | before | after | at | and | i | with | without | today | tomorrow | around | leaving | leave | reach | only | no | not |,|$)';
+  const from = t.match(new RegExp(' (?:from|starting at|starting from|leaving) ([a-z0-9 ]+?)' + STOPW));
+  // "to go to X", "to reach X", "get to X" - the verb is not the place
+  const to = t.match(new RegExp(' (?:to|reach|reaching|get to|going to|be at|be in|arrive at|arrive in|towards) (?:go to |get to |reach |be at |be in |the )?([a-z0-9 ]+?)' + STOPW.replace('$', ' from |$')));
+  const verbs = /^(go|get|reach|be|travel|come|arrive|head)$/;
   if (from) o.origin = { text: from[1].trim() };
-  if (to) o.destination = { text: to[1].trim() };
+  if (to && !verbs.test(to[1].trim()) && !/^\d/.test(to[1].trim())) o.destination = { text: to[1].trim() };
+  if (o.origin && o.destination && o.origin.text === o.destination.text) o.origin = null;
   // time
   const by = t.match(/(?:by|before|latest|reach by|be there by|there by)\s+(?:about\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|noon|midday|evening|morning|night|tonight|afternoon)/);
   const after = t.match(/(?:after|from|leave after|leaving after|leaving at|leave at|start at|starting at|around)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)\b/);
   const clock = w => WORD_TIMES[w] || clockOf(w.match(HOUR));
   if (by) { const v = clock(by[1].trim()); if (v) o.timeConstraint = { type: 'ARRIVE_BY', value: v }; }
-  else if (after) { const v = clock(after[1].trim()); if (v) o.timeConstraint = { type: 'LEAVE_AFTER', value: v }; }
+  if (after) { const v = clock(after[1].trim()); if (v) { if (o.timeConstraint) o.leaveAfter = v; else o.timeConstraint = { type: 'LEAVE_AFTER', value: v }; } }
   // modes
   const has = w => t.includes(' ' + w + ' ') || t.includes(' ' + w + 's ');
   const only = t.match(/ (?:only|just) (?:the |a )?(train|bus|metro)/) || t.match(/ (train|bus|metro)(?:es|s)? only /);
@@ -172,7 +186,7 @@ Rules: use 24-hour HH:MM. "by nine" in the morning context is 09:00. Never inven
 
 /** Local read first; the model, when there is one, may only fill what the
     local read left empty or correct a place name. The result is validated. */
-export async function parseIntent(text, { llm = null } = {}) {
+export async function parseIntent(text, { llm = null, geocode = null } = {}) {
   const raw = String(text || '').slice(0, 400);
   const local = parseLocally(raw);
   let fromModel = null, provider = 'local';
@@ -188,6 +202,7 @@ export async function parseIntent(text, { llm = null } = {}) {
   if (local.origin) merged.origin = local.origin; else if (!merged.origin) merged.origin = null;
   if (local.destination) merged.destination = local.destination;
   if (local.timeConstraint) merged.timeConstraint = local.timeConstraint;
+  if (local.leaveAfter) merged.leaveAfter = local.leaveAfter;
   if (local.modes) merged.modes = local.modes;
   merged.preferences = { ...(merged.preferences || {}), ...local.preferences };
   if (local.maxTransfers != null) merged.maxTransfers = local.maxTransfers;
@@ -198,6 +213,17 @@ export async function parseIntent(text, { llm = null } = {}) {
     from: r.origin ? resolvePlace(r.origin.text) : null,
     to: r.destination ? resolvePlace(r.destination.text) : null,
   };
+  // anywhere else: a point on the map, joined to the nearest station later
+  if (geocode) {
+    for (const side of ['from', 'to']) {
+      const txt = side === 'from' ? (r.origin && r.origin.text) : (r.destination && r.destination.text);
+      if (!txt || resolved[side]) continue;
+      try {
+        const g = await geocode(txt);
+        if (g && Number.isFinite(g.lat) && Number.isFinite(g.lng)) resolved[side] = { kind: 'place', id: g.lat.toFixed(5) + ',' + g.lng.toFixed(5), name: g.name || txt, lat: g.lat, lng: g.lng };
+      } catch { /* unresolved stays unresolved */ }
+    }
+  }
   const unresolved = [];
   if (r.origin && !resolved.from) unresolved.push('origin: ' + r.origin.text);
   if (r.destination && !resolved.to) unresolved.push('destination: ' + r.destination.text);
@@ -209,8 +235,9 @@ export async function parseIntent(text, { llm = null } = {}) {
 /** What we understood, as words, so she can see it before we act on it. */
 export function describe(r, resolved) {
   const bits = [];
-  if (resolved.from) bits.push('from ' + resolved.from.name);
-  if (resolved.to) bits.push('to ' + resolved.to.name);
+  if (resolved.from) bits.push('from ' + resolved.from.name + (resolved.from.kind === 'place' ? ' (on the map)' : ''));
+  if (resolved.to) bits.push('to ' + resolved.to.name + (resolved.to.kind === 'place' ? ' (on the map)' : ''));
+  if (r.leaveAfter) bits.push('leave after ' + r.leaveAfter);
   if (r.timeConstraint) bits.push((r.timeConstraint.type === 'ARRIVE_BY' ? 'reach by ' : 'leave after ') + r.timeConstraint.value);
   if (r.modes.length < MODES.length) bits.push(r.modes.join(' or ') + ' only');
   const p = r.preferences;
@@ -268,7 +295,8 @@ export async function ask(question, { chain = null, reason = null, alternatives 
 export function summary(chain, reason, alternatives = []) {
   const leg = l => ({ mode: l.mode, name: l.name || l.line || null, from: l.from, to: l.to, dep: l.dep || null, arr: l.arr || null,
     minutes: l.min, seat: l.seat ? l.seat.word : null, seatWhy: l.seat ? l.seat.why : null,
-    howFull: l.cap && l.cap.occupancy != null ? Math.round(l.cap.occupancy * 100) + '%' : 'unknown',
+    km: l.km || null, fare: l.fare != null ? l.fare : null,
+    howFull: (l.mode === 'walk' || l.mode === 'auto') ? 'n/a' : l.cap && l.cap.occupancy != null ? Math.round(l.cap.occupancy * 100) + '%' : 'unknown',
     capacityQuality: l.cap ? l.cap.quality : 'unknown', simulated: l.source === 'simulated' });
   return {
     recommended: chain ? { leaves: chain.depText, arrives: chain.arrText, totalMinutes: chain.totalMin, fare: chain.fare,

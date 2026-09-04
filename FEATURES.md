@@ -1355,6 +1355,21 @@ thin - three trains and a bus every half hour - and the tool shows exactly
 that. The same engine runs on a network that does not exist in the tests,
 where a busy train beside an empty bus gives the result you would expect.
 
+### Anywhere
+
+A journey may start or end anywhere on the map, not only at a station khaali
+knows. Type "Hebbal" - or say "I need to go from Bangarpet to Hebbal" - and
+the place is found on OpenStreetMap (keyless, via Photon), joined to the
+nearest station or stop within 15 km, and the last mile becomes its own leg:
+a walk under 1.2 km, otherwise an auto or local bus with an estimated fare,
+in the time, in the price, and drawn on the map in its own colour. The card
+says which station it goes through and how far. A place farther than any
+station khaali knows is refused with the distance, not guessed.
+
+**Leave after** and **Reach by** are two separate things, and both count:
+the clock starts at one, the search is cut off at the other, and each has
+its chips and a custom time. The sentence reads both ("after 8 by 10").
+
 ### The controls
 
 Mode chips - **All / Train / Metro / Bus** - decide what may be used, and the

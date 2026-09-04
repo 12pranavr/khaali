@@ -72,7 +72,8 @@ export function snapshot(leg, facts = {}) {
     return { ...base, occupancy: clamp01(facts.level), capacity: VEHICLE.metro.crush,
       quality: 'predicted', source: 'weekday hourly entries at this station, BMRCL under RTI' };
   }
-  if (leg.mode === 'walk') return { ...base, quality: 'exact', occupancy: 0, capacity: null, source: 'a footpath has no capacity' };
+  if (leg.mode === 'walk' || leg.mode === 'auto') return { ...base, quality: 'exact', occupancy: 0, capacity: null,
+    source: leg.mode === 'walk' ? 'a footpath has no capacity' : 'an auto is not a network vehicle' };
   return base;
 }
 
@@ -105,7 +106,7 @@ export function annotate(chains, { trainCap = null } = {}) {
 export function pressure(chain) {
   let num = 0, den = 0, conf = 0, n = 0, unknown = 0;
   chain.legs.forEach(l => {
-    if (l.mode === 'walk' || !l.cap) return;
+    if (l.mode === 'walk' || l.mode === 'auto' || !l.cap) return;
     const occ = l.cap.occupancy == null ? 0.5 : l.cap.occupancy;
     if (l.cap.occupancy == null) unknown++;
     const w = Math.max(1, l.min || 1);
@@ -124,7 +125,7 @@ export function pressure(chain) {
  * argument for moving people, so it is computed, not asserted.
  */
 export function impact(chain, passengers = 1) {
-  return chain.legs.filter(l => l.mode !== 'walk' && l.cap).map(l => {
+  return chain.legs.filter(l => l.mode !== 'walk' && l.mode !== 'auto' && l.cap).map(l => {
     const before = l.cap.occupancy, cap = l.cap.capacity;
     const after = (before == null || !cap) ? null : clamp01(before + passengers / cap);
     return { leg: l.name || l.line || l.mode, mode: l.mode, capacity: cap,
