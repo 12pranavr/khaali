@@ -1585,6 +1585,18 @@ async function api(req, res, url) {
   // Issue a pass. A day pass is hers for the day, scanned and never consumed;
   // a trip pass is this journey's bus and metro legs, priced here and spent
   // when they have been ridden.
+  // What a trip pass for these legs would cost, without cutting one. The
+  // review page has to name a price before anybody has agreed to pay it, and
+  // it must be the SAME price the pass is later issued at - so it comes from
+  // the same pricer, not from a second sum that can drift away from it.
+  if (p === '/api/pass/quote' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const priced = journey.priceTripLegs(b.legs);
+    if (!priced.ok) return send(res, 400, { ok: false, error: priced.error });
+    const fare = priced.legs.reduce((a, l) => a + (l.fare || 0), 0);
+    return send(res, 200, { ok: true, fare, legs: priced.legs,
+      skipped: (priced.skipped && priced.skipped.length) ? priced.skipped : null });
+  }
   if (p === '/api/pass' && req.method === 'POST') {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);

@@ -1958,6 +1958,15 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:14px">JOURNEY</div>
     <div style="font:700 17px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ fromName }} → {{ toName }}</div>
     <div style="font-size:13.5px;color:var(--k-fg-6a6d75)">{{ trainTitle }} · {{ dateLong }} · dep {{ depTime }} · arr {{ arrTime }} · {{ journeyKm }} km</div>
+    <div style="{{ jrnRestStyle }}">
+      <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">{{ jrnRestHead }}</div>
+      <sc-for list="{{ jrnRest }}" as="j" hint-placeholder-count="2">
+        <div style="display:flex;justify-content:space-between;gap:14px;padding:4px 0">
+          <span style="{{ j.st }}">{{ j.t }}</span><span style="{{ j.vst }}">{{ j.v }}</span>
+        </div>
+      </sc-for>
+      <div style="{{ jrnPassNoteStyle }}">{{ jrnPassNote }}</div>
+    </div>
   </div>
   <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px;margin-bottom:14px">
     <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:14px">BERTHS</div>
@@ -6864,6 +6873,25 @@ class Component extends DCLogic {
 
   /** The rest of the way, kept small enough to live on a ticket: the bus and
       metro legs she chose, and nothing about capacity or road geometry. */
+  /**
+   * What the trip pass on this booking would cost, from the server's own
+   * pricer. Asked once per set of legs and remembered, because the review
+   * page reads it on every render and the answer cannot change under it.
+   */
+  tripQuote(trip){
+    const legs=(trip&&trip.legs)||[];
+    if(!legs.length)return null;
+    const key=legs.map(l=>l.mode+':'+(l.id||l.toId||l.to)).join('|');
+    this._tq=this._tq||{};
+    if(this._tq[key]!==undefined)return this._tq[key];
+    if(this._tqBusy===key)return null;this._tqBusy=key;
+    this.tfetch('/api/pass/quote',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({legs})},9000)
+      .then(r=>r.json()).then(j=>{this._tq[key]=(j&&j.ok)?j:null;
+        if(this._tqBusy===key)this._tqBusy=null;this.setState({tqTick:Date.now()});})
+      .catch(()=>{if(this._tqBusy===key)this._tqBusy=null;});
+    return null;
+  }
   planTripOf(c){
     const legs=((c&&c.legs)||[]).filter(l=>l.mode==='bus'||l.mode==='metro').map(l=>({
       mode:l.mode,id:l.id||null,name:l.mode==='metro'?(l.line||'Metro'):(l.name||'BMTC'),
@@ -9091,6 +9119,10 @@ class Component extends DCLogic {
       &&b.dayIdx===rec.dayIdx&&b.from===rec.from&&b.to===rec.to&&b.cls===rec.cls);
     if(dupOf)setTimeout(()=>this.setState({dupAsk:{a:dupOf.pnr,b:rec.pnr,total:rec.total,
       what:this.TRAINS.find(t=>t.no===rec.train).name+' \u00b7 '+this.ST[rec.from].n+' \u2192 '+this.ST[rec.to].n}}),700);
+    // She agreed to the whole journey, so the whole journey is bought: the
+    // pass is cut against this booking now, rather than offered again on the
+    // ticket as though it were a thing she had not just paid for.
+    if(rec.journey&&(rec.journey.legs||[]).length)setTimeout(()=>this.getPass(rec),0);
     // the journey is spent on this booking; the next one starts without it
     this.setState({bookings:[rec].concat(S.bookings),page:'ticket',picks:picks,viewPnr:rec.pnr,holdId:null,hold:null,holdErr:null,
       classModal:false,countModal:false,hov:null,pBookChain:null});
@@ -10102,6 +10134,40 @@ class Component extends DCLogic {
         +(S.picks.length===S.pax?' · ₹'+money(total)+' total':'')),
       payLabel:this.anyInfo().isAny?'Book any berth →':(S.picks.length===S.pax?'Review booking →':'Pick '+(S.pax-S.picks.length)+' more'),
 
+      // ---- the rest of the way, on the page where she agrees to it ----
+      ...(()=>{
+        const trip=S.pBookChain;
+        const legs=(trip&&trip.legs)||[];
+        const rides=(trip&&trip.rides)||[];
+        if(!legs.length&&!rides.length)
+          return {jrnRest:[],jrnRestStyle:{display:'none'},jrnRestHead:'',
+            jrnPassNote:'',jrnPassNoteStyle:{display:'none'}};
+        const q=this.tripQuote(trip);
+        const shortn=n=>String(n||'').replace(/^.*, /,'');
+        const kst={font:'500 13px/1.5 Manrope,sans-serif',color:'var(--k-fg-40434a)'};
+        const vst={font:'600 13px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',flex:'none'};
+        const rows=legs.map(l=>({
+          t:(l.mode==='metro'?(l.name||'Purple Line'):(l.name||'BMTC'))
+            +'  '+shortn(l.from)+' \u2192 '+shortn(l.to),
+          v:q?('\u20b9'+((q.legs.find(x=>x.to===l.to)||{}).fare||0)):'\u2026',
+          st:kst,vst:vst}))
+          .concat(rides.map(r=>({
+            t:(r.name||r.mode)+'  '+shortn(r.from)+' \u2192 '+shortn(r.to),
+            v:'\u20b9'+r.fareMin+'\u2013'+r.fareMax,
+            st:kst,vst:vst})));
+        return {
+          jrnRest:rows,
+          jrnRestStyle:{display:'block',marginTop:12,paddingTop:12,borderTop:'1px solid var(--k-f4f3ef)'},
+          jrnRestHead:'Then, on the same ticket',
+          // a hired ride is not khaali's to sell, and the page says so where
+          // the price is rather than in a footnote somewhere else
+          jrnPassNote:rides.length
+            ?'The car or bike is an estimate and is booked separately \u2014 khaali does not run it.':'',
+          jrnPassNoteStyle:{display:rides.length?'block':'none',marginTop:8,
+            font:'500 11.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+        };
+      })(),
+
       allotment,fareRows:[
         {label:(anyHold||anyPre)?(cls.label+' · any berth × '+nPax):hopConf?(cls.label+' · seat-hop · '+S.picks.length+' berths, '+nTravC+' passenger'+(nTravC>1?'s':'')):(cls.label+' berth fare × '+nPax),
           value:'₹'+money(berthSum),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
@@ -10110,7 +10176,14 @@ class Component extends DCLogic {
         {label:'GST',value:gst?'₹'+money(gst):'—',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         {label:'Convenience fee',value:'₹12',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         ...(chosenFee?[{label:'Berth choice fee'+(nTravC>1?' × '+nTravC:''),value:'₹'+money(chosenFee),k:{color:'var(--k-fg-8a4a12)'},v:{fontWeight:600}}]:[]),
-        {label:'Total payable',value:'₹'+money(total),k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}
+        ...(()=>{const trip=S.pBookChain,legs=(trip&&trip.legs)||[];
+          if(!legs.length)return [];
+          const q=this.tripQuote(trip);
+          return [{label:'Trip pass \u00b7 '+legs.map(l=>(l.mode==='metro'?'metro':'bus')).join(' and '),
+            value:q?('\u20b9'+q.fare):'\u2026',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}}];})(),
+        {label:(S.pBookChain&&(S.pBookChain.legs||[]).length)?'Total for the whole journey':'Total payable',
+          value:'₹'+money(total+(()=>{const q=this.tripQuote(S.pBookChain);return q?q.fare:0;})()),
+          k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}
       ],
       pnr:S.viewPnr||'451'+String(7829063+S.dayIdx*13+S.seed+parseInt(tr.no)).slice(0,7),
       fromCode:fromS.c,toCode:toS.c,ticketDur:dur,ticketClass:clsL,
