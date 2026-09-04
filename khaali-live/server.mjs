@@ -36,6 +36,7 @@ import * as journey from './journey.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
+import * as sim from './sim.mjs';
 import * as metro from './metro.mjs';
 import crypto from 'node:crypto';
 
@@ -397,10 +398,17 @@ async function openaiChat(messages, { json = false, maxTokens = 300, temperature
 function llmFor(job) {
   const oa = OPENAI_KEY ? ((m, o) => openaiChat(m, o)) : null;
   const sv = SARVAM_KEY ? ((m, o = {}) => sarvam(m, Math.min(o.maxTokens || 400, 4096))) : null;
-  if (job === 'chat') return sv || oa;
-  return oa || sv;
+  const order = (job === 'chat' ? [sv, oa] : [oa, sv]).filter(Boolean);
+  if (!order.length) return null;
+  // the first that answers; a dead key or a quota is the next one's turn
+  return async (m, o) => {
+    let err = null;
+    for (const f of order) { try { const r = await f(m, o); if (r) return r; } catch (e) { err = e; } }
+    throw err || new Error('no provider answered');
+  };
 }
 const explainCache = new Map();
+const simCache = new Map();
 
 const NARR_RULES = 'You are khaali, an Indian railway booking product. Write plain, warm, '
   + 'concrete English for an ordinary traveller. Never invent a number: use only the figures given, '
@@ -1180,6 +1188,35 @@ async function api(req, res, url) {
     const alternatives = Array.isArray(b.alternatives) ? b.alternatives.slice(0, 5) : [];
     const r = await intel.ask(question, { chain, reason, alternatives, llm: llmFor('chat') });
     return send(res, 200, { ok: true, ...r });
+  }
+
+  // ---- what N people would do to the network ----
+  if (p === '/api/simulate') {
+    const fk = q.get('fromKind') === 'metro' ? 'metro' : 'rail';
+    const tk = q.get('toKind') === 'rail' ? 'rail' : 'metro';
+    const fid = String(q.get('fromId') || 'BWT'), tid = String(q.get('toId') || 'KGWA');
+    const n = Math.max(100, Math.min(50000, parseInt(q.get('n'), 10) || 10000));
+    const start = Math.max(0, Math.min(1439, parseInt(q.get('start'), 10) || 480));
+    const end = Math.max(start + 5, Math.min(1440, parseInt(q.get('end'), 10) || start + 60));
+    const profile = allocate.PROFILES.includes(q.get('profile')) ? q.get('profile') : 'balanced';
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('date') || '')) ? q.get('date') : TODAY();
+    const key = [fk, fid, tk, tid, n, start, end, profile, date].join('|');
+    if (simCache.has(key)) return send(res, 200, { ok: true, cached: true, ...simCache.get(key) });
+    const trainCap = (no, fi, ti) => {
+      if (!(fi >= 0 && ti >= 0)) return null;
+      const k = store.countsFor(String(no), date, 'SL', fi, ti);
+      return { free: k.free, total: k.free + k.part + k.taken + k.locked };
+    };
+    const candidates = t => {
+      const r = journey.journeys({ from: { kind: fk, id: fid }, to: { kind: tk, id: tid }, after: t,
+        modes: [...journey.MODES], counts: (no, f, tt) => { try { return store.countsFor(String(no), date, 'SL', f, tt).free; } catch { return null; } } });
+      if (!r.ok) return [];
+      return capacity.annotate(r.chains, { trainCap });
+    };
+    const out = sim.simulate({ candidates, n, start, end, profile });
+    out.from = fid; out.to = tid; out.date = date;
+    simCache.set(key, out); if (simCache.size > 50) simCache.delete(simCache.keys().next().value);
+    return send(res, 200, { ok: true, ...out });
   }
 
   if (p === '/api/plan') {

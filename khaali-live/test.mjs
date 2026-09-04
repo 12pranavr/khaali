@@ -14,6 +14,7 @@ import * as sos from './sos.mjs';
 import * as CAP from './capacity.mjs';
 import * as AL from './allocate.mjs';
 import * as IN from './intel.mjs';
+import * as SIM from './sim.mjs';
 import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
 import os from 'os';
@@ -2149,6 +2150,77 @@ t('places resolve the way people say them', () => {
   assert.strictEqual(IN.resolvePlace('Mysore').id, 'MYS');
   assert.strictEqual(IN.resolvePlace('ITPL').kind, 'metro');
   assert.strictEqual(IN.resolvePlace('Timbuktu'), null);
+});
+
+console.log('\nsimulation: ten thousand people, twice');
+
+// the golden network again, but now with vehicles: a direct train that is
+// already busy, and a bus + feeder that are not
+function goldenCandidates({ directOcc = 0.8, busOcc = 0.1, feederOcc = 0.2 } = {}) {
+  return t => {
+    const seat = w => ({ yes: { word: 'yes', rank: 3 }, standing: { word: 'standing', rank: 0 } })[w];
+    const cap = (occ, q, capacity) => ({ occupancy: occ, capacity, quality: q, source: 'golden' });
+    const dep = t + 10;
+    return [
+      { kind: 'train', legs: [{ mode: 'train', id: 'D', name: 'Direct', from: 'A', to: 'D', min: 60, depMin: dep, seat: seat(directOcc > 0.7 ? 'standing' : 'yes'), cap: cap(directOcc, 'exact', 400) }],
+        dep, arr: dep + 60, totalMin: 60, fare: 100, changes: 0, modes: ['train'], seat: seat(directOcc > 0.7 ? 'standing' : 'yes'), depText: 'x', arrText: 'y' },
+      { kind: 'bus+train', legs: [
+          { mode: 'bus', id: 'B1', name: 'Bus AB', from: 'A', to: 'B', min: 30, depMin: dep, seat: seat('yes'), cap: cap(busOcc, 'estimated', 75) },
+          { mode: 'train', id: 'F', name: 'Feeder', from: 'B', to: 'D', min: 36, depMin: dep + 35, seat: seat('yes'), cap: cap(feederOcc, 'exact', 400) }],
+        dep, arr: dep + 71, totalMin: 71, fare: 80, changes: 1, modes: ['bus', 'train'], seat: seat('yes'), depText: 'x', arrText: 'y' },
+    ];
+  };
+}
+
+t('the baseline piles everyone onto the fastest way; the allocator spreads them', () => {
+  const r = SIM.simulate({ candidates: goldenCandidates(), n: 1000, start: 480, end: 540 });
+  assert.strictEqual(r.baseline.assigned, 1000);
+  assert.strictEqual(r.baseline.modeSplit.bus || 0, 0, 'nobody takes a bus when only the clock counts');
+  assert.ok((r.allocated.modeSplit.bus || 0) > 20, 'the allocator moves a real share to the bus: ' + JSON.stringify(r.allocated.modeSplit));
+  assert.ok(r.allocated.peakOccupancy <= r.baseline.peakOccupancy, 'and the worst vehicle is no fuller');
+  assert.ok(r.allocated.trainOccupancy < r.baseline.trainOccupancy, 'the trains are emptier: ' + r.allocated.trainOccupancy + ' vs ' + r.baseline.trainOccupancy);
+  assert.ok(r.allocated.overloadedVehicles <= r.baseline.overloadedVehicles);
+  assert.ok(r.delta.averageMinutes <= AL.LIMITS.extraMin, 'at a cost that stays inside the line');
+  assert.match(r.finding, /1,000 people/);
+});
+
+t('the allocator does not empty the train either - it fills the bus until the bus is the crowd', () => {
+  const r = SIM.simulate({ candidates: goldenCandidates({ directOcc: 0.9 }), n: 1200, start: 480, end: 540 });
+  assert.ok((r.allocated.modeSplit.train || 0) > 0);
+  assert.ok((r.allocated.modeSplit.bus || 0) > 0);
+  assert.ok(r.allocated.busOccupancy <= 100);
+  assert.ok(r.baseline.peakOccupancy <= 100, 'nobody is put on a vehicle that cannot take them: ' + r.baseline.peakOccupancy);
+  // and when there is simply not enough room, it says so rather than hiding it
+  const crush = SIM.simulate({ candidates: goldenCandidates({ directOcc: 0.9 }), n: 5000, start: 480, end: 540 });
+  assert.ok(crush.baseline.peakOccupancy > 100, 'five thousand an hour do not fit, and the number shows it');
+  assert.ok(crush.allocated.peakOccupancy >= 100);
+});
+
+t('an empty direct train needs no allocator, and the finding says so', () => {
+  const r = SIM.simulate({ candidates: goldenCandidates({ directOcc: 0.05 }), n: 500, start: 480, end: 500 });
+  assert.strictEqual(r.allocated.modeSplit.bus || 0, 0);
+  assert.match(r.finding, /changes nothing/);
+});
+
+t('it is deterministic, and it does not run the same minute twice', () => {
+  let calls = 0;
+  const c = goldenCandidates(); const counting = t => { calls++; return c(t); };
+  const a = SIM.simulate({ candidates: counting, n: 3000, start: 480, end: 540 });
+  const b = SIM.simulate({ candidates: counting, n: 3000, start: 480, end: 540 });
+  assert.deepStrictEqual(a.allocated, b.allocated);
+  assert.strictEqual(calls, 24, 'twelve five-minute buckets per simulate, cached across baseline and allocated');
+});
+
+t('the real corridor: a morning at Bangarpet', () => {
+  const candidates = t => {
+    const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' }, after: t, counts: () => 30 });
+    return CAP.annotate(r.chains, { trainCap: () => ({ free: 30, total: 432 }) });
+  };
+  const r = SIM.simulate({ candidates, n: 10000, start: 480, end: 540 });
+  assert.strictEqual(r.baseline.assigned + r.baseline.unserved, 10000);
+  assert.ok(r.baseline.assigned > 0);
+  assert.ok(r.allocated.peakOccupancy <= r.baseline.peakOccupancy + 0.01);
+  assert.ok(typeof r.finding === 'string' && r.finding.length > 20);
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

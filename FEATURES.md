@@ -1333,6 +1333,28 @@ none of the facts means the sentence is thrown away and the template is used.
 The same check guards answers. OpenAI reads and phrases; Sarvam talks; either
 stands in for the other; the arithmetic never waits for either.
 
+### Ten thousand people, twice - the simulation
+
+`sim.mjs`. One recommendation is a courtesy; ten thousand of the same one is
+a crowd, and a planner that sends everyone the obvious way has only moved the
+crush from one platform to another. So the Plan page can run the morning
+twice: **today**, where everyone takes the way that gets them there soonest,
+and **allocated**, where each person gets the best way given everyone who was
+allocated before them - so the loads the allocator sees are the loads the
+earlier passengers made.
+
+A vehicle that cannot take the next ten people is not a choice; once a
+vehicle is past its seats, the seat is gone; when there is simply not enough
+room the number goes past 100 and says so. It is deterministic. Pick 300,
+2,000 or 10,000 people and read the finding: how the most crowded vehicle,
+the vehicles past 90%, the share standing, the bus utilisation and the
+average minutes moved, and what it cost.
+
+On Bangarpet the gains are modest, because the network out of Bangarpet is
+thin - three trains and a bus every half hour - and the tool shows exactly
+that. The same engine runs on a network that does not exist in the tests,
+where a busy train beside an empty bus gives the result you would expect.
+
 ### The controls
 
 Mode chips - **All / Train / Metro / Bus** - decide what may be used, and the
