@@ -62,7 +62,7 @@ export function systemPrompt(today) {
     'WAITLIST QUESTIONS (WL number, waiting confirm hogi kya, ವೇಯ್ಟಿಂಗ್): {"say":"","action":{"type":"odds","wl":<number>,"from":<index>,"to":<index>,"date":"YYYY-MM-DD","cls":"SL"}} — wl REQUIRED, the rest optional.',
     'TICKET QUESTIONS (my ticket / meri booking / mera PNR / ನನ್ನ ಟಿಕೆಟ್): {"say":"","action":{"type":"mybookings"}}.',
     'WHAT KHAALI CAN DO, if they ask: ' + PAGES.map(p => p[0] + ' (' + p[1] + ') ' + p[2]).join('; ') + '. A trip pass covers the bus and metro legs of one journey and is spent once they are ridden. khaali also measures how fast the roads are moving, from BMTC run times, and there is an SOS button on every page that shares a live location with someone trusted and with the railway police.',
-    'khaali cannot book a bus, a metro ride or a cab for anybody, and it takes no payment for them: it plans and shows. Only train berths are booked, on the page. If asked to book a bus or a cab, say so plainly and offer to plan the journey.',
+    'khaali cannot book a bus or a metro ride for anybody: it plans them and shows them, and a trip pass is how they are paid for. Only train berths are booked seat by seat, on the page. The last stretch, where no bus runs, is different: khaali publishes that ride to whoever is looking at its demand page and one of them may accept it. khaali owns no vehicle, employs no driver, and has checked nobody: it carries the offer and records who took it. Never promise that a vehicle will arrive, and never name one — it is private transport, which may be a bike, an auto or a car.',
 
     // ---- shape of the answer ----
     'For anything else respond ONLY with JSON: {"say":"<your answer>","action":null}.',

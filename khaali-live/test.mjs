@@ -2793,7 +2793,9 @@ console.log('\ntracking: where it should have got to by now');
 t('a ride reports its stage from the booking and the clock, not from a store', () => {
   const r = HR.newRide({ id: 'abcdef000000', who: 'h', date: '2026-09-10', kind: 'car',
     from: 'Majestic', to: 'Hoodi', km: 18, pickupMin: 9 * 60 }).ride;
-  const at = m => HR.statusOf(r, m, { today: '2026-09-10' });
+  // somebody took it, so there is somebody to be on the way
+  const taken = { status: 'accepted', driver: 'd1' };
+  const at = m => HR.statusOf(r, m, { today: '2026-09-10', offer: taken });
   assert.strictEqual(at(9 * 60 - 60).stage, 'booked');
   assert.strictEqual(at(9 * 60 - 12).stage, 'assigned');
   assert.strictEqual(at(9 * 60 - 2).stage, 'arriving');
@@ -2802,11 +2804,50 @@ t('a ride reports its stage from the booking and the clock, not from a store', (
   assert.ok(mid.progress > 20 && mid.progress < 80, mid.progress + '% through');
   assert.strictEqual(at(9 * 60 + r.min + 5).stage, 'arrived');
   assert.strictEqual(at(9 * 60 + r.min + 5).progress, 100);
-  // nothing here pretends khaali can see a car
+  // nothing here pretends khaali can see the vehicle
   Object.values([at(9 * 60 - 60), mid]).forEach(s => {
     assert.strictEqual(s.simulated, true);
-    assert.ok(/runs no cars/.test(s.source), s.source);
+    assert.ok(/booking and the clock/.test(s.source), s.source);
   });
+});
+
+t('one offer, two tariffs - the category is what is said, not what is priced', () => {
+  // khaali offers private transport because it cannot promise a vehicle. That
+  // is a change to what it SAYS. Underneath, a bike still carries one person
+  // and still has no ramp, and if that ever stops being enforced the category
+  // has started making a promise after all.
+  assert.strictEqual(HR.CATEGORY.name, 'Private transport');
+  assert.match(HR.CATEGORY.of, /bike.*auto.*car/);
+  assert.deepStrictEqual(HR.allowed(['bike', 'car'], { pax: 3 }), ['car'], 'three people is not a bike');
+  assert.deepStrictEqual(HR.allowed(['bike', 'car'], { needs: ['step-free'] }), ['car'], 'a ramp is not a bike');
+  assert.deepStrictEqual(HR.allowed(['bike', 'car'], { pax: 1 }), ['bike', 'car'], 'and both still reach the allocator');
+  assert.notStrictEqual(HR.fareFor('bike', 8), HR.fareFor('car', 8), 'two tariffs, still two');
+  // every kind wears the one label a traveller sees, and keeps its own word
+  for (const k of HR.KINDS) {
+    assert.strictEqual(HR.HIRE[k].label, HR.CATEGORY.name);
+    assert.ok(HR.HIRE[k].name && HR.HIRE[k].name !== HR.CATEGORY.name, 'the engine keeps its own word');
+  }
+});
+
+t('nobody accepted it, so khaali does not say anybody is coming', () => {
+  const r = HR.newRide({ id: 'abcdef000002', who: 'h', date: '2026-09-10', kind: 'car',
+    from: 'Majestic', to: 'Hoodi', km: 18, pickupMin: 9 * 60 }).ride;
+  // The stages used to fire off the clock alone. Harmless while nobody could
+  // ever accept; a lie the moment somebody could.
+  const at = m => HR.statusOf(r, m, { today: '2026-09-10' });
+  for (const m of [9 * 60 - 12, 9 * 60 - 2, 9 * 60 + 4, 9 * 60 + r.min + 5]) {
+    const s = at(m);
+    assert.strictEqual(s.stage, 'booked', 'at ' + m + ' it claimed ' + s.stage);
+    assert.strictEqual(s.dispatched, false);
+    assert.ok(!/assigned|Arriving|On the way/.test(s.label), s.label);
+  }
+  assert.match(at(9 * 60 - 12).label, /Waiting for a driver/);
+  assert.match(at(9 * 60 + 40).label, /Nobody accepted this/);
+  // and an offer somebody DID take moves again
+  assert.strictEqual(HR.statusOf(r, 9 * 60 - 12,
+    { today: '2026-09-10', offer: { status: 'accepted' } }).stage, 'assigned');
+  assert.strictEqual(HR.statusOf(r, 9 * 60 - 12,
+    { today: '2026-09-10', offer: { status: 'expired' } }).stage, 'booked');
 });
 
 t('a ride on another day is not tracked as if it were happening', () => {
@@ -3063,7 +3104,9 @@ t('turned on, a car reaches the place a bus never could', () => {
   const withCar = r.chains.filter(anyHire);
   assert.ok(withCar.length, 'no chain used the car');
   const l = withCar[0].legs.find(x => x.mode === 'car');
-  assert.strictEqual(l.name, 'Car');
+  // the engine still knows it is a car; the leg she reads does not claim one
+  assert.strictEqual(l.mode, 'car');
+  assert.strictEqual(l.name, 'Private transport');
   assert.ok(l.km > 0 && l.min > 0);
   assert.strictEqual(l.source, 'estimated', 'a hired fare is an estimate and says so');
 });
@@ -3409,7 +3452,12 @@ t('Saarthi can say what the website does', () => {
   });
   assert.match(p, /trip pass/i);
   assert.match(p, /SOS/);
-  assert.match(p, /cannot book a bus, a metro ride or a cab/i, 'and is honest about what it cannot do');
+  assert.match(p, /cannot book a bus or a metro ride/i, 'and is honest about what it cannot do');
+  // The last mile is now the one thing khaali does hand to somebody, so the
+  // brief has to carry both halves of that or Saarthi will keep telling people
+  // khaali cannot do the thing the page in front of them is doing.
+  assert.match(p, /owns no vehicle, employs no driver/i, 'and about what it still is not');
+  assert.match(p, /never name one/i, 'a named vehicle is a promise khaali cannot keep');
 });
 
 t('the brief still knows the corridor and the day', () => {

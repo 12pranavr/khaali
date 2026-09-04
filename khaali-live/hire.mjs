@@ -3,13 +3,20 @@
 // khaali deleted an "auto" mode once, and the reason still stands: a planner
 // that has BMTC's whole timetable and answers the last five kilometres with
 // "take an auto" has not done its job. So a hired ride here is not a shrug. It
-// is a named vehicle, a measured distance, a fare range from a published
-// tariff, and a booking that goes on the ticket - and it is only ever reached
-// AFTER a walk and a named bus have both been tried, and only when the
-// passenger asked for it.
+// is a measured distance, a fare range from a published tariff, and a booking
+// that goes on the ticket - and it is only ever reached AFTER a walk and a
+// named bus have both been tried, and only when the passenger asked for it.
 //
-// Two kinds, deliberately generic: a car and a bike. khaali has no agreement
-// with any ride-hailing company and will not imply one by naming it.
+// What it is NOT is a named vehicle. khaali used to offer "a car" and "a bike",
+// which reads as a promise about what will pull up, and khaali has nothing to
+// send. It offers one thing now - private transport - and prices it from the
+// two tariffs it actually has. See CATEGORY below.
+//
+// Since the demand page, one more thing is true and needs saying here: a ride
+// booked in khaali is published to whoever is looking at /drive, and one of
+// them may accept it. khaali still owns no vehicle and employs no driver. It
+// carries the offer and records who took it, and statusOf() will not say
+// anybody is coming until somebody has.
 //
 // Nothing here talks to a language model. This file is arithmetic.
 
@@ -25,10 +32,27 @@ import * as _traffic from './traffic.mjs';
  * it does not stop forty times - and a bike has a further advantage, because it
  * filters through what a car queues in. Those two ratios are the only thing
  * this file claims, and it says so out loud.
+ *
+ * ---
+ *
+ * What khaali offers, as against what it prices.
+ *
+ * It offers ONE thing: private transport, for the stretch the network does not
+ * cover. Not a car - because it cannot produce a car. Naming a vehicle is a
+ * promise about what will turn up, and khaali has none to send. What turns up
+ * is whoever accepted, on whatever they ride.
+ *
+ * Underneath, two tariffs stay two tariffs. A bike carries one person and no
+ * ramp; a car carries four and does. Those constraints are real and allowed()
+ * still enforces them, so the ENGINE keeps both kinds and only the OFFER
+ * collapses to one - which is the honest way round. `name` stays the engine's
+ * own diagnostic word; `label` is the only one a traveller is ever shown.
  */
+export const CATEGORY = { id: 'private', name: 'Private transport', of: 'a bike, an auto or a car' };
+
 export const HIRE = {
   car: {
-    kind: 'car', name: 'Car', seats: 4, waitMin: 5,
+    kind: 'car', name: 'Car', label: CATEGORY.name, seats: 4, waitMin: 5,
     // a car makes no stops, so it beats the bus that measured the road
     roadFactor: 1.35,
     base: 50, perKm: 16, spread: 0.18, stepFree: true,
@@ -36,7 +60,7 @@ export const HIRE = {
     speedSource: 'BMTC-measured road speed, x1.35 for a vehicle that does not stop',
   },
   bike: {
-    kind: 'bike', name: 'Bike', seats: 1, waitMin: 3,
+    kind: 'bike', name: 'Bike', label: CATEGORY.name, seats: 1, waitMin: 3,
     // ...and a two-wheeler filters through the queue the car sits in
     roadFactor: 1.75,
     base: 25, perKm: 8, spread: 0.20, stepFree: false,
@@ -146,7 +170,7 @@ export function leg(kind, from, to, startMin, km, hhmm, dayMin) {
   const min = h.waitMin + Math.max(1, Math.round(km / speed.kmh * 60));
   const f = fareFor(kind, km);
   return {
-    mode: kind, name: h.name, from: from.name, to: to.name,
+    mode: kind, name: h.label, from: from.name, to: to.name,
     km: Math.round(km * 10) / 10, min,
     depMin: startMin, arrMin: startMin + min,
     dep: hhmm(dayMin(startMin)), arr: hhmm(dayMin(startMin + min)),
@@ -158,7 +182,7 @@ export function leg(kind, from, to, startMin, km, hhmm, dayMin) {
     // A hired seat is hers by definition. It must speak the same vocabulary
     // every other leg speaks - 'yes' at rank 3 - or the chain's worst-seat
     // arithmetic reads a car as though she were standing in it.
-    seat: { word: 'yes', rank: 3, why: 'a hired ' + kind + ' is yours for the ride' },
+    seat: { word: 'yes', rank: 3, why: 'a hired ride is yours for its whole length' },
     source: 'estimated',
   };
 }
@@ -181,7 +205,7 @@ export function newRide({ id, who, date, kind, from, to, km, holder, pickupMin }
   if (km > HIRE_MAX_KM) return { ok: false, reason: 'too-far' };
   const fare = fareFor(kind, km);
   return { ok: true, ride: {
-    id, who, date, kind, name: h.name, holder: holder || null,
+    id, who, date, kind, name: h.label, holder: holder || null,
     from: String(from || '').slice(0, 80), to: String(to || '').slice(0, 80),
     km: Math.round(km * 10) / 10, min: minutesFor(kind, km),
     fare, seats: h.seats, waitMin: h.waitMin,
@@ -199,15 +223,26 @@ export function newRide({ id, who, date, kind, from, to, km, holder, pickupMin }
  * driver is still coming or she is already in the car, and a stored status
  * would only be a second thing to keep in step with the first.
  *
- * Every stage of this is SIMULATED and says so. khaali runs no cars, so there
- * is no driver moving and no position to report - what it can honestly say is
- * where the ride SHOULD be by now, against the booking she holds.
+ * Every stage of this is SIMULATED and says so. khaali owns no vehicle and
+ * employs no driver, so there is no position to report - what it can honestly
+ * say is where the ride SHOULD be by now, against the booking she holds.
+ *
+ * With one exception, and it is the important one. 'Assigned' and 'arriving'
+ * used to fire off the clock alone. That was harmless while nobody could ever
+ * accept, and became a lie the moment somebody could: it would tell a
+ * passenger a driver was on the way when no driver had touched it. Both stages
+ * now need an accepted offer behind them. Without one the ride stays 'booked',
+ * because being on a board waiting is all that has actually happened.
  */
 export const STAGES = ['booked', 'assigned', 'arriving', 'riding', 'arrived', 'cancelled'];
 
-export function statusOf(r, minute = null, { today = null } = {}) {
+export function statusOf(r, minute = null, { today = null, offer = null } = {}) {
   if (!r) return null;
-  const base = { simulated: true, source: 'derived from the booking and the clock; khaali runs no cars' };
+  const taken = !!(offer && ['accepted', 'arriving', 'arrived', 'done'].includes(offer.status));
+  const base = { simulated: true, dispatched: taken,
+    source: taken
+      ? 'a driver accepted this on khaali’s demand page; the timing is the booking and the clock'
+      : 'derived from the booking and the clock; nobody has accepted this ride yet' };
   if (r.status === 'cancelled') return { ...base, stage: 'cancelled', label: 'Cancelled', progress: 0 };
   if (today && r.date !== today) {
     const future = r.date > today;
@@ -219,9 +254,14 @@ export function statusOf(r, minute = null, { today = null } = {}) {
   const wait = r.waitMin || 4, ride = r.min || 1;
   const d = minute - start;                       // minutes until (negative) or since pickup
   if (d < -20) return { ...base, stage: 'booked', progress: 0,
-    label: 'Booked · a ' + r.kind + ' is held for ' + hhmmOf(start) };
+    label: 'Booked · the last mile is held for ' + hhmmOf(start) };
+  // Nobody has taken it, so nobody is coming, and khaali will not imply that
+  // somebody is. It says the true thing: it is on the board, and it is waiting.
+  if (!taken) return { ...base, stage: 'booked', progress: 0,
+    label: d < 0 ? 'Waiting for a driver · pickup at ' + hhmmOf(start)
+      : 'Nobody accepted this · pickup was ' + hhmmOf(start) };
   if (d < -wait) return { ...base, stage: 'assigned', progress: 0,
-    label: 'A ' + r.kind + ' is assigned · leaves at ' + hhmmOf(start) };
+    label: 'A driver accepted · leaves at ' + hhmmOf(start) };
   if (d < 0) return { ...base, stage: 'arriving', progress: 0,
     label: 'Arriving at ' + r.from + ' in about ' + Math.max(1, -d) + ' min' };
   if (d < ride) return { ...base, stage: 'riding', progress: Math.round(d / ride * 100),

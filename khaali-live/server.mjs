@@ -1896,7 +1896,8 @@ async function api(req, res, url) {
     const who = await whoIs(req);
     if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to book a ride.' });
     const kind = String(b.kind || '');
-    if (!hire.KINDS.includes(kind)) return send(res, 400, { ok: false, error: 'khaali hires a car or a bike, nothing else.' });
+    if (!hire.KINDS.includes(kind)) return send(res, 400, { ok: false,
+      error: 'khaali prices private transport for the last stretch, and nothing else.' });
     // the distance is measured from the two ends, not taken from the body
     const a = pointOf(b.fromAt), z = pointOf(b.toAt);
     if (!a || !z) return send(res, 400, { ok: false, error: 'A ride needs two points inside Karnataka.' });
@@ -1905,8 +1906,11 @@ async function api(req, res, url) {
     if (kmv > hire.HIRE_MAX_KM) return send(res, 400, { ok: false,
       error: 'That is ' + Math.round(kmv) + ' km. khaali will not call a car further than ' + hire.HIRE_MAX_KM + ' km.' });
     const pax = Math.max(1, Math.min(6, parseInt(b.pax, 10) || 1));
+    // A constraint, not a vehicle. khaali has just promised not to name one,
+    // so it says what will not work rather than telling her what to book.
     if (pax > hire.HIRE[kind].seats) return send(res, 400, { ok: false,
-      error: 'A ' + kind + ' carries ' + hire.HIRE[kind].seats + '. Book a car for ' + pax + '.' });
+      error: 'That is ' + pax + ' people, which is more than a two-wheeler carries. '
+        + 'This last mile will not be a bike.' });
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
     const id = crypto.randomBytes(6).toString('hex');
     const pickupMin = (b.pickupMin >= 0 && b.pickupMin < 2880) ? Math.floor(b.pickupMin) : null;
@@ -1936,7 +1940,9 @@ async function api(req, res, url) {
     return send(res, 200, { today: TODAY(), minute,
       rides: [...RIDES.values()].filter(x => x.who === who)
         .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10)
-        .map(x => ({ ...hire.publicOf(x), status2: hire.statusOf(x, minute, { today: TODAY() }) })) });
+        .map(x => ({ ...hire.publicOf(x),
+          // the stage is only allowed to say a driver is coming if one accepted
+          status2: hire.statusOf(x, minute, { today: TODAY(), offer: OFFERS.get(x.id) || null }) })) });
   }
   const mRide = p.match(/^\/api\/ride\/([a-f0-9]+)$/);
   if (mRide) {
@@ -1957,7 +1963,7 @@ async function api(req, res, url) {
     }
     const now2 = simNow(), min2 = now2.getHours() * 60 + now2.getMinutes();
     return send(res, 200, { ok: true, ride: hire.publicOf(rd),
-      status2: hire.statusOf(rd, min2, { today: TODAY() }) });
+      status2: hire.statusOf(rd, min2, { today: TODAY(), offer: OFFERS.get(rd.id) || null }) });
   }
 
   const mPass = p.match(/^\/api\/pass\/([a-f0-9]+)$/);

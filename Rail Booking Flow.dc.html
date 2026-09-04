@@ -6063,10 +6063,10 @@ class Component extends DCLogic {
     // the same chain the map drew - nothing is planned a second time.
     // the hired ride is part of the journey on this ticket, listed like any leg
     if(J)(J.rides||[]).forEach(l=>{
-      steps.push({dotStyle:{background:l.mode==='bike'?'#c9701a':'#0f8a7e'},
+      steps.push({dotStyle:{background:'#0f8a7e'},
         title:l.name+' · '+l.km+' km, about '+l.min+' min',
         sub:l.from+' → '+l.to+((l.dep&&l.arr)?('  '+l.dep+' → '+l.arr):''),
-        note:'₹'+l.fareMin+'–'+l.fareMax+' estimated. khaali does not run cars; that is a published tariff, not a quote.',
+        note:'₹'+l.fareMin+'–'+l.fareMax+' estimated. khaali owns no vehicle; that is a published tariff, not a quote.',
         noteStyle:{display:'block'},chip:'estimated',
         chipStyle:{background:'var(--k-fdf0e3)',color:'var(--k-fg-8a4a12)'}});
     });
@@ -6206,7 +6206,7 @@ class Component extends DCLogic {
       jnRideSubStyle:{font:'600 12.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:3},
       jnRideBtn:()=>rec&&this.getRide(rec),
       jnRideBtnStyle:{display:(planned&&!ride)?'block':'none',marginTop:10,border:'none',width:'100%',
-        background:planned&&planned.mode==='bike'?'#c9701a':'#0f8a7e',color:'#fff',
+        background:'#0f8a7e',color:'#fff',
         font:'700 14px/1 Manrope,sans-serif',padding:'15px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
       jnRideBtnLabel:planned?('Book the '+planned.mode+' · ₹'+planned.fareMin+'–'+planned.fareMax+' estimated'):'',
       jnRideErr:S.rideErr||'',
@@ -6218,7 +6218,7 @@ class Component extends DCLogic {
       jnRideLine:ride?(ride.from+' → '+ride.to+' · '+ride.km+' km · ₹'+ride.fare.min+'–'+ride.fare.max
         +' estimated · '+(ride.status==='cancelled'?'cancelled':'a '+ride.waitMin+' min wait at pick-up')):'',
       jnRideLineStyle:{font:'600 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:3},
-      jnRideNote:'khaali does not run cars. The fare is an estimate from a published tariff, and this booking is synthetic like every other booking here.',
+      jnRideNote:'khaali owns no vehicle and employs no driver. It puts this ride on its demand page, where a driver may accept it \u2014 until one does, nobody is coming. The fare is an estimate from a published tariff, and this booking is synthetic like every other booking here.',
       jnRideNoteStyle:{font:'500 11.5px/1.55 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6},
       jnRideCancel:()=>rec&&this.dropRide(rec),
       jnRideCancelStyle:{display:(ride&&ride.status!=='cancelled')?'inline-block':'none',
@@ -6341,8 +6341,9 @@ class Component extends DCLogic {
 
      Every status here is DERIVED - from the booking she holds and the clock -
      not stored, so there is no second copy to fall out of step. And khaali
-     runs no cars, so a ride says where it SHOULD have got to, and says that
-     is what it is doing. */
+     owns no vehicle, so a ride says where it SHOULD have got to, and says that
+     is what it is doing - and it will not say a driver is on the way until one
+     has actually accepted it on the demand page. */
   trackPull(){
     if(this._trBusy)return;this._trBusy=true;
     this.planBoot();                       // the Purple Line, for a metro pass
@@ -6587,7 +6588,7 @@ class Component extends DCLogic {
         fillStyle:{width:(st.progress||0)+'%',background:CH[r.kind]||CH.car},
         panel:(r.date===today)?this.trackCabPanel(r):null,
         onOpen:()=>{},
-        note:'khaali runs no cars. This is where the ride should have got to by now, from the booking and the clock.',
+        note:'khaali owns no vehicle. Once a driver has accepted, this is where the ride should have got to by now, from the booking and the clock \u2014 not from watching anybody.',
         noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
       ((r.date===today&&st.stage!=='arrived'&&st.stage!=='cancelled')?live:past).push(card);
     });
@@ -6626,7 +6627,7 @@ class Component extends DCLogic {
       trRefreshStyle:{cursor:'pointer',display:'inline-flex',alignItems:'center',minHeight:34,
         padding:'8px 14px',borderRadius:999,font:'700 12px/1 Manrope,sans-serif',
         border:'1px solid var(--k-dedcd6)',background:'var(--k-fff)',color:'var(--k-fg-40434a)'},
-      trNote:'Positions come from khaali’s own live feed for trains, from the gate taps for a pass, and for a hired ride from the booking and the clock — khaali runs no cars.',
+      trNote:'Positions come from khaali’s own live feed for trains, from the gate taps for a pass, and for a hired ride from the booking and the clock — khaali owns no vehicle and watches nobody.',
     };
   }
 
@@ -6650,8 +6651,12 @@ class Component extends DCLogic {
   pcDrop(i){const l=this.pcList().slice();if(l.length<=2)return;
     const m=this.pcModesList().slice();m.splice(Math.min(i,m.length-1),1);
     l.splice(i,1);this.setState({pcStops:l,pcModes:m,pcRes:null});}
-  pcToggleMode(i,k){const m=this.pcModesList().slice();
-    const set=new Set(m[i]||[]);if(set.has(k))set.delete(k);else set.add(k);
+  pcToggleMode(i,k){return this.pcToggleModes(i,[k]);}
+  /** One chip may stand for more than one mode - private transport is a car
+      and a bike - so the whole group turns on and off together, in one write. */
+  pcToggleModes(i,ks){const m=this.pcModesList().slice();
+    const set=new Set(m[i]||[]);
+    if(ks.some(k=>set.has(k)))ks.forEach(k=>set.delete(k));else ks.forEach(k=>set.add(k));
     m[i]=[...set];this.setState({pcModes:m,pcRes:null});}
   /** A place typed into a custom stop, found on the map. */
   async pcGeocode(i,q){
@@ -7642,8 +7647,9 @@ class Component extends DCLogic {
       metro:{c:'#6B3FA0',g:'\u25cf',n:'Metro'},
       bus:{c:'#17849B',g:'\u25b0',n:'Bus'},
       auto:{c:'#17849B',g:'\u25b2',n:'Auto'},
-      car:{c:'#9A6B12',g:'\u25c6',n:'Car'},
-      bike:{c:'#1E7A4C',g:'\u25c6',n:'Bike'},
+      // one category, so one colour and one word on the legend
+      car:{c:'#0f8a7e',g:'\u25c6',n:'Private'},
+      bike:{c:'#0f8a7e',g:'\u25c6',n:'Private'},
       walk:{c:'#9A9AA0',g:'\u00b7',n:'Walk'}};
     // A tint is a state, not a decoration: green means counted, blue means
     // worked out, amber means guessed, red means standing.
@@ -8058,16 +8064,24 @@ class Component extends DCLogic {
       pAfterVal:S.pAfter||'',
       setPAfter:e=>this.setState({pAfter:e.target.value}),
       // The modes she is willing to use. Nothing chosen means the network -
-      // and the network is train, metro and bus. A car and a bike are hired,
-      // not run, so they are never in "All" and never on by default.
+      // and the network is train, metro and bus. Private transport is hired,
+      // not run, so it is never in "All" and never on by default.
+      //
+      // One chip, two kinds. khaali will not name a vehicle it cannot produce,
+      // so what she turns on is "private transport" - and BOTH the car and the
+      // bike go to the allocator behind it, which is what lets the ranking
+      // profile still choose between them and lets hire.allowed() still refuse
+      // a bike to three people. The offer collapses; the engine does not.
       pModeChips:[['train','Train'],['metro','Metro'],['bus','Bus'],
-        ['car','Car'],['bike','Bike']].map(([k,l])=>{
-        const hire=k==='car'||k==='bike';
+        ['car|bike','Private transport']].map(([k,l])=>{
+        const ks=k.split('|');
+        const hire=ks[0]==='car';
         const cur=S.pModes||NET;
-        const on=cur.includes(k);
+        const on=ks.some(x=>cur.includes(x));
         return {l,on,onClick:()=>{
-          const set=new Set(S.pModes||NET);
-          if(set.has(k))set.delete(k);else set.add(k);
+          const set=new Set(this.state.pModes||NET);
+          // read at tap time, not at render time
+          if(ks.some(x=>set.has(x)))ks.forEach(x=>set.delete(x));else ks.forEach(x=>set.add(x));
           this.setState({pModes:[...set]});},
           style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
             font:'700 13px/1 Archivo,sans-serif',
@@ -8246,12 +8260,13 @@ class Component extends DCLogic {
           hopLabelStyle:{flex:'none',font:'700 9.5px/1 Archivo,sans-serif',letterSpacing:'.1em',
             textTransform:'uppercase',color:'var(--k-fg-8a8a84)',marginRight:2},
           hopChips:(i<this.pcList().length-1)
-            ? [['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car','Car'],['bike','Bike']].map(([k,l])=>{
+            ? [['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car|bike','Private transport']].map(([k,l])=>{
+                const ks=k?k.split('|'):[];
                 const sel=this.pcModesList()[i]||[];
-                const on=k?sel.includes(k):sel.length===0;
-                const hire=k==='car'||k==='bike';
+                const on=k?ks.some(x=>sel.includes(x)):sel.length===0;
+                const hire=ks[0]==='car';
                 return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
-                  else this.pcToggleMode(i,k);},
+                  else this.pcToggleModes(i,ks);},
                   style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Archivo,sans-serif',
                     minHeight:30,display:'inline-flex',alignItems:'center',
                     border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
@@ -8262,11 +8277,12 @@ class Component extends DCLogic {
       }),
       pcHops:this.pcModesList().map((sel,i)=>({
         label:'by',
-        chips:[['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car','Car'],['bike','Bike']].map(([k,l])=>{
-          const on=k?sel.includes(k):sel.length===0;
-          const hire=k==='car'||k==='bike';
+        chips:[['','Any'],['train','Train'],['metro','Metro'],['bus','Bus'],['car|bike','Private transport']].map(([k,l])=>{
+                const ks=k?k.split('|'):[];
+          const on=k?ks.some(x=>sel.includes(x)):sel.length===0;
+          const hire=ks[0]==='car';
           return {l,onClick:()=>{if(!k){const m=this.pcModesList().slice();m[i]=[];this.setState({pcModes:m,pcRes:null});}
-            else this.pcToggleMode(i,k);},
+            else this.pcToggleModes(i,ks);},
             style:{cursor:'pointer',padding:'6px 12px',borderRadius:999,font:'700 11.5px/1 Archivo,sans-serif',minHeight:30,
               display:'inline-flex',alignItems:'center',
               border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
@@ -8299,7 +8315,7 @@ class Component extends DCLogic {
           t:(l.name||l.line||l.mode),
           style:{font:'700 10px/1 Archivo,sans-serif',letterSpacing:'.03em',padding:'5px 8px',borderRadius:5,color:'#fff',
             background:l.mode==='train'?'var(--k-d8385a)':l.mode==='metro'?'#8C2877':l.mode==='bus'?'#1f6fd0'
-              :l.mode==='car'?'#0f8a7e':l.mode==='bike'?'#c9701a':'var(--k-8a8a84)'}})),
+              :(l.mode==='car'||l.mode==='bike')?'#0f8a7e':'var(--k-8a8a84)'}})),
         alt:st.alternatives?(st.alternatives+' other way'+(st.alternatives===1?'':'s')+' khaali found for this hop'):'',
         altStyle:{display:st.alternatives?'block':'none',font:'500 11px/1.5 Archivo,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:3},
         rowStyle:{padding:'12px 0',borderTop:'1px solid var(--k-f0efeb)'},
@@ -8341,7 +8357,7 @@ class Component extends DCLogic {
       pcPassSubStyle:{display:S.pcPass?'block':'none',marginTop:4,
         font:'500 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
       pcRideRows:(S.pcRides||[]).map(r=>({
-        t:(r.kind==='bike'?'Bike':'Car')+'  \u00b7  '+r.from+' \u2192 '+r.to+'  \u00b7  '+(r.code||r.id),
+        t:'Private transport'+'  \u00b7  '+r.from+' \u2192 '+r.to+'  \u00b7  '+(r.code||r.id),
         style:{font:'600 12.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'}})),
       pcNote:S.pcRes?S.pcRes.note:'',
       pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
@@ -8432,14 +8448,14 @@ class Component extends DCLogic {
         font:'600 13px/1.6 Archivo,sans-serif',color:'var(--k-fg-a71f3d)'},
       pErrText:(R&&R.err)||'',
       // the question asked at the moment it is useful, not described in a manual
-      pTryHire:(R&&R.canHire)?[['car','Try a car'],['bike','Try a bike']].map(([k,l])=>({l,
-        onClick:()=>{const set=new Set(this.planModes());set.add(k);
+      pTryHire:(R&&R.canHire)?[['car|bike','Try private transport']].map(([k,l])=>({l,
+        onClick:()=>{const set=new Set(this.planModes());k.split('|').forEach(x=>set.add(x));
           this.setState({pModes:[...set]});setTimeout(()=>this.planSearch(),0);},
         style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
           font:'700 13px/1 Archivo,sans-serif',border:'1px solid #0f8a7e',
           background:'#0f8a7e',color:'#fff'}})):[],
       pTryHireWrap:{display:(R&&R.canHire)?'flex':'none',gap:9,marginTop:12,flexWrap:'wrap',alignItems:'center'},
-      pTryHireLead:'khaali does not run these, and the fare is an estimate:',
+      pTryHireLead:'khaali runs none of these itself, and the fare is an estimate from a published tariff:',
       pTryHireLeadStyle:{font:'600 12.5px/1.5 Archivo,sans-serif',color:'var(--k-fg-6a6d75)',width:'100%'},
       pRows:rows,
         // a ticket is a ticket, not a banner: at 1240px a single column
@@ -8452,14 +8468,15 @@ class Component extends DCLogic {
       pEndHireWrap:{gridColumn:'1/-1',display:(rows.length&&!hiring)?'flex':'none',gap:9,marginTop:14,padding:'13px 15px',
         borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
         flexWrap:'wrap',alignItems:'center'},
-      pEndHireLead:'Want the last mile door to door? khaali does not run these, and the fare is an estimate.',
+      pEndHireLead:'Want the last mile door to door? A bike, an auto or a car \u2014 khaali does not say which, '
+        +'because it does not own one. The fare is an estimate from a published tariff.',
       pEndHireLeadStyle:{width:'100%',font:'600 12.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-6a6d75)'},
-      pEndHire:[['car','Add a car'],['bike','Add a bike']].map(([k,l])=>({l,
-        onClick:()=>{const set=new Set(this.planModes());set.add(k);
+      pEndHire:[['car|bike','Add private transport']].map(([k,l])=>({l,
+        onClick:()=>{const set=new Set(this.planModes());k.split('|').forEach(x=>set.add(x));
           this.setState({pModes:[...set]});setTimeout(()=>this.planSearch(),0);},
         style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
-          font:'700 13px/1 Archivo,sans-serif',border:'1px solid '+(k==='bike'?'#c9701a':'#0f8a7e'),
-          background:k==='bike'?'#c9701a':'#0f8a7e',color:'#fff'}})),
+          font:'700 13px/1 Archivo,sans-serif',border:'1px solid #0f8a7e',
+          background:'#0f8a7e',color:'#fff'}})),
       // ...and the way back out again
       pDropHireWrap:{gridColumn:'1/-1',display:hiring?'flex':'none',gap:9,marginTop:14,alignItems:'center',flexWrap:'wrap'},
       pDropHire:()=>{this.setState({pModes:[...NET]});setTimeout(()=>this.planSearch(),0);},
@@ -10625,7 +10642,7 @@ class Component extends DCLogic {
         });
 
         if(rides.length)parts.push({
-          cap:(rides[0].mode==='bike'?'BIKE':'CAR')+' \u00b7 NOT KHAALI\u2019S TO SELL',
+          cap:'PRIVATE TRANSPORT \u00b7 KHAALI CARRIES THE OFFER, NOT THE VEHICLE',
           title:rides.map(r2=>r2.name||r2.mode).join(', then '),
           note:rides.map(r2=>String(r2.from).replace(/^.*, /,'')+' \u2192 '+String(r2.to).replace(/^.*, /,'')).join(' \u00b7 '),
           rows:rideOn?rides.map(r2=>row({label:(r2.km!=null?r2.km+' km \u00b7 ':'')+'fare is a range, paid to the driver',

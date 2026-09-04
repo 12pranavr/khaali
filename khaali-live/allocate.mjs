@@ -286,12 +286,12 @@ export function sentence(reason) {
   if ((has('RIDE_BECAUSE_NOTHING_RUNS') || has('RIDE_IS_FASTER_THAN_THE_NETWORK')) && f.hired && f.hired.length) {
     const h = f.hired[0], alt = f.networkAlternative;
     s += alt
-      ? (' The ' + h.mode + ' covers the last ' + h.km + ' km to ' + h.to + '. The '
+      ? (' The ride covers the last ' + h.km + ' km to ' + h.to + '. The '
         + (alt.modes || []).filter((m, i, a) => a.indexOf(m) === i).join(' and ')
         + ' gets there for ₹' + alt.fare
         + (alt.slowerByMinutes ? ', about ' + alt.slowerByMinutes + ' minutes slower' : '')
         + '; the ride is an estimated fare, not a quote.')
-      : (' The ' + h.mode + ' is there because no bus khaali knows runs the '
+      : (' The ride is there because no bus khaali knows runs the '
         + h.km + ' km to ' + h.to + '; that fare is an estimate.');
     // A ride past khaali's own limit is only here because nothing else reached
     // at all. Recommending it quietly would be the part that is not honest.
