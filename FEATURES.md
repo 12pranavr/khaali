@@ -1275,6 +1275,43 @@ marked `simulated`, and every screen that shows it says so. Inventing the
 numbers quietly would be dishonest; leaving out the leg that makes the whole
 journey work would be worse.
 
+### Which way, and why - the allocator
+
+Routing says what she can physically do. `allocate.mjs` says which of those
+to put first, and it answers for two people at once: the passenger and the
+network. Every way gets a passenger cost (time from when she is ready to when
+she arrives, fare, changes, walking, standing) and a network cost (how full
+each leg already is, squared, so a 90% train weighs far more than two 45%
+buses), both in minutes, and the smallest total is **Recommended for you**.
+
+There is always a line the network may not cross on her behalf: never more
+than a set number of minutes slower than the fastest way, never an extra
+change beyond one, never a long walk. **Rank by** moves the line - Comfortable
+will trade forty-five minutes for a seat, Fastest will trade ten - but there
+is always a line. Hard constraints (reach by nine, at most one change, a
+lift) are never traded at all.
+
+"Leave after eight" means the clock starts at eight, not when the train does.
+A 10:30 departure that runs 95 minutes has cost her the whole morning.
+
+The reason is a set of codes and verified numbers - `LOWER_CROWDING`,
+`BETTER_SEAT`, `ONLY_MINUTES_SLOWER`, the exact minute and rupee differences,
+a confidence word - and the sentence on the card is made from those and
+nothing else. `/api/plan?trace=1` shows every score.
+
+### How full, and how well we know it - capacity
+
+`capacity.mjs`. Every leg carries a snapshot: how full, how many it takes,
+where the number came from, and its quality. **Counted** is a train's berths
+for this stretch, from the same inventory the booking page sells. **Estimated**
+is a bus's boarding position: stop 3 of 43 is arithmetic on the timetable.
+**Predicted** is a metro station's own weekday hour, from BMRCL under RTI.
+**Unknown** is unknown - carried as null, scored as half full, and the
+confidence says LOW. It is never zero and never "probably 40%".
+
+The allocator is tested on a network that does not exist (A-B-C-D, made-up
+capacities) before it is trusted on Bengaluru.
+
 ### The controls
 
 Mode chips - **All / Train / Metro / Bus** - decide what may be used, and the

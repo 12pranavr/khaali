@@ -320,8 +320,8 @@ export function trainsBetween(fromIdx, toIdx, after, limit = 12) {
   }).filter(Boolean).filter(x => x.dep >= after).sort((a, b) => a.dep - b.dep).slice(0, limit);
 }
 
-const LEG_TRAIN = (t, fromName, toName, freeSL) => ({
-  mode: 'train', id: t.train, name: t.name, from: fromName, to: toName,
+const LEG_TRAIN = (t, fi, ti, freeSL) => ({
+  mode: 'train', id: t.train, name: t.name, from: ST[fi].n, to: ST[ti].n, fromIdx: fi, toIdx: ti,
   dep: hhmm(t.dep), arr: hhmm(t.arr), depMin: t.dep, arrMin: t.arr, min: t.min,
   seat: seatOdds({ mode: 'train', free: freeSL }), source: 'timetable',
 });
@@ -349,7 +349,7 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
   if (from.kind === 'rail' && to.kind === 'rail') {
     if (!use('train')) return { ok: true, chains: [] };
     trainsBetween(fromRail, toRail, after).forEach(t => {
-      out.push({ kind: 'train', legs: [LEG_TRAIN(t, ST[fromRail].n, ST[toRail].n, freeOf(t.train, fromRail, toRail))],
+      out.push({ kind: 'train', legs: [LEG_TRAIN(t, fromRail, toRail, freeOf(t.train, fromRail, toRail))],
         dep: t.dep, arr: t.arr, fare: railFare('SL', Math.abs(ST[toRail].km - ST[fromRail].km)) });
     });
   }
@@ -372,7 +372,7 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
         const p = plan({ arriveAt: t.arr, needs, to: to.id });
         if (!p.ok) return;
         out.push({ kind: 'train+metro',
-          legs: [LEG_TRAIN(t, ST[fromRail].n, ST[WFD].n, freeOf(t.train, fromRail, WFD))]
+          legs: [LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD))]
             .concat(p.legs.map(l => metroLegOut(l, b.stop.id))),
           dep: t.dep, arr: p.arrive,
           fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + p.fare.qr });
@@ -384,7 +384,7 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
       trainsBetween(fromRail, destNear.i, after).forEach(t => {
         const w = Math.max(1, Math.round(destNear.km / WALK_KMH * 60));
         out.push({ kind: 'train-through',
-          legs: [LEG_TRAIN(t, ST[fromRail].n, ST[destNear.i].n, freeOf(t.train, fromRail, destNear.i)),
+          legs: [LEG_TRAIN(t, fromRail, destNear.i, freeOf(t.train, fromRail, destNear.i)),
             { mode: 'walk', from: ST[destNear.i].n, to: STOPS[toMetro].n,
               km: destNear.km, min: w, depMin: t.arr, arrMin: t.arr + w, source: 'measured' }],
           dep: t.dep, arr: t.arr + w,
@@ -426,7 +426,7 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
           const nb = nextBus(bus, t.arr);
           if (!nb.ok) return;
           out.push({ kind: 'train+bus',
-            legs: [LEG_TRAIN(t, ST[fromRail].n, ST[WFD].n, freeOf(t.train, fromRail, WFD)),
+            legs: [LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD)),
               busLegOut(bus, nb, nb.board + bus.runMin)],
             dep: t.dep, arr: nb.board + bus.runMin,
             fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + busFare(bus) });

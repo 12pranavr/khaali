@@ -33,6 +33,8 @@ import * as orders from './orders.mjs';
 import * as digilocker from './digilocker.mjs';
 import * as sos from './sos.mjs';
 import * as journey from './journey.mjs';
+import * as capacity from './capacity.mjs';
+import * as allocate from './allocate.mjs';
 import * as metro from './metro.mjs';
 import crypto from 'node:crypto';
 
@@ -1137,7 +1139,24 @@ async function api(req, res, url) {
       counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } },
     });
     if (!r.ok) return send(res, 400, r);
-    return send(res, 200, { ok: true, chains: r.chains, date, modes });
+    // capacity, then allocation. Routing said what is possible; this decides
+    // what to put first, and says why in codes a sentence can be made from.
+    capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
+      if (!(fi >= 0 && ti >= 0)) return null;
+      const k = store.countsFor(String(no), date, 'SL', fi, ti);
+      return { free: k.free, total: k.free + k.part + k.taken + k.locked };
+    } });
+    const profile = allocate.PROFILES.includes(q.get('profile')) ? q.get('profile') : 'balanced';
+    const maxChanges = q.get('maxChanges') != null && q.get('maxChanges') !== '' ? parseInt(q.get('maxChanges'), 10) : null;
+    const maxWalkKm = q.get('maxWalkKm') ? parseFloat(q.get('maxWalkKm')) : null;
+    const a = allocate.allocate(r.chains, { profile, maxChanges: Number.isFinite(maxChanges) ? maxChanges : null,
+      maxWalkKm: Number.isFinite(maxWalkKm) ? maxWalkKm : null,
+      after: (after >= 0 && after < 1440) ? after : null, by: (by >= 0 && by < 2880) ? by : null });
+    const out = { ok: true, chains: a.chains, date, modes, profile,
+      recommended: a.recommended, reason: a.reason,
+      explanation: allocate.sentence(a.reason) };
+    if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);
+    return send(res, 200, out);
   }
 
   // Many plans in one call. A journey search offers a dozen trains, each

@@ -11,6 +11,8 @@ import * as tatkal from './tatkal.mjs';
 import * as orders from './orders.mjs';
 import * as dl from './digilocker.mjs';
 import * as sos from './sos.mjs';
+import * as CAP from './capacity.mjs';
+import * as AL from './allocate.mjs';
 import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
 import os from 'os';
@@ -1910,6 +1912,143 @@ t('a pass refuses the wrong day, a mode it never covered, and a cancelled one', 
   JY.cancelPass(p, day);
   assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'cancelled');
   assert.strictEqual(JY.newPass({ id: 'x', who: 'h', date: '2026-09-10', covers: ['auto'] }).reason, 'no-modes');
+});
+
+console.log('\nallocation: which way, and why - on a network that does not exist');
+
+// A -> B -> C -> D. A direct train A->D, a bus A->B, a train B->D. Every
+// number here is made up on purpose: the allocator must be right about a
+// network it has never seen, or it is not right about Bengaluru either.
+function golden({ directOcc = 0.2, busOcc = 0.2, feederOcc = 0.2, directMin = 60, viaMin = 66,
+  directSeat = 'yes', busSeat = 'yes', feederSeat = 'yes', unknownDirect = false } = {}) {
+  const seat = w => ({ yes: { word: 'yes', rank: 3 }, likely: { word: 'likely', rank: 2 },
+    maybe: { word: 'maybe', rank: 1 }, standing: { word: 'standing', rank: 0 } })[w];
+  const cap = (occ, q, unk) => ({ occupancy: unk ? null : occ, capacity: 100,
+    quality: unk ? 'unknown' : q, source: 'golden' });
+  const direct = { kind: 'train', legs: [{ mode: 'train', name: 'Direct', from: 'A', to: 'D', min: directMin,
+      seat: seat(directSeat), cap: cap(directOcc, 'exact', unknownDirect) }],
+    dep: 480, arr: 480 + directMin, totalMin: directMin, fare: 100, changes: 0, modes: ['train'],
+    seat: seat(directSeat), depText: '08:00', arrText: '09:00' };
+  const worst = [seat(busSeat), seat(feederSeat)].reduce((p, c) => c.rank < p.rank ? c : p);
+  const via = { kind: 'bus+train', legs: [
+      { mode: 'bus', name: 'Bus AB', from: 'A', to: 'B', min: 30, seat: seat(busSeat), cap: cap(busOcc, 'estimated') },
+      { mode: 'train', name: 'Feeder', from: 'B', to: 'D', min: viaMin - 30, seat: seat(feederSeat), cap: cap(feederOcc, 'exact') }],
+    dep: 480, arr: 480 + viaMin, totalMin: viaMin, fare: 80, changes: 1, modes: ['bus', 'train'],
+    seat: worst, depText: '08:00', arrText: '09:06' };
+  return [direct, via];
+}
+const recOf = (chains, opts) => { const a = AL.allocate(chains, opts); return a.chains[a.recommended].kind; };
+
+t('an empty direct train wins over a change', () => {
+  assert.strictEqual(recOf(golden()), 'train');
+  const a = AL.allocate(golden());
+  assert.strictEqual(a.reason.primary, 'FASTEST');
+  assert.ok(a.chains[0].alloc.labels.includes('recommended'));
+});
+
+t('a full direct train loses to a bus and an emptier train, six minutes slower', () => {
+  const g = golden({ directOcc: 0.92, directSeat: 'standing', busOcc: 0.4, feederOcc: 0.5 });
+  assert.strictEqual(recOf(g), 'bus+train');
+  const a = AL.allocate(g);
+  assert.ok(a.reason.reasons.includes('LOWER_CROWDING'));
+  assert.ok(a.reason.reasons.includes('BETTER_SEAT'));
+  assert.strictEqual(a.reason.facts.timeDifferenceMinutes, 6);
+  assert.strictEqual(a.reason.facts.crowdingDifference, 'lower');
+  assert.match(AL.sentence(a.reason), /6 minutes slower/);
+  assert.match(AL.sentence(a.reason), /seat/);
+});
+
+t('but never more than the limit slower, however full the train', () => {
+  const g = golden({ directOcc: 0.95, directSeat: 'standing', viaMin: 100 });
+  assert.strictEqual(recOf(g), 'train', 'forty minutes of her morning are not the network to spend');
+  const a = AL.allocate(g);
+  assert.ok(a.chains[1].alloc.overLimit.includes('SLOWER_THAN_LIMIT'));
+  const b = AL.allocate(g, { limits: { extraMin: 60 } });
+  assert.ok(b.chains[1].alloc.candidate, 'with the limit raised it is at least a candidate');
+  assert.strictEqual(b.chains[b.recommended].kind, 'train', 'and still loses: forty minutes is forty minutes');
+});
+
+t('when the bus is full too, the direct train is back', () => {
+  const g = golden({ directOcc: 0.9, directSeat: 'standing', busOcc: 0.95, busSeat: 'standing', feederOcc: 0.9, feederSeat: 'standing' });
+  assert.strictEqual(recOf(g), 'train');
+});
+
+t('five minutes faster is not enough to stand for an hour', () => {
+  const g = golden({ directOcc: 0.9, directSeat: 'standing', busOcc: 0.3, feederOcc: 0.3, viaMin: 65 });
+  assert.strictEqual(recOf(g), 'bus+train');
+  assert.strictEqual(recOf(g, { profile: 'fastest' }), 'train', 'unless she only cares about the clock');
+});
+
+t('a hard constraint is not a preference', () => {
+  const g = golden({ directOcc: 0.95, directSeat: 'standing', busOcc: 0.2, feederOcc: 0.2 });
+  assert.strictEqual(recOf(g, { maxChanges: 0 }), 'train');
+  const a = AL.allocate(g, { maxChanges: 0 });
+  assert.ok(a.chains[1].alloc.broken.includes('TOO_MANY_CHANGES'));
+});
+
+t('unknown is not zero, and the confidence says so', () => {
+  const g = golden({ unknownDirect: true });
+  const a = AL.allocate(g);
+  const p = a.chains[0].alloc.pressure;
+  assert.strictEqual(a.chains[0].legs[0].cap.occupancy, null);
+  assert.ok(p.value > 0.2, 'an unknown leg is scored as half full, not empty: ' + p.value);
+  assert.strictEqual(p.word, 'LOW');
+  assert.match(AL.sentence(a.reason), /unknown/);
+});
+
+t('leave after eight means the clock starts at eight', () => {
+  const g = golden();
+  const late = { ...g[0], kind: 'late-train', dep: 630, arr: 690, totalMin: 60 };   // 10:30, same 60 min
+  const early = { ...g[0], kind: 'early-train', dep: 480, arr: 585, totalMin: 105 };
+  const a = AL.allocate([late, early], { after: 480 });
+  assert.strictEqual(a.chains[a.recommended].kind, 'early-train', 'she is there at 9:45, not 11:30');
+  assert.ok(a.chains[1].alloc.labels.includes('fastest'));
+  assert.strictEqual(AL.span(late, { after: 480 }), 210);
+  const b = AL.allocate([late, early], { by: 720 });
+  assert.strictEqual(b.chains[b.recommended].kind, 'late-train', 'reach by noon: leave as late as you can');
+});
+
+t('the profile moves the line, but there is always a line', () => {
+  const g = golden({ directOcc: 0.95, directSeat: 'standing', busOcc: 0.2, feederOcc: 0.2, viaMin: 100 });
+  assert.strictEqual(recOf(g), 'train');
+  assert.strictEqual(recOf(g, { profile: 'cheapest' }), 'bus+train', 'sixty minutes is allowed when money is the point');
+  assert.ok(AL.allocate(golden({ viaMin: 200 }), { profile: 'cheapest' }).chains[1].alloc.overLimit.length);
+});
+
+t('capacity snapshots say what they know and how', () => {
+  const tr = CAP.snapshot({ mode: 'train' }, { free: 10, total: 100 });
+  assert.strictEqual(tr.quality, 'exact'); assert.strictEqual(tr.occupancy, 0.9);
+  const bus = CAP.snapshot({ mode: 'bus', source: 'timetable' }, { boardIdx: 2, nStops: 37 });
+  assert.strictEqual(bus.quality, 'estimated'); assert.ok(bus.occupancy < 0.1);
+  const late = CAP.snapshot({ mode: 'bus' }, { boardIdx: 30, nStops: 37 });
+  assert.ok(late.occupancy >= 0.99);
+  const m = CAP.snapshot({ mode: 'metro' }, { level: 0.8 });
+  assert.strictEqual(m.quality, 'predicted');
+  const u = CAP.snapshot({ mode: 'train' }, {});
+  assert.strictEqual(u.quality, 'unknown'); assert.strictEqual(u.occupancy, null);
+  const sim = CAP.snapshot({ mode: 'bus', source: 'simulated' }, { boardIdx: 0, nStops: 18 });
+  assert.ok(sim.simulated); assert.match(sim.source, /simulated/);
+});
+
+t('one more passenger moves the number, and the move is shown', () => {
+  const g = golden({ directOcc: 0.9 });
+  const im = CAP.impact(g[0]);
+  assert.strictEqual(im[0].before, 90); assert.strictEqual(im[0].after, 91);
+  const a = AL.allocate(g);
+  assert.ok(Array.isArray(a.reason.impact) && a.reason.impact.length, 'and the recommendation carries its own');
+});
+
+t('the real corridor: Bangarpet to Majestic gets a recommendation with a reason', () => {
+  const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' }, after: 480,
+    counts: () => 5 });                                     // every train nearly full
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 5, total: 72 }) });
+  const a = AL.allocate(r.chains);
+  assert.ok(a.recommended != null);
+  assert.ok(a.reason.reasons.length);
+  const rec = a.chains[a.recommended];
+  assert.ok(rec.totalMin - Math.min(...r.chains.map(c => c.totalMin)) <= AL.LIMITS.extraMin);
+  assert.ok(AL.trace(a.chains).every(x => typeof x.total === 'number'));
+  assert.ok(r.chains.every(c => c.legs.filter(l => l.mode !== 'walk').every(l => l.cap && CAP.QUALITY.includes(l.cap.quality))));
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

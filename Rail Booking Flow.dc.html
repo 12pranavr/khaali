@@ -651,14 +651,19 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </sc-for>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
-      <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="6">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">When</span>
+      <div style="display:flex;align-items:center">
+        <div onClick="{{ onWhenAfter }}" style="{{ pWhenAfterStyle }}">Leave after</div>
+        <div onClick="{{ onWhenBy }}" style="{{ pWhenByStyle }}">Reach by</div>
+      </div>
+      <sc-for list="{{ pTimeChips }}" as="t" hint-placeholder-count="6">
         <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
       </sc-for>
+      <span style="font:500 11.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ pWhenHint }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Reach by</span>
-      <sc-for list="{{ pByChips }}" as="t" hint-placeholder-count="5">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Rank by</span>
+      <sc-for list="{{ pProfileChips }}" as="t" hint-placeholder-count="5">
         <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
       </sc-for>
     </div>
@@ -696,7 +701,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
   <div style="{{ pRowsStyle }}">
     <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
-      <div class="k-resrow" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:11px;padding:18px 20px;margin-bottom:12px">
+      <div class="k-resrow" style="{{ r.rowStyle }}">
+        <div style="{{ r.headStyle }}">
+          <span style="font:800 10.5px/1 Manrope,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--k-d8385a);padding:6px 9px;border-radius:5px">{{ r.headText }}</span>
+          <span style="font:600 11.5px/1 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ r.headSub }}</span>
+        </div>
         <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
           <div style="flex:none;display:flex;align-items:center;gap:12px">
             <div style="text-align:right"><div style="font:800 19px/1.15 Manrope,sans-serif">{{ r.dep }}</div></div>
@@ -720,6 +729,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </sc-for>
           <div onClick="{{ r.onToggle }}" style="margin-left:auto;cursor:pointer;font:700 12px/1 Manrope,sans-serif;color:var(--k-fg-1f3f8f);text-decoration:underline">{{ r.toggleLabel }}</div>
         </div>
+        <div style="{{ r.whyStyle }}">{{ r.whyText }}</div>
         <div style="{{ r.openStyle }}">
           <sc-for list="{{ r.legs }}" as="l" hint-placeholder-count="3">
             <div style="display:flex;gap:12px;padding:8px 0">
@@ -728,6 +738,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
                 <div style="font:700 13px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ l.title }}<span style="{{ l.srcStyle }}">{{ l.srcText }}</span></div>
                 <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ l.sub }}</div>
                 <div style="{{ l.seatStyle }}">{{ l.seatText }}</div>
+                <div style="{{ l.capStyle }}">{{ l.capText }}</div>
               </div>
             </div>
           </sc-for>
@@ -4856,20 +4867,29 @@ class Component extends DCLogic {
     });
     return this._leafP;
   }
-  planByMin(){
-    const v=this.state.pBy;
+  /** "Leave after" and "Reach by" are one control with two meanings, and the
+      meaning changes what the engine searches for - not what the list is
+      filtered by afterwards. */
+  planWhen(){return this.state.pWhen==='by'?'by':'after';}
+  planTimeVal(){const v=this.state.pTime;
     if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}
-    return null;
-  }
+    return null;}
+  planByMin(){return this.planWhen()==='by'?this.planTimeVal():null;}
   /** A time chosen from words, because a native time picker on a phone is a
       three-column slot machine and nobody wants one to say "after nine". */
-  planTimeChips(which){
-    const cur=which==='after'?this.state.pAfter:this.state.pBy;
+  planSegStyle(on,left){
+    return {cursor:'pointer',padding:'9px 14px',font:'700 12.5px/1 Manrope,sans-serif',
+      border:'1px solid var(--k-14161a)',
+      borderRadius:left?'999px 0 0 999px':'0 999px 999px 0',marginLeft:left?0:-1,
+      background:on?'var(--k-14161a)':'var(--k-fff)',color:on?'#fff':'var(--k-fg-14161a)'};
+  }
+  planTimeChips(){
+    const cur=this.state.pTime, which=this.planWhen();
     const opts=which==='after'
-      ?[['','Now'],['06:00','6 am'],['09:00','9 am'],['12:00','Noon'],['17:00','5 pm'],['20:00','8 pm']]
-      :[['','Any'],['09:00','9 am'],['12:00','Noon'],['18:00','6 pm'],['22:00','10 pm']];
+      ?[['','Now'],['06:00','6 am'],['08:00','8 am'],['09:00','9 am'],['12:00','Noon'],['17:00','5 pm'],['20:00','8 pm']]
+      :[['09:00','9 am'],['10:00','10 am'],['12:00','Noon'],['18:00','6 pm'],['22:00','10 pm']];
     return opts.map(([v,l])=>({l,on:(cur||'')===v,
-      onClick:()=>this.setState(which==='after'?{pAfter:v}:{pBy:v}),
+      onClick:()=>this.setState({pTime:v}),
       style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
         font:'700 12.5px/1 Manrope,sans-serif',
         border:'1px solid '+((cur||'')===v?'var(--k-d8385a)':'var(--k-dedcd6)'),
@@ -4877,8 +4897,7 @@ class Component extends DCLogic {
         color:(cur||'')===v?'#fff':'var(--k-fg-40434a)'}}));
   }
   planAfterMin(){
-    const v=this.state.pAfter;
-    if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}
+    if(this.planWhen()==='after'){const t=this.planTimeVal();if(t!=null)return t;}
     if((this.state.dayIdx||0)>0)return 0;            // a future day starts at midnight
     const d=this.simNowDate();return d.getHours()*60+d.getMinutes();
   }
@@ -4909,6 +4928,7 @@ class Component extends DCLogic {
         +'&after='+after+(by!=null?'&by='+by:'')
         +'&date='+this.dateIsoFor(S.dayIdx||0)
         +'&modes='+this.planModes().join(',')
+        +'&profile='+(S.pProfile||'balanced')
         +(S.pStep?'&needs=step-free':'');
       const r=await this.tfetch('/api/plan?'+qs,null,12000);
       const j=await r.json();
@@ -4922,6 +4942,7 @@ class Component extends DCLogic {
           if(fi>=0&&ti>=0){this._c={};this.setState({from:fi,to:ti,allCls:true,picks:[]});}
         }
         return this.setState({pBusy:false,pRes:{kind:'chains',from:F,to:T,chains:j.chains,
+          recommended:j.recommended,reason:j.reason,explanation:j.explanation,
           err:j.chains.length?null:'Nothing runs between those two after that time with the modes you picked. Try more modes, or an earlier time.'}});
       }
       this.setState({pBusy:false,pRes:{err:(j&&j.error)||'khaali could not work that one out.'}});
@@ -5120,12 +5141,28 @@ class Component extends DCLogic {
       const sk=SEAT[c.seat.word]||SEAT.unknown;
       const open=S.pOpenIdx===ci;
       const tl=c.legs.find(l=>l.mode==='train');
-      const tags=[];
-      if(c.totalMin===best)tags.push({t:'Fastest',style:{background:'var(--k-eaf0fd)',color:'var(--k-fg-1f3f8f)'}});
-      if(c.fare===cheap)tags.push({t:'Cheapest',style:{background:'var(--k-e6f4ec)',color:'var(--k-fg-14663a)'}});
-      if(c.seat.word==='yes')tags.push({t:'You sit',style:{background:'var(--k-e6f4ec)',color:'var(--k-fg-14663a)'}});
+      // the labels come from the allocator, which is the only thing that
+      // compared every way against every other
+      const LBL={fastest:['Fastest','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
+        cheapest:['Cheapest','var(--k-e6f4ec)','var(--k-fg-14663a)'],
+        'fewest-changes':['Fewest changes','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
+        'least-walking':['Least walking','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
+        seated:['You sit','var(--k-e6f4ec)','var(--k-fg-14663a)']};
+      const labels=(c.alloc&&c.alloc.labels)||[];
+      const isRec=R&&R.recommended===ci;
+      const tags=labels.filter(k=>LBL[k]).map(k=>({t:LBL[k][0],style:{background:LBL[k][1],color:LBL[k][2]}}));
       if(c.simulated)tags.push({t:'Has a simulated leg',style:{background:'var(--k-f1f1ee)',color:'var(--k-fg-8a8a84)'}});
+      const CAPQ={exact:'counted',estimated:'estimated',predicted:'predicted',unknown:'unknown'};
       return {
+        isRec,
+        rowStyle:{background:'var(--k-fff)',border:(isRec?'2px solid var(--k-d8385a)':'1px solid var(--k-e6e5e0)'),
+          borderRadius:11,padding:'18px 20px',marginBottom:12,position:'relative'},
+        headStyle:{display:isRec?'flex':'none',alignItems:'center',gap:10,marginBottom:12},
+        headText:'Recommended for you',
+        headSub:isRec&&R.reason?('confidence '+(R.reason.facts.capacityConfidence||'').toLowerCase()):'',
+        whyText:isRec?(R.explanation||''):'',
+        whyStyle:{display:isRec&&R.explanation?'block':'none',marginTop:10,padding:'10px 12px',borderRadius:8,
+          background:'var(--k-fdf3f5)',font:'600 13px/1.55 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
         dep:c.depText,arr:c.arrText,
         dur:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m',
         fare:'\u20b9'+c.fare,
@@ -5150,6 +5187,10 @@ class Component extends DCLogic {
           seatStyle:{display:l.seat?'block':'none',
             font:'600 11.5px/1.5 Manrope,sans-serif',marginTop:2,
             color:(SEAT[(l.seat||{}).word]||SEAT.unknown).c},
+          capText:(l.cap&&l.mode!=='walk')?((l.cap.occupancy==null?'how full: unknown':'about '+Math.round(l.cap.occupancy*100)+'% full')
+            +' \u00b7 '+(CAPQ[l.cap.quality]||l.cap.quality)+(l.cap.source?' \u00b7 '+l.cap.source:'')):'',
+          capStyle:{display:(l.cap&&l.mode!=='walk')?'block':'none',
+            font:'500 11px/1.5 Manrope,sans-serif',marginTop:2,color:'var(--k-fg-8a8a84)'},
           srcText:l.source==='simulated'?'simulated':(l.source||''),
           srcStyle:{display:l.source?'inline-block':'none',marginLeft:7,
             font:'700 9px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
@@ -5174,6 +5215,8 @@ class Component extends DCLogic {
           cursor:'pointer',minHeight:44},
       };
     });
+
+    rows.sort((a,b)=>(b.isRec?1:0)-(a.isRec?1:0));
 
     const mp=(R&&R.kind==='metro')?R.plan:null;
     return {
@@ -5208,8 +5251,21 @@ class Component extends DCLogic {
         border:'1px solid '+(((S.pModes||[]).length===3||!S.pModes)?'var(--k-14161a)':'var(--k-dedcd6)'),
         background:((S.pModes||[]).length===3||!S.pModes)?'var(--k-14161a)':'var(--k-fff)',
         color:((S.pModes||[]).length===3||!S.pModes)?'#fff':'var(--k-fg-40434a)'},
-      pAfterChips:this.planTimeChips('after'),
-      pByChips:this.planTimeChips('by'),
+      pTimeChips:this.planTimeChips(),
+      onWhenAfter:()=>this.setState({pWhen:'after',pTime:''}),
+      onWhenBy:()=>this.setState({pWhen:'by',pTime:'09:00'}),
+      pWhenAfterStyle:this.planSegStyle(this.planWhen()==='after',true),
+      pWhenByStyle:this.planSegStyle(this.planWhen()==='by',false),
+      pWhenHint:this.planWhen()==='after'?'the earliest you can leave':'the latest you can arrive',
+      // how to rank: the passenger's own weighting of time, money and comfort
+      pProfileChips:[['balanced','Balanced'],['fastest','Fastest'],['cheapest','Cheapest'],['comfortable','Comfortable'],['network','Network-smart']].map(([k,l])=>{
+        const on=(S.pProfile||'balanced')===k;
+        return {l,onClick:()=>this.setState({pProfile:k}),
+          style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
+            font:'700 12.5px/1 Manrope,sans-serif',
+            border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),
+            background:on?'var(--k-14161a)':'var(--k-fff)',
+            color:on?'#fff':'var(--k-fg-40434a)'}};}),
       pMapStyle:{display:S.pMapChain?'block':'none',height:340,borderRadius:11,
         overflow:'hidden',border:'1px solid var(--k-e6e5e0)',marginTop:14},
       pMapNote:S.pMapChain?('Only this journey is drawn. '
