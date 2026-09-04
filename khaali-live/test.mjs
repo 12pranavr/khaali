@@ -13,6 +13,7 @@ import * as dl from './digilocker.mjs';
 import * as sos from './sos.mjs';
 import * as CAP from './capacity.mjs';
 import * as AL from './allocate.mjs';
+import * as IN from './intel.mjs';
 import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
 import os from 'os';
@@ -2049,6 +2050,105 @@ t('the real corridor: Bangarpet to Majestic gets a recommendation with a reason'
   assert.ok(rec.totalMin - Math.min(...r.chains.map(c => c.totalMin)) <= AL.LIMITS.extraMin);
   assert.ok(AL.trace(a.chains).every(x => typeof x.total === 'number'));
   assert.ok(r.chains.every(c => c.legs.filter(l => l.mode !== 'walk').every(l => l.cap && CAP.QUALITY.includes(l.cap.quality))));
+});
+
+console.log('\nintelligence: it reads, it phrases, it never invents');
+
+t('a sentence becomes a request without any model at all', async () => {
+  const r = await IN.parseIntent('I need to reach Majestic by 9 from Bangarpet, not much walking');
+  assert.strictEqual(r.provider, 'local');
+  assert.deepStrictEqual(r.resolved.to, { kind: 'metro', id: 'KGWA', name: 'Nadaprabhu Kempegowda Station, Majestic' });
+  assert.strictEqual(r.resolved.from.id, 'BWT');
+  assert.deepStrictEqual(r.request.timeConstraint, { type: 'ARRIVE_BY', value: '09:00' });
+  assert.strictEqual(r.request.preferences.minimizeWalking, true);
+  assert.strictEqual(r.request.profile, 'comfortable');
+  assert.deepStrictEqual(r.unresolved, []);
+  assert.match(r.understood, /reach by 09:00/);
+});
+
+t('modes, changes, seats, lifts and evenings are all read', async () => {
+  let r = await IN.parseIntent('only trains from whitefield to majestic after 5 pm');
+  assert.deepStrictEqual(r.request.modes, ['train']);
+  assert.deepStrictEqual(r.request.timeConstraint, { type: 'LEAVE_AFTER', value: '17:00' });
+  assert.strictEqual(r.resolved.from.id, 'WFD');
+  r = await IN.parseIntent('to Indiranagar by 6, no bus, at most one change, I want a seat');
+  assert.deepStrictEqual(r.request.modes, ['train', 'metro']);
+  assert.strictEqual(r.request.timeConstraint.value, '18:00', 'six is the evening unless she says am');
+  assert.strictEqual(r.request.maxChanges, 1);
+  assert.strictEqual(r.request.preferences.wantSeat, true);
+  r = await IN.parseIntent('I am travelling with my grandmother to MG Road, cheapest');
+  assert.deepStrictEqual(r.request.needs, ['step-free']);
+  assert.strictEqual(r.request.profile, 'cheapest');
+  assert.strictEqual(r.resolved.to.id, 'MAGR');
+});
+
+t('what it cannot place, it says, rather than guessing', async () => {
+  const r = await IN.parseIntent('get me to Hebbal by 10');
+  assert.strictEqual(r.resolved.to, null);
+  assert.ok(r.unresolved.some(u => /Hebbal/.test(u)));
+});
+
+t('a model may fill gaps; it may not override what was read, and junk is dropped', async () => {
+  const llm = async () => JSON.stringify({ origin: { text: 'Bangarpet' }, destination: { text: 'Majestic' },
+    timeConstraint: { type: 'ARRIVE_BY', value: '25:99' }, modes: ['train', 'rocket'], maxTransfers: 9,
+    preferences: { minimizeWalking: 'yes', wantSeat: true }, profile: 'network' });
+  const r = await IN.parseIntent('by 9 to majestic', { llm });
+  assert.strictEqual(r.provider, 'model');
+  assert.strictEqual(r.resolved.from.id, 'BWT', 'the model filled the origin the sentence lacked');
+  assert.strictEqual(r.request.timeConstraint.value, '09:00', 'the sentence said nine; the model said nonsense');
+  assert.deepStrictEqual(r.request.modes, ['train'], 'rockets are not a mode');
+  assert.strictEqual(r.request.maxChanges, null, 'nine changes is not a constraint');
+  assert.strictEqual(r.request.preferences.minimizeWalking, undefined, 'a string is not a boolean');
+  assert.strictEqual(r.request.preferences.wantSeat, true);
+  const broken = await IN.parseIntent('to majestic by 9', { llm: async () => 'not json at all' });
+  assert.strictEqual(broken.provider, 'local', 'a model that fails costs nothing');
+  assert.strictEqual(broken.resolved.to.id, 'KGWA');
+});
+
+t('an explanation may phrase the facts and may not add a number', async () => {
+  const reason = { reasons: ['LOWER_CROWDING', 'BETTER_SEAT', 'ONLY_MINUTES_SLOWER'], confidence: 0.8,
+    facts: { timeDifferenceMinutes: 6, recommendedMinutes: 66, fastestMinutes: 60, fareDifference: -20, recommendedFare: 80,
+      cheapestFare: 80, changes: 1, seat: 'yes', seatWhy: 'you board where the bus starts', fastestSeat: 'standing',
+      crowdingDifference: 'lower', networkPressure: 0.2, fastestPressure: 0.85, capacityConfidence: 'HIGH', simulated: false, modes: ['bus', 'train'] },
+    impact: [] };
+  const none = await IN.explain(reason);
+  assert.strictEqual(none.provider, 'template');
+  assert.match(none.text, /6 minutes slower/);
+  const good = await IN.explain(reason, { llm: async () => 'It is 6 minutes slower but you get a seat and avoid the crowded train.' });
+  assert.strictEqual(good.provider, 'model');
+  const liar = await IN.explain(reason, { llm: async () => 'It is 6 minutes slower and the train is 95% full.' });
+  assert.strictEqual(liar.provider, 'template', '95 is in none of the facts, so the sentence is thrown away');
+  const dead = await IN.explain(reason, { llm: async () => { throw new Error('quota'); } });
+  assert.strictEqual(dead.provider, 'template');
+});
+
+t('a question is answered from the journey, with or without a model', async () => {
+  const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' }, after: 480, counts: () => 50 });
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 72 }) });
+  const a = AL.allocate(r.chains, { after: 480 });
+  const chain = a.chains[a.recommended];
+  const seat = await IN.ask('will I get a seat?', { chain, reason: a.reason });
+  assert.strictEqual(seat.provider, 'template');
+  assert.ok(/seat|stand|likely|yes/i.test(seat.text));
+  const crowd = await IN.ask('how crowded is it', { chain, reason: a.reason });
+  assert.match(crowd.text, /% full/);
+  const why = await IN.ask('why this way?', { chain, reason: a.reason });
+  assert.ok(why.text.length > 10);
+  const m = await IN.ask('why?', { chain, reason: a.reason, llm: async () => 'Because it arrives at ' + chain.arrText + ' and the fare is ' + chain.fare + ' rupees.' });
+  assert.strictEqual(m.provider, 'model');
+  const liar = await IN.ask('why?', { chain, reason: a.reason, llm: async () => 'Because train 99999 is faster.' });
+  assert.strictEqual(liar.provider, 'template', 'a train the facts never mentioned is an invention');
+  const empty = await IN.ask('why?', {});
+  assert.match(empty.text, /Plan a journey first/);
+});
+
+t('places resolve the way people say them', () => {
+  assert.strictEqual(IN.resolvePlace('Majestic').id, 'KGWA');
+  assert.strictEqual(IN.resolvePlace('bangarapet').id, 'BWT');
+  assert.strictEqual(IN.resolvePlace('KR Puram').id, 'KJM');
+  assert.strictEqual(IN.resolvePlace('Mysore').id, 'MYS');
+  assert.strictEqual(IN.resolvePlace('ITPL').kind, 'metro');
+  assert.strictEqual(IN.resolvePlace('Timbuktu'), null);
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -35,6 +35,7 @@ import * as sos from './sos.mjs';
 import * as journey from './journey.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
+import * as intel from './intel.mjs';
 import * as metro from './metro.mjs';
 import crypto from 'node:crypto';
 
@@ -370,6 +371,37 @@ async function narrate(cacheKey, system, user, maxTokens = 170) {
   finally { clearTimeout(t); }
 }
 
+/** One call to OpenAI, any job. JSON mode when asked. */
+async function openaiChat(messages, { json = false, maxTokens = 300, temperature = 0.3, model = 'gpt-4o-mini' } = {}) {
+  if (!OPENAI_KEY) throw new Error('no openai key');
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 15000);
+  try {
+    const body = { model, temperature, max_tokens: maxTokens, messages };
+    if (json) body.response_format = { type: 'json_object' };
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', signal: ac.signal,
+      headers: { authorization: 'Bearer ' + OPENAI_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('openai http ' + r.status);
+    const j = await r.json();
+    return ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+  } finally { clearTimeout(t); }
+}
+
+// Which model does which job. Understanding a sentence and phrasing a reason
+// go to OpenAI; a conversation goes to Sarvam, which speaks the languages
+// people here actually speak. Either can stand in for the other, and with
+// neither key the product still works on its own arithmetic and templates.
+function llmFor(job) {
+  const oa = OPENAI_KEY ? ((m, o) => openaiChat(m, o)) : null;
+  const sv = SARVAM_KEY ? ((m, o = {}) => sarvam(m, Math.min(o.maxTokens || 400, 4096))) : null;
+  if (job === 'chat') return sv || oa;
+  return oa || sv;
+}
+const explainCache = new Map();
+
 const NARR_RULES = 'You are khaali, an Indian railway booking product. Write plain, warm, '
   + 'concrete English for an ordinary traveller. Never invent a number: use only the figures given, '
   + 'and never contradict them. No markdown, no bullet points, no preamble, no exclamation marks. '
@@ -610,7 +642,8 @@ setInterval(() => {
 
 // Five routes spend a paid credit per call. Twenty a minute per caller is
 // far more than a person needs and far less than a loop.
-const PAID = new Set(['/api/tts', '/api/stt', '/api/chat', '/api/odds/explain', '/api/tatkal/explain']);
+const PAID = new Set(['/api/tts', '/api/stt', '/api/chat', '/api/odds/explain', '/api/tatkal/explain',
+  '/api/intent', '/api/explain', '/api/ask']);
 function overLimit(req, res, p) {
   if (!PAID.has(p)) return false;
   const r = limits.hit(limits.callerOf(req) + '|' + p, 20, 60000);
@@ -636,6 +669,7 @@ async function api(req, res, url) {
     return send(res, 200, {
       ok: true, up: Math.round(process.uptime()),
       sarvam: !!SARVAM_KEY, openai: !!OPENAI_KEY, narrated: narrCache.size,
+      intel: { intent: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'local', explain: OPENAI_KEY ? 'openai' : SARVAM_KEY ? 'sarvam' : 'template', ask: SARVAM_KEY ? 'sarvam' : OPENAI_KEY ? 'openai' : 'template' },
     });
   }
 
@@ -1119,6 +1153,35 @@ async function api(req, res, url) {
   // Every sensible way from A to B, with what each costs in time, in money and
   // in standing up. The berth counts come from the real inventory, so the seat
   // a train promises is the same seat the booking page will sell.
+  // ---- the intelligence layer: sentences in, sentences out, facts untouched ----
+  if (p === '/api/intent' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const text = String(b.text || '').slice(0, 400);
+    if (!text.trim()) return send(res, 400, { ok: false, error: 'text is required' });
+    const r = await intel.parseIntent(text, { llm: llmFor('intent') });
+    return send(res, 200, r);
+  }
+  if (p === '/api/explain' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const reason = b.reason && typeof b.reason === 'object' ? b.reason : null;
+    if (!reason || !Array.isArray(reason.reasons)) return send(res, 400, { ok: false, error: 'reason is required' });
+    const key = JSON.stringify([reason.reasons, reason.facts]);
+    if (explainCache.has(key)) return send(res, 200, { ok: true, ...explainCache.get(key), cached: true });
+    const r = await intel.explain(reason, { llm: llmFor('explain') });
+    explainCache.set(key, r); if (explainCache.size > 500) explainCache.delete(explainCache.keys().next().value);
+    return send(res, 200, { ok: true, ...r });
+  }
+  if (p === '/api/ask' && req.method === 'POST') {
+    let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
+    const question = String(b.question || '').slice(0, 300);
+    if (!question.trim()) return send(res, 400, { ok: false, error: 'question is required' });
+    const chain = b.chain && typeof b.chain === 'object' ? b.chain : null;
+    const reason = b.reason && typeof b.reason === 'object' ? b.reason : null;
+    const alternatives = Array.isArray(b.alternatives) ? b.alternatives.slice(0, 5) : [];
+    const r = await intel.ask(question, { chain, reason, alternatives, llm: llmFor('chat') });
+    return send(res, 200, { ok: true, ...r });
+  }
+
   if (p === '/api/plan') {
     const fk = q.get('fromKind') === 'metro' ? 'metro' : 'rail';
     const tk = q.get('toKind') === 'metro' ? 'metro' : 'rail';

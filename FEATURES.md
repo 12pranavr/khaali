@@ -1312,6 +1312,27 @@ confidence says LOW. It is never zero and never "probably 40%".
 The allocator is tested on a network that does not exist (A-B-C-D, made-up
 capacities) before it is trusted on Bengaluru.
 
+### The part that understands sentences - and may not invent
+
+`intel.mjs`. A language model does three jobs and no others. It turns "I
+need to reach Majestic by nine, not much walking" into a structured request;
+it turns the allocator's codes into one plain sentence; and it answers "why
+through Whitefield?" from the journey facts it is handed. It never decides a
+route, a fare, a probability or how full a train is.
+
+Every job has a deterministic fallback, so the product works with no key at
+all. The sentence is first read by khaali's own grammar (places, "by nine",
+"only trains", "no bus", "one change", "grandmother"); a model may fill what
+that left empty but may not override a time or a mode the grammar found, and
+everything it returns is squeezed through a schema - a rocket is not a mode,
+nine changes is not a constraint. The page shows **Understood: ...** before it
+acts, and says what it could not place rather than guessing.
+
+An explanation the model phrases is checked for numbers: a figure that is in
+none of the facts means the sentence is thrown away and the template is used.
+The same check guards answers. OpenAI reads and phrases; Sarvam talks; either
+stands in for the other; the arithmetic never waits for either.
+
 ### The controls
 
 Mode chips - **All / Train / Metro / Bus** - decide what may be used, and the
