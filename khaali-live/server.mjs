@@ -1054,6 +1054,28 @@ function spotsNow(nowMin, near) {
 /** Anything that changes the map drops it, so a new booking shows at once. */
 function spotsStale() { spotAt = 0; }
 
+/**
+ * How full each corridor leg is, at most once every ten seconds.
+ *
+ * The one layer on the map that is COUNTED rather than modelled, and the one
+ * that has to move the moment somebody books - so it is cached on time and
+ * dropped on every event that could change a berth, rather than waiting out
+ * the ten seconds. store already emits those events; this listens.
+ */
+const railCache = new Map();
+const RAIL_MS = 10000;
+function railNow(train, date, cls) {
+  const key = train + '|' + date + '|' + cls;
+  const hit = railCache.get(key);
+  if (hit && Date.now() - hit.at < RAIL_MS) return hit.v;
+  const v = store.segmentLoad(train, date, cls);
+  railCache.set(key, { at: Date.now(), v });
+  return v;
+}
+store.subscribe(m => {
+  if (['held', 'released', 'booked', 'chart', 'reset'].includes(m.type)) railCache.clear();
+});
+
 /** The pooled offer this ride is one leg of, if there is one. */
 function pooledWith(rd) {
   return [...OFFERS.values()].find(o => o.riders && o.riders.length > 1
@@ -1768,6 +1790,36 @@ async function api(req, res, url) {
       factor: f.factor, factorQuality: f.quality,
       stats: road.stats(),
       note: 'Where a road is slow is measured from BMTC run times. When it is slow is a declared curve, not a measurement.' });
+  }
+
+  // How full the corridor is, leg by leg.
+  //
+  // Everything else on khaali's map is worked out from a timetable or a model.
+  // This is counted: thirteen legs, a berth mask each, and a number that moves
+  // when somebody books. It is also the one layer that does not belong to the
+  // wall clock - it is the inventory for a train on a date, so the hour slider
+  // must not touch it, and it carries its own date rather than a minute.
+  if (p === '/api/rail/segments') {
+    const train = String(q.get('train') || '');
+    if (!TRAINS.some(t => t.no === train)) return send(res, 400, { ok: false, error: 'no such train' });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('date') || '')) ? q.get('date') : TODAY();
+    const cls = CLS.some(c => c.k === q.get('cls')) ? q.get('cls') : 'SL';
+    const r = railNow(train, date, cls);
+    const segments = r.segments.map(sg => {
+      const b = load.bandOf(sg.load, sg.quality === 'mixed' ? 'exact' : sg.quality, 'rail');
+      // GEO carries the coordinates, in ST's own order, so the leg index is
+      // the index into both - no lookup by code and nothing to fall out of step
+      return { ...sg, band: b.band, colour: b.colour, texture: b.texture, word: b.word,
+        fromLat: GEO[sg.leg].lat, fromLng: GEO[sg.leg].lng,
+        toLat: GEO[sg.leg + 1].lat, toLng: GEO[sg.leg + 1].lng };
+    });
+    return send(res, 200, { ok: true, ...r, segments,
+      colours: load.COLOUR, legend: load.legend('rail'),
+      // Not a function of the hour, and the page must not pretend otherwise.
+      livesOn: 'the booking date, not the clock', now: true,
+      note: 'Counted from the berth inventory. Where a leg says it was there when '
+        + 'the day started, that is khaali’s own declared starting occupancy, '
+        + 'not a booking anybody made.' });
   }
 
   // Where a bus has got to on her stretch of it.

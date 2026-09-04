@@ -3005,6 +3005,72 @@ t('a journey is as crowded as its worst leg, not its average', () => {
   assert.strictEqual(LD.worstOf([]), null);
 });
 
+console.log('\nthe corridor, leg by leg - the one thing khaali counts');
+
+t('the per-leg count agrees with the number the booking path uses', () => {
+  // segmentLoad walks the same arrays anySeatsFor walks, in its own loop,
+  // because anySeatsFor sits inside hold()'s compare-and-swap and allocating an
+  // array in that path is a change to that path. The duplication is the price;
+  // this is what stops the two drifting apart.
+  const train = '16021', date = '2026-09-12', cls = 'SL';
+  const r = S.segmentLoad(train, date, cls);
+  for (const [from, to] of [[0, 13], [0, 5], [5, 13], [2, 8], [6, 7], [1, 4]]) {
+    const want = S.countsFor(train, date, cls, from, to).anySeats;
+    let room = r.total;
+    for (let l = from; l < to; l++) room = Math.min(room, r.total - r.segments[l].occupied);
+    assert.strictEqual(Math.max(0, room), want, 'legs ' + from + '-' + to + ' disagree');
+  }
+});
+
+t('a leg says which of its passengers khaali counted and which it declared', () => {
+  const r = S.segmentLoad('16021', '2026-09-13', 'SL');
+  for (const sg of r.segments) {
+    assert.strictEqual(sg.booked + sg.held + sg.pooled + sg.seeded, sg.occupied,
+      'leg ' + sg.leg + ' has passengers from nowhere');
+    assert.strictEqual(sg.free, sg.total - sg.occupied);
+    assert.ok(sg.load >= 0 && sg.load <= 1);
+  }
+  // nothing booked through khaali yet, so every leg is khaali's own declared
+  // starting occupancy - and it says so rather than borrowing the word 'exact'
+  const untouched = r.segments.filter(sg => sg.booked + sg.held + sg.pooled === 0 && sg.seeded > 0);
+  assert.ok(untouched.length, 'the fixture should have seeded legs');
+  untouched.forEach(sg => assert.strictEqual(sg.quality, 'simulated',
+    'a leg khaali invented called itself ' + sg.quality));
+  untouched.forEach(sg => assert.match(sg.says, /were there when the day started/));
+});
+
+t('a hold moves exactly the legs it spans, and no others', () => {
+  const train = '16021', date = '2026-09-14', cls = 'SL';
+  const before = S.segmentLoad(train, date, cls);
+  const av = S.availability(train, date, cls, 3, 6);
+  const idx = av.berths.findIndex(b => b.k === 'free');
+  assert.ok(idx >= 0, 'the fixture needs a free berth');
+  const h = S.hold({ train, date, cls, from: 3, to: 6, who: 'seg@test', pax: 1,
+    berthIdxs: [idx], mode: 'exact' });
+  assert.ok(h.ok, h.reason);
+  const after = S.segmentLoad(train, date, cls);
+  for (let l = 0; l < before.segments.length; l++) {
+    const want = before.segments[l].occupied + (l >= 3 && l < 6 ? 1 : 0);
+    assert.strictEqual(after.segments[l].occupied, want, 'leg ' + l + ' moved when it should not have');
+  }
+  // and the legs it does touch stop being purely declared
+  [3, 4, 5].forEach(l => {
+    assert.strictEqual(after.segments[l].held, before.segments[l].held + 1);
+    assert.strictEqual(after.segments[l].quality, 'mixed', 'a real hold on a seeded leg is both');
+  });
+  S.release(h.holdId);
+});
+
+t('a train at half capacity is not a jam, whatever a road at half speed is', () => {
+  // Reading the corridor through the road ladder painted all thirteen legs red
+  // at occupancies khaali calls "seats available" everywhere else in the app.
+  assert.strictEqual(LD.bandOf(0.56, 'exact', 'rail').band, 'green');
+  assert.strictEqual(LD.bandOf(0.56, 'exact', 'road').band, 'orange', 'which is right for a road');
+  assert.strictEqual(LD.bandOf(0.78, 'exact', 'road').band, 'red');
+  assert.strictEqual(LD.bandOf(0.82, 'exact', 'rail').band, 'yellow');
+  assert.strictEqual(LD.bandOf(0.99, 'exact', 'rail').band, 'red');
+});
+
 console.log('\nallocation: which way, and why - on a network that does not exist');
 
 // A -> B -> C -> D. A direct train A->D, a bus A->B, a train B->D. Every

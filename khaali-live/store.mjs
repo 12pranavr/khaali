@@ -29,10 +29,11 @@
 // Before charting the seat map keeps showing the railway's scattered
 // assignment, because that is what is physically true today; the number
 // beside it says what charting will make of it.
+import { ST } from './data.mjs';
 import crypto from 'crypto';
 import {
   SEGMENTS, journeyMask, spanMask, berthState, seedOccupancy, berthLayout,
-  packPlan, packInto, classByKey, fare, journeyKm, priceFor, coveredKm, popcount, isLowerBerth } from './engine.mjs';
+  packPlan, packInto, classByKey, fare, journeyKm, priceFor, coveredKm, popcount, isLowerBerth, legCounts } from './engine.mjs';
 
 export const HOLD_MS = 5 * 60 * 1000;          // 5 minutes at the payment screen
 // One request used to be able to lock every free berth on a train. Six is
@@ -105,6 +106,11 @@ function inv(key) {
       need: ((i * 7919 + seeded.length) % 100) < 12 ? 'senior' : null }); });
     v = {
       booked: Int32Array.from(seeded),   // what is physically on each berth now
+      // The same numbers again, frozen. `booked` grows as people book through
+      // khaali; this does not - so subtracting one from the other is how a leg
+      // can say which of its passengers khaali counted and which were there
+      // when the day started. Written once, never again.
+      seedMask: Int32Array.from(seeded),
       pinned: new Int32Array(seeded.length),  // the legs a chosen booking nailed down
       held: new Int32Array(seeded.length),
       owner: new Array(seeded.length).fill(null),
@@ -243,6 +249,59 @@ export function countsFor(train, date, cls, from, to) {
     if (hit === 0) free++; else if (hit === j) taken++; else part++;
   }
   return { free, part, taken, locked, anySeats: v.charted ? free : anySeatsFor(v, j), charted: v.charted };
+}
+
+/**
+ * How full each of the thirteen legs is - counted, not estimated.
+ *
+ * Read-only: four passes over arrays this function does not own, no mutation,
+ * no await, nothing held across a turn. It cannot disturb hold()'s
+ * compare-and-swap because it never takes part in one.
+ *
+ * The split matters more than the total. khaali's corridor starts each day
+ * with a seeded occupancy - engine.seedOccupancy, a deterministic model with a
+ * hard-coded blockers table - and real bookings are laid on top of it. A leg
+ * that reports 41 of 72 taken has therefore counted two different things, and
+ * the map has to say which is which: `booked`/`held`/`pooled` are people who
+ * went through khaali, `seeded` is the inventory khaali declared. A leg made
+ * entirely of the second is labelled `simulated`, however exact the count is.
+ */
+export function segmentLoad(train, date, cls) {
+  const key = keyOf(train, date, cls);
+  const v = inv(key);
+  const total = v.booked.length;
+  const own = [], all = [], held = [], seed = [];
+  for (let i = 0; i < total; i++) {
+    const mine = v.booked[i] & ~v.seedMask[i];
+    own.push(mine); held.push(v.held[i]); seed.push(v.seedMask[i]);
+    all.push(v.booked[i] | v.held[i]);
+  }
+  const pool = poolItems(v).map(p => p.mask);
+  const cOwn = legCounts(own), cHeld = legCounts(held), cSeed = legCounts(seed);
+  const cPool = legCounts(pool), cAll = legCounts(all.concat(pool));
+
+  const segments = [];
+  for (let l = 0; l < SEGMENTS; l++) {
+    const occupied = cAll[l];
+    const khaali = cOwn[l] + cHeld[l] + cPool[l];
+    const seeded = cSeed[l];
+    segments.push({
+      leg: l, from: ST[l].c, to: ST[l + 1].c, fromName: ST[l].n, toName: ST[l + 1].n,
+      km: ST[l + 1].km - ST[l].km,
+      occupied, free: Math.max(0, total - occupied), total,
+      booked: cOwn[l], held: cHeld[l], pooled: cPool[l], seeded,
+      load: total ? Math.round(occupied / total * 100) / 100 : null,
+      // Counted either way. But a leg nobody has booked through khaali is a
+      // leg khaali declared, and it says so rather than borrowing the word
+      // 'exact' from an inventory it invented.
+      quality: !total ? 'unknown' : seeded === 0 ? 'exact' : khaali === 0 ? 'simulated' : 'mixed',
+      says: !total ? 'no berths counted here'
+        : occupied + ' of ' + total + ' berths taken on this leg'
+          + (khaali ? ' · ' + khaali + ' booked through khaali' : '')
+          + (seeded ? ' · ' + seeded + ' were there when the day started' : ''),
+    });
+  }
+  return { train, date, cls, total, charted: v.charted, segments };
 }
 
 export function snapshot(train, date, cls) {

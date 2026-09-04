@@ -1163,6 +1163,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div onClick="{{ togglePTraffic }}" style="{{ pTrafficStyle }}">{{ pTrafficLabel }}</div>
             <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
           </div>
+          <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
+          <div style="{{ pRailNoteStyle }}">{{ pRailNote }}</div>
 
           <div style="display:flex;flex-direction:column">
             <sc-for list="{{ r.steps }}" as="st" hint-placeholder-count="4">
@@ -1250,7 +1252,6 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
       </div>
 
-  <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
     </div>
   </div>
 </div>
@@ -7457,6 +7458,61 @@ class Component extends DCLogic {
       this.setState({pRoad:{factor:j.factor,free:j.freeFlowKmh,stats:j.stats,note:j.note}});
       this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintTraffic(j),60);});
     }catch(e){}
+    this.planRail();
+  }
+  /**
+   * The corridor, leg by leg, coloured by what is actually inside the train.
+   *
+   * Every other colour on this map is worked out from a timetable or a model.
+   * This one is COUNTED: thirteen legs, a berth mask each, and a number that
+   * moves the moment somebody books. It is the only layer khaali has that no
+   * mapping company can draw, because it is not on the road - it is inside the
+   * vehicle, and only the people selling the seats can see it.
+   *
+   * It is also the only layer the hour does not touch. A train's occupancy
+   * belongs to a date and a train, not to the wall clock, so scrubbing the
+   * time must leave it exactly where it is.
+   */
+  async planRail(){
+    if(!this.state.pTraffic)return this.planClearRail();
+    const date=this.dateIsoFor(this.state.pDayIdx||0);
+    if(this._prailAt===date&&this._prailLayers&&this._prailLayers.length)return;
+    try{
+      const r=await this.tfetch('/api/rail/segments?train=16021&cls=SL&date='+date,null,9000);
+      const j=await r.json();
+      if(!j||!j.ok)return;
+      this._prailAt=date;
+      this.setState({pRail:{total:j.total,note:j.note,
+        worst:j.segments.reduce((a,b)=>(b.load>((a&&a.load)||0)?b:a),null)}});
+      this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintRail(j),60);});
+    }catch(e){}
+  }
+  planClearRail(){
+    const map=this._pmap;
+    if(this._prailLayers&&map)this._prailLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    this._prailLayers=[];this._prailAt=null;
+  }
+  planPaintRail(j){
+    const L=window.L,map=this.planMapEl();
+    if(!L||!map||!j)return;
+    this.planClearRail();
+    if(!this.state.pTraffic)return;
+    this._prailLayers=j.segments.map(sg=>{
+      // A leg somebody booked through khaali is drawn solid. A leg that is
+      // entirely khaali's own declared starting occupancy is dashed - the count
+      // is exact either way, but one of them counts people and the other counts
+      // a model, and they must not look the same.
+      const made=sg.quality==='simulated';
+      const ln=L.polyline([[sg.fromLat,sg.fromLng],[sg.toLat,sg.toLng]],
+        {color:sg.colour,weight:9,opacity:made?0.45:0.75,lineCap:'butt',
+         dashArray:made?'10 7':null,interactive:true});
+      ln.bindTooltip(sg.fromName+' \u2192 '+sg.toName+'  \u00b7  '+sg.says);
+      ln.addTo(map);
+      try{ln.bringToBack();}catch(e){}
+      return ln;
+    });
+    if(this._ptrafficLayers)this._ptrafficLayers.forEach(l=>{try{l.bringToBack();}catch(e){}});
+    if(this._ptile)try{this._ptile.bringToBack();}catch(e){}
   }
   planClearTraffic(){
     const map=this._pmap;
@@ -8445,7 +8501,8 @@ class Component extends DCLogic {
       pcNoteStyle:{display:S.pcRes?'block':'none',marginTop:10,font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pTrafficLabel:S.pTraffic?'Hide traffic':'Show traffic',
       togglePTraffic:()=>{this.setState({pTraffic:!S.pTraffic});
-        setTimeout(()=>{if(S.pTraffic)this.planClearTraffic();else this.planTraffic();},0);},
+        setTimeout(()=>{if(S.pTraffic){this.planClearTraffic();this.planClearRail();}
+          else this.planTraffic();},0);},
       pTrafficStyle:{cursor:'pointer',padding:'6px 11px',borderRadius:999,marginRight:8,
         font:'700 11.5px/1 Archivo,sans-serif',minHeight:30,display:'inline-flex',alignItems:'center',
         border:'1px solid '+(S.pTraffic?'#e07b16':'var(--k-dedcd6)'),
@@ -8456,6 +8513,17 @@ class Component extends DCLogic {
           +S.pRoad.stats.samples.toLocaleString('en-IN')+' timed BMTC segments; WHEN it is slow is a declared curve, not a measurement. Grey is unmeasured.')
         :'',
       pRoadNoteStyle:{display:(S.pTraffic&&S.pRoad)?'block':'none',marginTop:6,
+        font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
+      // The corridor is the one line on this map khaali counted rather than
+      // worked out, and it is worth saying which one that is.
+      pRailNote:(S.pTraffic&&S.pRail&&S.pRail.worst)
+        ?('The thick line along the corridor is counted, not estimated: '
+          +S.pRail.worst.says+', between '+S.pRail.worst.fromName+' and '
+          +S.pRail.worst.toName+', which is its busiest leg. A dashed leg is one '
+          +'nobody has booked through khaali \u2014 that is khaali\u2019s own starting '
+          +'occupancy, and it is a model.')
+        :'',
+      pRailNoteStyle:{display:(S.pTraffic&&S.pRail&&S.pRail.worst)?'block':'none',marginTop:6,
         font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       pMapPlainLabel:S.pMapPlain?'Show street names':'Hide street names',
       togglePMapPlain:()=>{this.setState({pMapPlain:!S.pMapPlain});

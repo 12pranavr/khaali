@@ -51,6 +51,12 @@ export const BANDS = { green: 0.20, yellow: 0.45, orange: 0.60 };
  */
 export const OVERRIDES = {
   metro: { green: 0.40, yellow: 0.60, orange: 0.75 },
+  // A road at 60% of free-flowing speed is a jam. A sleeper coach at 60% of
+  // its berths is a comfortable train with room to spare. Same scalar, two
+  // physical meanings, so the cuts cannot be the same - reading the corridor
+  // through the road ladder painted all thirteen legs red at occupancies khaali
+  // would describe as "seats available" everywhere else in the app.
+  rail: { green: 0.70, yellow: 0.88, orange: 0.97 },
 };
 
 export function bandsFor(key = null) { return (key && OVERRIDES[key]) || BANDS; }

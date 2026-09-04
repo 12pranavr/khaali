@@ -412,6 +412,30 @@ export function liveOf(tr, now = new Date()) {
  * first berth already vacated by then. Optimal for intervals: berths used
  * equals the busiest single leg.
  */
+/**
+ * How many people are on each of the thirteen legs.
+ *
+ * store.anySeatsFor has computed exactly this since the beginning and thrown it
+ * away, returning only the minimum over the journey somebody asked about. The
+ * array itself is the most interesting number khaali holds: it is a counted,
+ * per-segment headcount of a moving vehicle, which is the thing every congestion
+ * map in the world is trying to estimate and cannot.
+ *
+ * Pure, and deliberately NOT called from anySeatsFor. That function sits inside
+ * hold()'s compare-and-swap, whose correctness rests on there being no await
+ * between the check and the set (see the header of store.mjs), and allocating
+ * an array per call in that path is a change to that path. The duplication is
+ * the price, and a test asserts the two agree.
+ */
+export function legCounts(masks) {
+  const occ = new Int32Array(SEGMENTS);
+  for (const m of masks || []) {
+    if (!m) continue;
+    for (let l = 0; l < SEGMENTS; l++) if (m & (1 << l)) occ[l]++;
+  }
+  return occ;
+}
+
 export function packPlan(masks) {
   const items = [];
   masks.forEach((m, i) => {
