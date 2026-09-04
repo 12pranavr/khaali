@@ -43,6 +43,8 @@ import * as dispatch from './dispatch.mjs';
 import * as commit from './commit.mjs';
 import * as reliability from './reliability.mjs';
 import * as gap from './gap.mjs';
+import * as pool from './pool.mjs';
+import * as providers from './providers.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
@@ -324,6 +326,8 @@ try {
     }
     if (r.t === 'offergone') { const o = OFFERS.get(r.id); if (o) dispatch.cancel(o, r.why || 'cancelled', r.at); }
     if (r.t === 'offerexpire') { const o = OFFERS.get(r.id); if (o) { o.status = 'expired'; o.endedWhy = 'nobody took it'; } }
+    // the sources were already cancelled by their own offergone lines above
+    if (r.t === 'offerpool') { /* the pooled offer arrived as an ordinary t:'offer' */ }
   }
   // A commitment that has closed is no longer a commitment; it is one row of
   // khaali's own record of how often a yes turned out to be true.
@@ -922,6 +926,9 @@ setInterval(() => {
   // position being dropped, which close() does in its own body so that this
   // loop cannot forget to.
   const nowMin = then.getHours() * 60 + then.getMinutes();
+  // people going the same way, before anybody is asked to come for them
+  poolPass(now);
+
   for (const done of commit.sweep([...COMMITS.values()], nowMin, now, servedFrom)) {
     const c = COMMITS.get(done.id);
     if (!commit.close(c, done.outcome, now).ok) continue;
@@ -979,6 +986,64 @@ function outlookFor(ride) {
     // statement that it will.
     promise: false, simulated: true,
   };
+}
+
+/**
+ * Put people who are going the same way in the same vehicle.
+ *
+ * Runs on the sweep, over offers nobody has taken yet. The merge is itself a
+ * compare-and-set, for the same reason accept() is: cancel every source offer
+ * first, and if ANY of those cancels fails - because a driver accepted one
+ * half a second ago - abandon the whole thing and leave every offer exactly as
+ * it was. There is no half-merged state, and a passenger is never moved out of
+ * a ride somebody is already on the way to.
+ */
+function poolPass(now) {
+  for (const set of pool.group([...OFFERS.values()])) {
+    const kmPooled = pool.pooledKm(set);
+    const fare = hire.fareFor('car', kmPooled);
+    const riders = set.flatMap(o => o.riders);
+    const split = pool.splitFare(
+      riders.map(r => ({ id: r.id, km: r.km, fare: hire.fareFor('car', r.km) })), fare);
+    // The guarantee: if anybody would pay more than alone, this is null and
+    // nothing happens. Not a warning, not a smaller discount - no pool.
+    if (!split) continue;
+
+    // take the sources out first; if one is already gone, put nothing together
+    const undo = [];
+    let clean = true;
+    for (const o of set) {
+      if (dispatch.cancel(o, 'pooled', now).ok) undo.push(o);
+      else { clean = false; break; }
+    }
+    if (!clean) {
+      for (const o of undo) { o.status = 'offered'; o.endedWhy = null; o.doneAt = null; }
+      continue;
+    }
+
+    const id = crypto.randomBytes(6).toString('hex');
+    const head = set[0];
+    const priced = riders.map(r => {
+      const p = split.find(x => x.id === r.id);
+      return { ...r, fareMin: p.min, fareMax: p.max };
+    });
+    const made = dispatch.newOffer({
+      id, who: head.who, holder: head.holder, from: head.from,
+      to: priced[priced.length - 1].to,
+      fromLat: head.fromLat, fromLng: head.fromLng,
+      toLat: priced[priced.length - 1].toLat, toLng: priced[priced.length - 1].toLng,
+      km: kmPooled, fareMin: fare.min, fareMax: fare.max,
+      kinds: ['car'], pax: riders.reduce((n, r) => n + (r.pax || 1), 0),
+      pool: true, riders: priced, pickupMin: head.pickupMin,
+    }, now);
+    if (!made.ok) { for (const o of undo) { o.status = 'offered'; o.endedWhy = null; o.doneAt = null; } continue; }
+
+    OFFERS.set(id, made.offer);
+    for (const o of set) journal.append({ t: 'offergone', id: o.id, why: 'pooled into ' + id, at: now });
+    journal.append({ t: 'offer', offer: made.offer });
+    journal.append({ t: 'offerpool', id, from: set.map(o => o.id), at: now });
+    for (const r of priced) sseSend({ type: 'offer', id, who: r.who, status: 'pooled' });
+  }
 }
 
 /** Did this driver actually take a ride from that place in that half hour?
@@ -2098,6 +2163,11 @@ async function api(req, res, url) {
 
     return send(res, 200, { today: TODAY(), minute: nowMin, windows,
       gaps, asks: gap.asks(gaps, { near }), rings: gap.RING_KM,
+      // What other operators have out there. Empty because none is connected,
+      // and empty means khaali does not know rather than that there are none -
+      // it never joins the counts above, and it carries its own name when it
+      // is not empty. providers.mjs explains what connecting one would take.
+      others: [], othersSays: providers.NONE_CONNECTED,
       // khaali counted statements - that part is exact. How many of the people
       // who made them turn up is its own past record applied forward, which is
       // what capacity.mjs calls `predicted` and is a weaker thing.
@@ -2184,7 +2254,10 @@ async function api(req, res, url) {
       from: r.ride.from, to: r.ride.to,
       fromLat: a.lat, fromLng: a.lng, toLat: z.lat, toLng: z.lng,
       km: kmv, fareMin: hire.fareFor('bike', kmv), fareMax: hire.fareFor('car', kmv),
-      pax }, simNow().getTime());
+      pax, pickupMin,
+      // Sharing a vehicle with a stranger is a thing a person agrees to. It
+      // defaults to false and an absent field is not a yes.
+      pool: b.pool === true }, simNow().getTime());
     if (of.ok) {
       OFFERS.set(id, of.offer);
       journal.append({ t: 'offer', offer: of.offer });
@@ -2210,6 +2283,18 @@ async function api(req, res, url) {
     if (!who) return send(res, 401, { needsAuth: true });
     const rd = RIDES.get(mRide[1]);
     if (!rd || rd.who !== who) return send(res, 404, { error: 'no such ride' });
+    // If this ride was pooled, she is told that and how many with - never who,
+    // and never where anybody else is going.
+    const inPool = [...OFFERS.values()].find(o => o.riders.length > 1
+      && o.riders.some(r => r.id === rd.id) && o.status !== 'cancelled' && o.status !== 'expired');
+    const share = inPool ? (() => {
+      const me = inPool.riders.find(r => r.id === rd.id);
+      return { with: inPool.riders.length - 1, fareMin: me.fareMin, fareMax: me.fareMax,
+        says: 'You are sharing this with ' + (inPool.riders.length - 1)
+          + (inPool.riders.length === 2 ? ' other person' : ' other people')
+          + ' going the same way. Your share is lower than riding alone, which is the only '
+          + 'reason khaali put you together.' };
+    })() : null;
     if (req.method === 'DELETE') {
       hire.cancelRide(rd, simNow().getTime());
       journal.append({ t: 'ridegone', id: rd.id, at: rd.cancelledAt });
@@ -2222,8 +2307,8 @@ async function api(req, res, url) {
       }
     }
     const now2 = simNow(), min2 = now2.getHours() * 60 + now2.getMinutes();
-    return send(res, 200, { ok: true, ride: hire.publicOf(rd),
-      status2: hire.statusOf(rd, min2, { today: TODAY(), offer: OFFERS.get(rd.id) || null }),
+    return send(res, 200, { ok: true, ride: hire.publicOf(rd), share,
+      status2: hire.statusOf(rd, min2, { today: TODAY(), offer: OFFERS.get(rd.id) || inPool || null }),
       outlook: outlookFor(rd) });
   }
 

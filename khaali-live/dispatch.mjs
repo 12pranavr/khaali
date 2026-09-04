@@ -28,7 +28,8 @@ export const STATES = ['offered', 'accepted', 'arriving', 'arrived', 'done', 'ca
 export const OFFER_MS = 5 * 60 * 1000;
 
 export function newOffer({ id, who, holder, from, to, fromLat, fromLng, toLat, toLng,
-                           km, fareMin, fareMax, kinds, pax = 1, pnr = null },
+                           km, fareMin, fareMax, kinds, pax = 1, pnr = null,
+                           pool = false, riders = null, pickupMin = null },
                          now = Date.now()) {
   if (!id || !who || !from || !to) return { ok: false, reason: 'incomplete' };
   if (!(km > 0)) return { ok: false, reason: 'no-distance' };
@@ -43,6 +44,19 @@ export function newOffer({ id, who, holder, from, to, fromLat, fromLng, toLat, t
     // what a driver could turn up in. khaali does not pick one.
     kinds: Array.isArray(kinds) && kinds.length ? kinds.slice(0, 3) : ['bike', 'auto', 'car'],
     pax: Math.max(1, Math.min(6, Math.floor(pax) || 1)),
+    // An offer is one ride, and one ride may carry more than one person who
+    // agreed to share it. `riders` is length 1 for an ordinary booking, which
+    // is why accept() below needed no change at all: still one driver, still
+    // one offer, still the same compare-and-set.
+    pool: pool === true,
+    pickupMin: pickupMin != null ? Math.floor(pickupMin) : null,
+    riders: Array.isArray(riders) && riders.length ? riders : [{
+      id, who, holder: holder || null, to: String(to).slice(0, 80),
+      toLat: toLat != null ? +toLat : null, toLng: toLng != null ? +toLng : null,
+      km: Math.round(km * 10) / 10, pax: Math.max(1, Math.floor(pax) || 1),
+      fareMin: fareMin != null ? Math.round(fareMin) : null,
+      fareMax: fareMax != null ? Math.round(fareMax) : null,
+    }],
     status: 'offered', driver: null,
     offeredAt: now, expiresAt: now + OFFER_MS,
     acceptedAt: null, arrivedAt: null, doneAt: null, endedWhy: null,
@@ -127,6 +141,13 @@ export function publicOf(o, { forDriver = null } = {}) {
     from: o.from, to: o.to, km: o.km, pax: o.pax,
     fareMin: o.fareMin, fareMax: o.fareMax, kinds: o.kinds,
     holder: o.holder, status: o.status,
+    // Where each of them is going, and what each is paying - to the driver who
+    // has to make the stops, at the same point the destination was already
+    // shown. A passenger reading their own ride never sees another rider's
+    // name or drop; that shaping is done by the ride route, not here.
+    shared: o.riders.length > 1,
+    riders: o.riders.map(r => ({ holder: r.holder, to: r.to, km: r.km, pax: r.pax,
+      fareMin: r.fareMin, fareMax: r.fareMax })),
     mine, taken: o.status !== 'offered',
     offeredAt: o.offeredAt, expiresAt: o.expiresAt,
     msLeft: Math.max(0, o.expiresAt - Date.now()),

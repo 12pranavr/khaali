@@ -21,6 +21,8 @@ import * as DP from './dispatch.mjs';
 import * as CM from './commit.mjs';
 import * as RL from './reliability.mjs';
 import * as GP from './gap.mjs';
+import * as PL from './pool.mjs';
+import * as PV from './providers.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
@@ -2758,6 +2760,152 @@ t('what a passenger is told is caused by something, not by the clock', () => {
   assert.strictEqual(GP.outlookLines({ ...quiet, said: 6, near: 3 }).length, 4);
   assert.match(GP.outlookLines({ ...quiet, said: 6, near: 3 })[3], /3 of them are near Whitefield now/);
   assert.strictEqual(GP.outlookLines({ at: 'X' }).length, 0, 'and with nothing counted, it says nothing');
+});
+
+console.log('\nsharing the last mile, and the promise underneath it');
+
+const off = (id, toLat, toLng, extra) => ({ id, status: 'offered', pool: true, pax: 1, offeredAt: 1,
+  from: 'Whitefield', fromLat: 12.9698, fromLng: 77.75,
+  toLat, toLng, km: PL.km({ lat: 12.9698, lng: 77.75 }, { lat: toLat, lng: toLng }),
+  pickupMin: 520, ...(extra || {}) });
+
+t('nobody ever pays more for being pooled', () => {
+  // The guarantee the whole feature rests on. Not rarely, not on average:
+  // if any rider would be worse off, the pool does not happen at all.
+  let pooled = 0, refused = 0;
+  for (let i = 0; i < 200; i++) {
+    const a = off('a', 12.9698 + 0.02 + (i % 13) * 0.004, 77.75 - 0.03 - (i % 7) * 0.003);
+    const b = off('b', 12.9698 + 0.02 + (i % 11) * 0.005, 77.75 - 0.03 - (i % 5) * 0.004);
+    if (!PL.compatible(a, b).ok) { refused++; continue; }
+    const fare = HR.fareFor('car', PL.pooledKm([a, b]));
+    const split = PL.splitFare([{ id: 'a', km: a.km }, { id: 'b', km: b.km }], fare);
+    if (split === null) { refused++; continue; }
+    pooled++;
+    for (const p of split) {
+      const alone = HR.fareFor('car', p.km);
+      assert.ok(p.min <= alone.min, 'pair ' + i + ': ' + p.id + ' pays ' + p.min + ' vs ' + alone.min + ' alone');
+      assert.ok(p.max <= alone.max, 'pair ' + i + ': ' + p.id + ' pays ' + p.max + ' vs ' + alone.max + ' alone');
+    }
+  }
+  assert.ok(pooled > 40, 'the fixture has to actually pool sometimes: ' + pooled + ' of 200');
+  assert.ok(refused > 0, 'and refuse sometimes, or it is testing nothing: ' + refused);
+});
+
+t('the shares add up to the fare, exactly', () => {
+  const a = off('a', 13.02, 77.72), b = off('b', 13.03, 77.71);
+  const fare = HR.fareFor('car', PL.pooledKm([a, b]));
+  const s = PL.splitFare([{ id: 'a', km: a.km }, { id: 'b', km: b.km }], fare);
+  assert.strictEqual(s.reduce((n, p) => n + p.min, 0), fare.min, 'no invented rupee to make it close');
+  assert.strictEqual(s.reduce((n, p) => n + p.max, 0), fare.max);
+  assert.ok(s[0].saves > 0 && s[1].saves > 0);
+});
+
+t('a pool refuses everything it should, and says which', () => {
+  const a = off('a', 13.02, 77.72);
+  assert.strictEqual(PL.compatible(a, off('b', 12.90, 77.80)).why, 'direction', 'the other way entirely');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { pickupMin: 560 })).why, 'window');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { pax: 4 })).why, 'seats');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { pool: false })).why, 'consent',
+    'silence is not consent, and neither is a default');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { pool: undefined })).why, 'consent');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { status: 'accepted' })).why, 'taken');
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { from: 'Hebbal' })).why, 'origin');
+  assert.strictEqual(PL.compatible(a, a).why, 'same');
+});
+
+t('roughly the same direction is not close enough on its own', () => {
+  // Two drops ten kilometres out, twenty-five degrees apart - inside the
+  // bearing rule, and still a four-kilometre second leg on a ten-kilometre
+  // ride. Bearing says yes; the shape of the trip says no.
+  const one = off('a', 12.9698 + 0.0637, 77.75 + 0.0653);      // ~10 km, 45 degrees
+  const two = off('b', 12.9698 + 0.0308, 77.75 + 0.0868);      // ~10 km, 70 degrees
+  assert.strictEqual(PL.compatible(one, two).why, 'detour');
+  const alike = off('b', 12.9698 + 0.0600, 77.75 + 0.0690);
+  assert.strictEqual(PL.compatible(one, alike).ok, true, 'and a few degrees apart is fine');
+});
+
+t('a short drop on the way to a long one costs almost nothing, so it is allowed', () => {
+  // This looked wrong when I first wrote the rule and it is not: dropping
+  // somebody two kilometres out on the way to twenty-four adds nothing to the
+  // vehicle's trip, the short rider is dropped first, and the split by
+  // distance leaves both of them paying less than alone.
+  const near = off('a', 12.9698 + 0.018, 77.75 + 0.013);
+  const far = off('b', 12.9698 + 0.180, 77.75 + 0.130);
+  assert.strictEqual(PL.compatible(near, far).ok, true);
+  const fare = HR.fareFor('car', PL.pooledKm([near, far]));
+  const s = PL.splitFare([{ id: 'a', km: near.km }, { id: 'b', km: far.km }], fare);
+  assert.ok(s, 'and the guarantee holds, which is what makes it allowable');
+  assert.ok(s[0].saves > 0 && s[1].saves > 0, 'both of them pay less than they would alone');
+  assert.ok(s[0].max < s[1].max, 'and the short ride is the cheaper share');
+});
+
+t('a pool is a car, and what a car cannot do it still cannot do', () => {
+  const a = off('a', 13.02, 77.72, { pax: 2 });
+  assert.strictEqual(PL.compatible(a, off('b', 13.02, 77.72, { pax: 3 })).why, 'seats');
+  assert.strictEqual(PL.POOL_SEATS, HR.HIRE.car.seats, 'the ceiling is the car hire.mjs describes');
+  // and the step-free gate is hire.mjs's, called rather than copied
+  assert.deepStrictEqual(HR.allowed(['car'], { pax: 2, needs: ['step-free'] }), ['car']);
+});
+
+t('waiting longest anchors the group - a better match does not displace you', () => {
+  const first = off('a', 13.02, 77.72, { offeredAt: 1 });
+  const second = off('b', 13.03, 77.71, { offeredAt: 5 });
+  const third = off('c', 13.025, 77.715, { offeredAt: 9 });
+  const groups = PL.group([third, second, first]);
+  assert.strictEqual(groups.length, 1);
+  assert.strictEqual(groups[0][0].id, 'a', 'the one who has been waiting anchors it');
+  assert.ok(groups[0].length <= PL.POOL_MAX);
+  assert.strictEqual(PL.group([first]).length, 0, 'one person is not a pool');
+  assert.strictEqual(PL.group([first, off('z', 12.90, 77.80)]).length, 0, 'nor two going different ways');
+});
+
+t('a pool nobody consented to is never formed, however well it fits', () => {
+  const a = off('a', 13.02, 77.72, { pool: false });
+  const b = off('b', 13.021, 77.721, { pool: false });
+  assert.strictEqual(PL.group([a, b]).length, 0);
+  assert.strictEqual(PL.group([a, off('b', 13.021, 77.721)]).length, 0, 'one yes is not two');
+});
+
+t('nothing is connected, and khaali does not pretend a seam is a partner', () => {
+  assert.deepStrictEqual(PV.PROVIDERS, [], 'no operator is registered, and none is fake');
+  assert.match(PV.NONE_CONNECTED, /No other operator is connected/);
+  assert.match(PV.NONE_CONNECTED, /khaali/);
+});
+
+t('an empty provider list means khaali does not know, not that there are none', async () => {
+  assert.deepStrictEqual(await PV.availability({ lat: 12.9, lng: 77.6, when: 510, radiusKm: 2 }), []);
+  assert.deepStrictEqual(await PV.quotes({ km: 5, pax: 1 }), []);
+  // and the whole system runs with nothing registered, which is the test of
+  // the design rather than a caveat on it
+  assert.ok(GP.gapOf(spot(8, 12), sup(3), null), 'the gap needs no provider');
+  assert.ok(RL.rateFor(rows(40, 'kept'), {}).rate, 'nor does the rate');
+});
+
+t('half a provider is worse than none, so it is refused', () => {
+  const stub = { id: 'x', name: 'X', source: 's', availabilityAt: async () => null, quote: async () => null };
+  assert.match(PV.register(stub).reason, /^missing:/, 'the half that is missing is found by a passenger');
+  assert.strictEqual(PV.register({ id: 'y' }).reason, 'incomplete');
+  assert.deepStrictEqual(PV.PROVIDERS, [], 'and neither of them got in');
+});
+
+t('a provider that answers wrongly is a provider khaali did not hear from', async () => {
+  const bad = { id: 'b', name: 'B', source: 's',
+    availabilityAt: async () => { throw new Error('down'); },
+    quote: async () => ({ min: 1, max: 2, quality: 'excellent' }),   // not a rung of the ladder
+    offer: async () => ({ accepted: false, reason: 'no' }), status: async () => null };
+  assert.ok(PV.register(bad).ok);
+  try {
+    assert.deepStrictEqual(await PV.availability({}), [], 'a throw is silence, never an invented number');
+    assert.deepStrictEqual(await PV.quotes({}), [], 'and a quality khaali does not use is not shown');
+    const good = { ...bad, id: 'g', name: 'G', quote: async () => ({ min: 90, max: 140, quality: 'estimated' }) };
+    assert.ok(PV.register(good).ok);
+    const q = await PV.quotes({});
+    assert.strictEqual(q.length, 1);
+    assert.strictEqual(q[0].name, 'G', 'and what is shown carries whose number it is');
+    assert.ok(CAP.QUALITY.includes(q[0].quality));
+    PV.forget('g');
+  } finally { PV.forget('b'); PV.forget('g'); }
+  assert.deepStrictEqual(PV.PROVIDERS, []);
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');
