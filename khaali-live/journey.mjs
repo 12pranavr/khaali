@@ -213,6 +213,9 @@ export function plan({ arriveAt, needs = [], from = null, to = null, toIdx = nul
   legs.push({ mode: 'metro', line: LINE.name, color: LINE.color, from: ride.from.n, fromKn: ride.from.kn,
     fromId: ride.from.id, toId: ride.to.id,
     to: ride.to.n, toKn: ride.to.kn, stops: ride.stops, runMin: ride.runMin,
+    // every other leg says how long it takes in `min`; the metro said it only
+    // in `runMin`, so anything drawing legs to scale drew this one as nothing
+    min: Math.round(ride.runMin),
     every: nm.every, waitMax: nm.waitMax, board: hhmm(boardMin % 1440), alight: hhmm(ride.alight % 1440),
     crowdBoard: boardCrowd, crowdAlight: alightCrowd, source: 'timetable' });
   return {

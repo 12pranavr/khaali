@@ -951,129 +951,117 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
   <div style="{{ pRowsStyle }}">
     <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
-      <div class="k-resrow" onClick="{{ r.onSelect }}" style="{{ r.tkStyle }}">
+      <article onClick="{{ r.onSelect }}" style="{{ r.cardStyle }}">
 
-        <div style="{{ r.mapWrap }}">
-          <svg viewBox="{{ r.mapBox }}" width="100%" height="104" style="display:block;overflow:visible">
-            <path d="{{ r.gWalk.d }}" style="{{ r.gWalk.style }}" fill="none" stroke="{{ r.gWalk.c }}" stroke-width="{{ r.gWalk.w }}" stroke-dasharray="{{ r.gWalk.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="{{ r.gCar.d }}" style="{{ r.gCar.style }}" fill="none" stroke="{{ r.gCar.c }}" stroke-width="{{ r.gCar.w }}" stroke-dasharray="{{ r.gCar.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="{{ r.gBus.d }}" style="{{ r.gBus.style }}" fill="none" stroke="{{ r.gBus.c }}" stroke-width="{{ r.gBus.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="{{ r.gMetro.d }}" style="{{ r.gMetro.style }}" fill="none" stroke="{{ r.gMetro.c }}" stroke-width="{{ r.gMetro.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="{{ r.gTrain.d }}" style="{{ r.gTrain.style }}" fill="none" stroke="{{ r.gTrain.c }}" stroke-width="{{ r.gTrain.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
-            <circle style="{{ r.p0s }}" cx="{{ r.p0x }}" cy="{{ r.p0y }}" r="5.5" fill="{{ r.p0f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-            <circle style="{{ r.p1s }}" cx="{{ r.p1x }}" cy="{{ r.p1y }}" r="5.5" fill="{{ r.p1f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-            <circle style="{{ r.p2s }}" cx="{{ r.p2x }}" cy="{{ r.p2y }}" r="5.5" fill="{{ r.p2f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-            <circle style="{{ r.p3s }}" cx="{{ r.p3x }}" cy="{{ r.p3y }}" r="5.5" fill="{{ r.p3f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-            <circle style="{{ r.p4s }}" cx="{{ r.p4x }}" cy="{{ r.p4y }}" r="5.5" fill="{{ r.p4f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-            <circle style="{{ r.p5s }}" cx="{{ r.p5x }}" cy="{{ r.p5y }}" r="5.5" fill="{{ r.p5f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
-          </svg>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font:500 13px/1.3 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ r.modeLabel }}</span>
+          <span style="font:700 16px/1.3 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-14161a)">{{ r.via }}</span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <span style="{{ r.recStyle }}">RECOMMENDED</span>
+            <span style="{{ r.seatTint }}">{{ r.seatWord }}</span>
+          </span>
         </div>
 
-        <div style="padding:16px 16px 13px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-            <div style="{{ r.icStyle }}"><svg width="17" height="17"><use href="{{ r.iconRef }}"></use></svg></div>
-            <div style="flex:1;min-width:0">
-              <div style="{{ r.whoStyle }}">{{ r.whoText }}</div>
-              <div style="{{ r.nmStyle }}">{{ r.nmText }}</div>
-            </div>
-            <div style="{{ r.statStyle }}">{{ r.statText }}</div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="flex:1 1 auto;min-width:0">
+            <div style="font:800 30px/1 Archivo,sans-serif;letter-spacing:-.035em;color:var(--k-fg-14161a);font-variant-numeric:tabular-nums">{{ r.depTime }}</div>
+            <div style="font:600 13px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);margin-top:4px;overflow-wrap:anywhere">{{ r.fromName }}</div>
+            <div style="font:600 11px/1.3 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84);margin-top:1px">{{ r.fromCode }}</div>
           </div>
+          <div style="flex:0 1 auto;min-width:18px;display:flex;align-items:center;gap:7px;padding:0 4px">
+            <span style="height:0;border-top:2px dotted var(--k-dedcd6);flex:1;display:block"></span>
+            <sc-for list="{{ r.dots }}" as="d" hint-placeholder-count="3">
+              <span style="{{ d.style }}"></span>
+            </sc-for>
+            <span style="height:0;border-top:2px dotted var(--k-dedcd6);flex:1;display:block"></span>
+          </div>
+          <div style="flex:1 1 auto;min-width:0;text-align:right">
+            <div style="font:800 30px/1 Archivo,sans-serif;letter-spacing:-.035em;color:var(--k-fg-14161a);font-variant-numeric:tabular-nums">{{ r.arrTime }}</div>
+            <div style="font:600 13px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);margin-top:4px;overflow-wrap:anywhere">{{ r.toName }}</div>
+            <div style="font:600 11px/1.3 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84);margin-top:1px">{{ r.toCode }}</div>
+          </div>
+        </div>
 
-          <div style="{{ r.odStyle }}">
-            <div style="min-width:0">
-              <div style="{{ r.codeStyle }}">{{ r.fromCode }}</div>
-              <div style="{{ r.bigStyle }}">{{ r.dep }}</div>
-              <div style="{{ r.placeStyle }}">{{ r.fromName }}</div>
-              <div style="{{ r.dayStyle }}">{{ r.dayText }}</div>
-            </div>
-            <div style="{{ r.arcWrapStyle }}">
-              <svg width="104" height="38" viewBox="0 0 104 38" style="display:block;overflow:visible">
-                <path d="M3 30 Q52 4 101 30" fill="none" stroke="{{ r.arcStroke }}" stroke-width="1.6" stroke-linecap="round"></path>
-                <circle cx="3" cy="30" r="2.6" fill="{{ r.arcStroke }}"></circle>
-                <circle cx="101" cy="30" r="2.6" fill="{{ r.arcStroke }}"></circle>
-              </svg>
-              <div style="{{ r.arcDurStyle }}">{{ r.dur }}</div>
-            </div>
-            <div style="min-width:0;text-align:right">
-              <div style="{{ r.codeStyle }}">{{ r.toCode }}</div>
-              <div style="{{ r.bigStyle }}">{{ r.arr }}</div>
-              <div style="{{ r.placeStyle }}">{{ r.toName }}</div>
-              <div style="{{ r.dayStyle }}">{{ r.dayText }}</div>
+        <div style="background:var(--k-f1f1ee);border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font:700 14px/1 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ r.durTxt }}</span>
+          <span style="font:500 14px/1 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ r.changesTxt }}</span>
+          <span style="{{ r.qTint }}">{{ r.qWord }}</span>
+          <span style="margin-left:auto;display:flex;align-items:baseline;gap:8px">
+            <span style="{{ r.deltaStyle }}">{{ r.delta }}</span>
+            <span style="font:800 20px/1 Archivo,sans-serif;letter-spacing:-.03em;color:var(--k-fg-14161a)">{{ r.fare }}</span>
+            <span style="font:500 12.5px/1 Archivo,sans-serif;color:var(--k-fg-8a8a84)">/person</span>
+          </span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="{{ r.trackWrap }}">
+            <div style="position:absolute;top:0;bottom:0;left:{{ r.trackLeft }};width:{{ r.trackWidth }};display:flex;gap:2px">
+              <sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="3">
+                <span style="{{ b.style }}"></span>
+              </sc-for>
             </div>
           </div>
-          <div style="{{ r.rule }}"></div>
-        </div>
-
-        <div style="{{ r.badgeRowStyle }}">
-          <sc-for list="{{ r.badges }}" as="b" hint-placeholder-count="2">
-            <span style="{{ b.style }}"><svg width="13" height="13"><use href="{{ b.ref }}"></use></svg>{{ b.l }}</span>
-          </sc-for>
-        </div>
-
-        <div style="{{ r.trackWrap }}">
-          <div style="position:absolute;top:0;bottom:0;left:{{ r.trackLeft }};width:{{ r.trackWidth }};display:flex;gap:2px">
-            <sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="3">
-              <span style="{{ b.style }}"></span>
+          <div style="display:flex;flex-wrap:wrap;gap:14px">
+            <sc-for list="{{ r.legend }}" as="l" hint-placeholder-count="3">
+              <span style="display:flex;align-items:center;gap:7px;font:500 13px/1.4 Archivo,sans-serif;color:var(--k-fg-40434a)">
+                <span style="{{ l.sw }}"></span>
+                {{ l.t }}
+                <span style="color:var(--k-fg-8a8a84)">{{ l.note }}</span>
+              </span>
             </sc-for>
           </div>
         </div>
 
-        <div style="{{ r.trkWrap }}">
-          <div style="{{ r.trkLine }}"></div>
-          <div style="{{ r.trkGrid }}">
-            <sc-for list="{{ r.trk }}" as="k" hint-placeholder-count="3">
-              <div style="{{ k.cell }}">
-                <div style="{{ k.dot }}"></div>
-                <div style="{{ k.nm }}">{{ k.n }}</div>
-                <div style="{{ k.tm }}">{{ k.t }}</div>
-              </div>
-            </sc-for>
-          </div>
-        </div>
-
-        <div style="{{ r.factsWrap }}">
-          <sc-for list="{{ r.facts }}" as="f" hint-placeholder-count="4">
-            <div style="min-width:0">
-              <div style="{{ f.kRowStyle }}">
-                <svg width="12" height="12" style="flex:none"><use href="{{ f.ref }}"></use></svg>
-                <span style="{{ f.kStyle }}">{{ f.k }}</span>
-              </div>
-              <div style="{{ f.vStyle }}">{{ f.v }}</div>
-            </div>
-          </sc-for>
-        </div>
-
-        <div style="{{ r.whyStyle }}">{{ r.whyText }}</div>
-
-        <div style="{{ r.stripStyle }}">
-          <span style="{{ r.miniStyle }}">{{ r.dur }}</span>
-          <span style="{{ r.miniStyle }}">{{ r.changes }}</span>
-          <span style="{{ r.onMapNoteStyle }}">{{ r.onMapNote }}</span>
-          <span style="{{ r.fareStyle }}">{{ r.fare }}</span>
-        </div>
-
-        <div style="{{ r.footStyle }}">
-          <sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2">
-            <span style="{{ g.style }}">{{ g.t }}</span>
-          </sc-for>
-          <div onClick="{{ r.onToggle }}" style="{{ r.toggleStyle }}">{{ r.toggleLabel }}</div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--k-f0efeb)">
+          <span style="flex:1;min-width:240px;font:500 13.5px/1.5 Archivo,sans-serif;color:var(--k-fg-6a6d75)">{{ r.whyLine }}</span>
+          <div onClick="{{ r.onToggle }}" style="flex:none;white-space:nowrap;cursor:pointer;border:1px solid var(--k-dedcd6);border-radius:10px;padding:10px 16px;font:700 13.5px/1 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ r.stepLabel }}</div>
           <button onClick="{{ r.onChoose }}" style="{{ r.chooseStyle }}">{{ r.chooseLabel }}</button>
         </div>
 
-        <div style="{{ r.legWrapStyle }}">
-          <sc-for list="{{ r.legs }}" as="l" hint-placeholder-count="3">
-            <div style="display:flex;gap:12px;padding:7px 0">
-              <div style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:5px;{{ l.dotStyle }}"></div>
-              <div style="flex:1;min-width:0">
-                <div style="{{ r.legTitleStyle }}">{{ l.title }}<span style="{{ l.srcStyle }}">{{ l.srcText }}</span></div>
-                <div style="{{ r.legSubStyle }}">{{ l.sub }}</div>
-                <div style="{{ l.seatStyle }}">{{ l.seatText }}</div>
-                <div style="{{ l.capStyle }}">{{ l.capText }}</div>
+        <div style="{{ r.openPanel }}">
+          <span style="font:700 15.5px/1.2 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-14161a)">Every step of it</span>
+
+          <div style="{{ r.mapWrap }}">
+                    <svg viewBox="{{ r.mapBox }}" width="100%" height="104" style="display:block;overflow:visible">
+                      <path d="{{ r.gWalk.d }}" style="{{ r.gWalk.style }}" fill="none" stroke="{{ r.gWalk.c }}" stroke-width="{{ r.gWalk.w }}" stroke-dasharray="{{ r.gWalk.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="{{ r.gCar.d }}" style="{{ r.gCar.style }}" fill="none" stroke="{{ r.gCar.c }}" stroke-width="{{ r.gCar.w }}" stroke-dasharray="{{ r.gCar.dash }}" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="{{ r.gBus.d }}" style="{{ r.gBus.style }}" fill="none" stroke="{{ r.gBus.c }}" stroke-width="{{ r.gBus.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="{{ r.gMetro.d }}" style="{{ r.gMetro.style }}" fill="none" stroke="{{ r.gMetro.c }}" stroke-width="{{ r.gMetro.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="{{ r.gTrain.d }}" style="{{ r.gTrain.style }}" fill="none" stroke="{{ r.gTrain.c }}" stroke-width="{{ r.gTrain.w }}" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <circle style="{{ r.p0s }}" cx="{{ r.p0x }}" cy="{{ r.p0y }}" r="5.5" fill="{{ r.p0f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                      <circle style="{{ r.p1s }}" cx="{{ r.p1x }}" cy="{{ r.p1y }}" r="5.5" fill="{{ r.p1f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                      <circle style="{{ r.p2s }}" cx="{{ r.p2x }}" cy="{{ r.p2y }}" r="5.5" fill="{{ r.p2f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                      <circle style="{{ r.p3s }}" cx="{{ r.p3x }}" cy="{{ r.p3y }}" r="5.5" fill="{{ r.p3f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                      <circle style="{{ r.p4s }}" cx="{{ r.p4x }}" cy="{{ r.p4y }}" r="5.5" fill="{{ r.p4f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                      <circle style="{{ r.p5s }}" cx="{{ r.p5x }}" cy="{{ r.p5y }}" r="5.5" fill="{{ r.p5f }}" stroke="{{ r.dotRing }}" stroke-width="2.5"></circle>
+                    </svg>
+                        </svg>
+          </div>
+
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ r.steps }}" as="st" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:76px 12px minmax(0,1fr);gap:12px;align-items:start">
+                <span style="font:600 13px/1.3 'JetBrains Mono',monospace;color:var(--k-fg-6a6d75);padding-top:2px;text-align:right;white-space:nowrap">{{ st.time }}</span>
+                <div style="display:flex;flex-direction:column;align-items:center;align-self:stretch">
+                  <span style="{{ st.dot }}"></span>
+                  <sc-if value="{{ st.notLast }}" hint-placeholder-val="{{ true }}">
+                    <span style="width:2px;background:var(--k-dedcd6);flex:1;display:block;min-height:14px"></span>
+                  </sc-if>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;padding-bottom:20px;min-width:0">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="font:700 15px/1.3 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a)">{{ st.title }}</span>
+                    <sc-if value="{{ st.hasBadge }}" hint-placeholder-val="{{ false }}">
+                      <span style="{{ st.badgeStyle }}">{{ st.badge }}</span>
+                    </sc-if>
+                  </div>
+                  <span style="font:500 13.5px/1.45 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ st.detail }}</span>
+                </div>
               </div>
-            </div>
-          </sc-for>
+            </sc-for>
+          </div>
         </div>
-      </div>
+      </article>
     </sc-for>
     <div style="{{ pNoteStyle }}">{{ pNoteText }}</div>
     <div style="{{ pEndHireWrap }}">
@@ -6761,13 +6749,30 @@ class Component extends DCLogic {
     // A journey is not a train, so a row does not lead with SL/3A/2A. It leads
     // with when you leave, when you arrive, what it costs, and whether you will
     // be sitting down - which is the question nobody else answers.
-    const MODE={train:{c:'#d0451b',g:'\u25ac',n:'Train'},
-      metro:{c:'#8C2877',g:'\u25cf',n:'Metro'},
-      bus:{c:'#1f6fd0',g:'\u25b0',n:'Bus'},
-      auto:{c:'#2a9d8f',g:'\u25b2',n:'Auto'},
-      car:{c:'#0f8a7e',g:'\u25c6',n:'Car'},
-      bike:{c:'#c9701a',g:'\u25c6',n:'Bike'},
-      walk:{c:'var(--k-8a8a84)',g:'\u00b7',n:'Walk'}};
+    const MODE={train:{c:'#1B3A6B',g:'\u25ac',n:'Train'},
+      metro:{c:'#6B3FA0',g:'\u25cf',n:'Metro'},
+      bus:{c:'#17849B',g:'\u25b0',n:'Bus'},
+      auto:{c:'#17849B',g:'\u25b2',n:'Auto'},
+      car:{c:'#9A6B12',g:'\u25c6',n:'Car'},
+      bike:{c:'#1E7A4C',g:'\u25c6',n:'Bike'},
+      walk:{c:'#9A9AA0',g:'\u00b7',n:'Walk'}};
+    // A tint is a state, not a decoration: green means counted, blue means
+    // worked out, amber means guessed, red means standing.
+    const TINT={'SEAT YES':{bg:'#DDF0E6',fg:'#14603B'},
+      'SEAT LIKELY':{bg:'#E4EBF5',fg:'#1B3A6B'},
+      'SEAT IF LUCKY':{bg:'#F7EDD8',fg:'#7A5210'},
+      'STANDING':{bg:'#F7E3E3',fg:'#8A2A2A'},
+      'SEAT UNKNOWN':{bg:'#EFEFF1',fg:'#5F5F63'},
+      'EXACT':{bg:'#DDF0E6',fg:'#14603B'},
+      'ESTIMATED':{bg:'#E4EBF5',fg:'#1B3A6B'},
+      'PREDICTED':{bg:'#E4EBF5',fg:'#1B3A6B'},
+      'SIMULATED':{bg:'#F7EDD8',fg:'#7A5210'},
+      'Simulated':{bg:'#F7EDD8',fg:'#7A5210'}};
+    const tint=k=>TINT[k]||{bg:'#EFEFF1',fg:'#5F5F63'};
+    // 7:44 pm, the way it is said out loud
+    const hm12=m=>{const x=((Math.round(m)%1440)+1440)%1440;let h=Math.floor(x/60);
+      const mm=String(x%60).padStart(2,'0'),ap=h>=12?'pm':'am';h=h%12||12;return h+':'+mm+' '+ap;};
+    const dhm=m=>m>=60?(Math.floor(m/60)+'h '+(m%60)+'m'):(m+'m');
     const SEAT={yes:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'You get a seat',short:'Yours'},
       likely:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'Seat likely',short:'Likely'},
       maybe:{c:'var(--k-fg-8a4a12)',bg:'var(--k-fdf0e3)',t:'Seat if you are lucky',short:'If lucky'},
@@ -6826,11 +6831,10 @@ class Component extends DCLogic {
         // ---- where this way sits on the shared clock ----
         trackLeft:((c.dep-AXt0)/AXwin*100).toFixed(2)+'%',
         trackWidth:(Math.max(c.totalMin,1)/AXwin*100).toFixed(2)+'%',
-        trackWrap:{position:'relative',height:8,borderRadius:4,
-          background:isRec?INKINS:'var(--k-f1f1ee)',margin:'0 16px 12px'},
-        bars:c.legs.map(l=>({flex:String(Math.max(l.min||1,1)),
-          style:{flex:String(Math.max(l.min||1,1)),display:'block',borderRadius:2,
-            background:(MODE[l.mode]||MODE.walk).c}})),
+        trackWrap:{position:'relative',height:9,borderRadius:5,
+          background:'var(--k-f1f1ee)'},
+        bars:c.legs.map(l=>({style:{flex:String(Math.max(l.min||1,1)),display:'block',
+          borderRadius:3,background:(MODE[l.mode]||MODE.walk).c}})),
         // ---- the ticket itself ----
         tkStyle:{background:isRec?INK:'var(--k-fff)',borderRadius:18,gridColumn:isRec?'1/-1':'auto',
           overflow:'hidden',cursor:'pointer',position:'relative',
@@ -6862,25 +6866,26 @@ class Component extends DCLogic {
             c:(MODE[m]||MODE.walk).c,w:String(w),dash:dash||'none'});
           const dots=(mm?mm.dots:[]);
           const out={mapWrap:{display:mm?'block':'none',position:'relative',
-              margin:'0 0 2px',padding:'12px 14px 0',background:isRec?'rgba(255,255,255,.05)':'var(--k-fafaf8)',
-              borderBottom:'1px solid '+(isRec?'rgba(255,255,255,.12)':'var(--k-e6e5e0)')},
+              margin:0,padding:'6px 4px 0'},
             mapBox:'0 0 '+W+' '+H,
             gTrain:line('train',3),gMetro:line('metro',3),gBus:line('bus',3),
             gWalk:line('walk',2.2,'2 5'),gCar:line('car',3,'7 5'),
-            dotRing:isRec?'#14161a':'#ffffff'};
+            dotRing:'var(--k-fafaf8)'};
           for(let i=0;i<6;i++){
             const p=dots[i];
             out['p'+i+'x']=p?String(p.x):'0';
             out['p'+i+'y']=p?String(p.y):'0';
             out['p'+i+'n']=String(i+1);
             out['p'+i+'s']={display:p?'block':'none'};
-            out['p'+i+'f']=i===0?'#1a8f4e':(i===dots.length-1?'#d0451b':(isRec?'#ffffff':'#14161a'));
+            out['p'+i+'f']=i===0?'#1E7A4C':(i===dots.length-1?'#8A2A2A':'#14161a');
           }
           return out;
         })(),
-        // ---- codes above the times, dates under the places ----
-        fromCode:this.planCode(stops[0])||'',
-        toCode:this.planCode(stops[stops.length-1])||'',
+        // ---- the two ends of the whole way, walk included ----
+        fromName:c.legs.length?c.legs[0].from:stops[0],
+        toName:c.legs.length?c.legs[c.legs.length-1].to:stops[stops.length-1],
+        fromCode:this.planCode(c.legs.length?c.legs[0].from:stops[0])||'',
+        toCode:this.planCode(c.legs.length?c.legs[c.legs.length-1].to:stops[stops.length-1])||'',
         codeStyle:{font:'700 11px/1 Archivo,sans-serif',letterSpacing:'.13em',color:fg2,marginBottom:6},
         dayStyle:{font:'600 11px/1.35 Archivo,sans-serif',color:fg2,marginTop:3,opacity:.85},
         dayText:(()=>{try{const d=new Date(this.dateIsoFor(S.dayIdx||0)+'T00:00:00');
@@ -6906,7 +6911,6 @@ class Component extends DCLogic {
         bigStyle:{font:'800 27px/1 Archivo,sans-serif',letterSpacing:'-.035em',color:fg,
           fontVariantNumeric:'tabular-nums'},
         placeStyle:{font:'600 11.5px/1.35 Archivo,sans-serif',color:fg2,marginTop:5,overflowWrap:'anywhere'},
-        fromName:stops[0],toName:stops[stops.length-1],
         lnStyle:{flex:1,height:0,borderTop:'2px dotted '+(isRec?ONINK2:'var(--k-dedcd6)')},
         midIcStyle:{width:26,height:26,borderRadius:999,flex:'none',display:'flex',alignItems:'center',
           justifyContent:'center',background:isRec?ONINK:'var(--k-14161a)',
@@ -7024,6 +7028,98 @@ class Component extends DCLogic {
         // Filled means "press this". Twelve filled buttons means nothing does.
         // The recommended way, and whichever she has picked, are filled; the
         // rest wait quietly until she chooses one.
+        // ---------------------------------------------------------------
+        // the redesign's card
+        // ---------------------------------------------------------------
+        cardStyle:{background:'var(--k-fff)',borderRadius:20,padding:'18px 20px',
+          display:'flex',flexDirection:'column',gap:15,cursor:'pointer',
+          border:'1.5px solid '+((isSel||isRec)?'var(--k-14161a)':'var(--k-e6e5e0)')},
+        // who runs it, and where it turns
+        modeLabel:(()=>{const n=c.legs.map(l=>(MODE[l.mode]||MODE.walk).n.toLowerCase());
+          if(!n.length)return '';
+          const head=n[0].charAt(0).toUpperCase()+n[0].slice(1);
+          if(n.length===1)return head+' only';
+          return [head].concat(n.slice(1,-1)).join(', ')+', then '+n[n.length-1];})(),
+        via:ride.length>1?('Via '+stops[1]):'Straight through',
+        recStyle:{display:isRec?'inline-block':'none',
+          font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
+          background:'var(--k-14161a)',color:'var(--k-fg-fff)',padding:'6px 10px',borderRadius:6},
+        seatWord:(sk.short==='Yours'?'SEAT YES':sk.short==='Likely'?'SEAT LIKELY'
+          :sk.short==='If lucky'?'SEAT IF LUCKY':sk.short==='Standing'?'STANDING':'SEAT UNKNOWN'),
+        seatTint:(()=>{const w=sk.short==='Yours'?'SEAT YES':sk.short==='Likely'?'SEAT LIKELY'
+          :sk.short==='If lucky'?'SEAT IF LUCKY':sk.short==='Standing'?'STANDING':'SEAT UNKNOWN';
+          const t=tint(w);return {font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+            padding:'6px 10px',borderRadius:6,background:t.bg,color:t.fg};})(),
+        // the two times, and the places under them
+        depTime:hm12(c.dep),arrTime:hm12(c.arr),
+        dots:ride.map(l=>({style:{width:9,height:9,borderRadius:999,flex:'none',display:'block',
+          background:(MODE[l.mode]||MODE.walk).c}})),
+        // one grey strip: how long, how many changes, how well it is known, what it costs
+        durTxt:dhm(c.totalMin),
+        changesTxt:c.changes===0?'no changes':(c.changes+(c.changes===1?' change':' changes')),
+        qWord:(()=>{if(c.simulated)return 'SIMULATED';
+          const q=c.legs.map(l=>l.cap&&l.cap.quality).filter(Boolean);
+          const rank=['unknown','predicted','estimated','exact'];
+          if(!q.length)return 'ESTIMATED';
+          return q.reduce((a,b)=>rank.indexOf(a)<rank.indexOf(b)?a:b).toUpperCase();})(),
+        qTint:(()=>{const w=c.simulated?'SIMULATED':(()=>{const q=c.legs.map(l=>l.cap&&l.cap.quality).filter(Boolean);
+            const rank=['unknown','predicted','estimated','exact'];
+            return q.length?q.reduce((a,b)=>rank.indexOf(a)<rank.indexOf(b)?a:b).toUpperCase():'ESTIMATED';})();
+          const t=tint(w);return {font:"600 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+            padding:'5px 9px',borderRadius:6,background:t.bg,color:t.fg};})(),
+        // what it costs against the recommended way, when it is not that way
+        delta:(()=>{if(isRec||R==null||R.recommended==null)return '';
+          const b=chains[R.recommended];if(!b||b===c)return '';
+          const df=c.fare-b.fare, dt=c.totalMin-b.totalMin, out=[];
+          if(df)out.push((df>0?'+':'\u2212')+'\u20b9'+Math.abs(df));
+          if(dt)out.push((dt>0?'+':'\u2212')+Math.abs(dt)+'m');
+          return out.join(' ');})(),
+        deltaStyle:{display:(!isRec&&R&&R.recommended!=null&&chains[R.recommended]!==c)?'inline':'none',
+          font:"600 11.5px/1 'JetBrains Mono',monospace",color:'var(--k-fg-8a8a84)'},
+        // the journey as a bar, and the bar's legend
+        legend:c.legs.map(l=>{const M=MODE[l.mode]||MODE.walk;
+          const t=l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m')
+            :l.mode==='train'?('Train '+(l.id||'')+' \u00b7 '+(this.planCode(l.from)||l.from)+'\u2192'+(this.planCode(l.to)||l.to))
+            :l.mode==='metro'?((l.line||'Metro')+' \u00b7 '+l.from+'\u2192'+l.to)
+            :l.mode==='bus'?('Bus '+String(l.id||'').replace(/^BMTC /,'')+' \u00b7 to '+l.to)
+            :(M.n+' \u00b7 door to door');
+          return {t,note:dhm(l.min||0),
+            sw:{width:8,height:8,borderRadius:2,display:'block',flex:'none',background:M.c}};}),
+        // why this one is here at all
+        whyLine:isRec?(R.explanation||''):(c.alloc&&c.alloc.why)||'',
+        // ---- every step of it ----
+        stepLabel:open?'Hide the steps':'See full journey',
+        openPanel:{display:open?'flex':'none',flexDirection:'column',gap:15,
+          background:'var(--k-fafaf8)',borderRadius:16,padding:'18px 20px'},
+        steps:(()=>{let at=c.dep;
+          const out=c.legs.map(l=>{const t=at;at+=(l.min||0);const M=MODE[l.mode]||MODE.walk;
+            const title=l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' metres')
+              :l.mode==='train'?((l.name||'Train')+' '+(l.id||''))
+              :l.mode==='metro'?(l.line||'Metro')
+              :l.mode==='bus'?('BMTC '+String(l.id||'').replace(/^BMTC /,''))
+              :(l.name||M.n);
+            const detail=l.mode==='walk'?('To '+l.to+(l.entrance?' \u00b7 '+l.entrance.n:'')+' \u00b7 about '+l.min+' min')
+              :l.mode==='train'?(l.from+' to '+l.to+(l.seat&&l.seat.why?' \u00b7 '+l.seat.why:''))
+              :l.mode==='metro'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes')
+              :l.mode==='bus'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes')
+              :((l.km!=null?l.km+' km \u00b7 ':'')+'fare is a range, not a price \u00b7 khaali runs no '+M.n.toLowerCase()+'s');
+            const badge=l.mode==='train'?'Book this'
+              :l.mode==='metro'?('Every '+l.every+' min')
+              :l.source==='simulated'?'Simulated':'';
+            const bt=badge==='Book this'?{bg:IP.bg,fg:IP.fg}:tint(badge);
+            return {time:hm12(t),title,detail,badge,hasBadge:!!badge,
+              dot:{width:12,height:12,borderRadius:999,flex:'none',display:'block',
+                marginTop:3,background:M.c},
+              badgeStyle:{font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+                padding:'5px 9px',borderRadius:6,background:bt.bg,color:bt.fg},
+              notLast:true};});
+          out.push({time:hm12(c.arr),title:c.legs.length?c.legs[c.legs.length-1].to:stops[stops.length-1],
+            detail:'You are there',
+            badge:'',hasBadge:false,
+            dot:{width:12,height:12,borderRadius:999,flex:'none',display:'block',
+              marginTop:3,background:'#1E7A4C'},
+            badgeStyle:{display:'none'},notLast:false});
+          return out;})(),
         chooseStyle:(isRec||isSel)
           ? {flex:'none',marginLeft:'auto',border:'none',
              background:tl?'var(--k-d8385a)':(this.planTripOf(c).legs.length?'#8C2877':'var(--k-1f3f8f)'),
@@ -7439,9 +7535,7 @@ class Component extends DCLogic {
       pRows:rows,
         // a ticket is a ticket, not a banner: at 1240px a single column
         // stretched every one of them to eleven hundred pixels wide
-        pRowsStyle:{display:rows.length?'grid':'none',marginTop:18,
-          gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,340px),1fr))',
-          gap:12,alignItems:'start'},
+        pRowsStyle:{display:rows.length?'flex':'none',flexDirection:'column',gap:10},
       pNoteStyle:{gridColumn:'1/-1',display:rows.length?'block':'none',marginTop:8,
         font:'500 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       // The last mile, offered where she is looking at it. She may have twelve
