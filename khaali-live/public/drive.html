@@ -54,6 +54,8 @@
   button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
   button:disabled{opacity:.45;cursor:default}
   .says.rate{padding:0 0 8px 21px;color:#7c828f}
+  .says.gap{padding:0 0 8px 21px;color:#e0a419}
+  .says.gap.full,.says.gap.crowded{color:#5bd48b}
   .ask{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 10px 21px}
   .ask .said{font:600 11.5px/1.5 Manrope,sans-serif;color:#5bd48b;flex:1;min-width:140px}
   .ask button{margin-top:0;width:auto;flex:1;min-width:180px}
@@ -92,7 +94,7 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&
 const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const mins = (ms) => Math.max(0, Math.round(ms / 60000));
 
-let spots = [], offers = [], windows = [], head = null, busy = false, saidAt = 0, here = null;
+let spots = [], offers = [], windows = [], asks = [], gaps = [], head = null, busy = false, saidAt = 0, here = null;
 
 /* Whether this driver has agreed to khaali using a rounded position while a
    window they said yes to is on. A separate answer from saying yes, kept on
@@ -203,6 +205,16 @@ function render() {
         '</div>'));
     }
 
+    /* What khaali is short of here - or that it is not short at all, which is
+       the sentence that stops this becoming a shout to the whole city. */
+    const g = gapFor(s);
+    if (g && (g.crowded || g.enough || g.asking > 0)) {
+      card.appendChild($('<div class="says gap' + (g.crowded ? ' crowded' : g.enough ? ' full' : '') + '">' +
+        esc(g.says) +
+        (g.asking > 0 ? ' <span class="chip">asking ' + g.radiusKm + ' km out</span>' : '') +
+        '</div>'));
+    }
+
     /* The question, asked where the number is. A driver should not have to go
        looking for the place to answer it. */
     const ask = $('<div class="ask"></div>');
@@ -251,6 +263,12 @@ function render() {
     'you taking a ride somewhere else, and there is no score attached to your name &mdash; khaali counts how ' +
     'often a yes turns out to be true by place and by time of day, never by person. You can take it back at ' +
     'any point before the half hour ends.<br><br>' +
+    '<b>Why you are not told about everywhere.</b> khaali asks outward in rings &mdash; two kilometres, ' +
+    'then five, then ten &mdash; and the ring widens only as far as the shortage justifies. It stops the ' +
+    'moment as many drivers have said yes as there are people booked, and it says so when more have. ' +
+    'Telling every driver in the city about a shortage of twelve is how a hundred of you end up sharing ' +
+    'forty passengers, and the sixty who came for nothing are the ones who paid for it. The point is to ' +
+    'close the gap, not to fill the place.<br><br>' +
     '<b>Where &ldquo;expected&rdquo; comes from.</b> khaali&rsquo;s own record of what happened at this place ' +
     'at this time of day, and it always shows you both counts rather than a percentage, so you can check the ' +
     'denominator instead of trusting the fraction. Under twenty it does not have a number and says so. The ' +
@@ -267,6 +285,7 @@ function render() {
 const myWindows = () => windows.filter(w => w.mine);
 const supplyFor = (s) => windows.find(w => w.at === s.at && w.window === s.window)
   || { said: 0, mine: false, rungs: {} };
+const gapFor = (s) => gaps.find(g => g.at === s.at && g.window === s.window) || null;
 
 async function sayYes(spot) {
   if (busy) return; busy = true; render();
@@ -362,9 +381,11 @@ async function pull() {
     const [d, o, s] = await Promise.all([
       fetch('/api/demand' + near).then(r => r.json()),
       fetch('/api/offers?driver=' + encodeURIComponent(ME)).then(r => r.json()),
-      fetch('/api/supply?driver=' + encodeURIComponent(ME)).then(r => r.json()),
+      fetch('/api/supply?driver=' + encodeURIComponent(ME) + (here ? '&lat=' + here.lat + '&lng=' + here.lng : ''))
+        .then(r => r.json()),
     ]);
-    head = d; spots = d.hotspots || []; offers = o.offers || []; windows = s.windows || [];
+    head = d; spots = d.hotspots || []; offers = o.offers || [];
+    windows = s.windows || []; asks = s.asks || []; gaps = s.gaps || [];
     render();
   } catch (e) { /* a poll that fails leaves the last true answer on screen */ }
 }

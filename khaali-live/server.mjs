@@ -42,6 +42,7 @@ import * as demand from './demand.mjs';
 import * as dispatch from './dispatch.mjs';
 import * as commit from './commit.mjs';
 import * as reliability from './reliability.mjs';
+import * as gap from './gap.mjs';
 import * as capacity from './capacity.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
@@ -2007,6 +2008,10 @@ async function api(req, res, url) {
   if (p === '/api/supply') {
     const driver = String(q.get('driver') || '').slice(0, 40) || null;
     const now = simNow(), nowMin = now.getHours() * 60 + now.getMinutes(), t = now.getTime();
+    // Where the driver is standing, if they said. It decides which rings they
+    // are inside and nothing else, and it is not stored.
+    const sLat = parseFloat(q.get('lat')), sLng = parseFloat(q.get('lng'));
+    const near = (isFinite(sLat) && isFinite(sLng)) ? { lat: sLat, lng: sLng } : null;
     const live = [...COMMITS.values()].filter(x => !x.outcome && !commit.over(x, nowMin));
     const by = new Map();
     for (const c of live) {
@@ -2028,7 +2033,21 @@ async function api(req, res, url) {
       return { ...e, supplyFloor: floor, rate,
         expected: reliability.expected(e.said, floor, rate) };
     });
+
+    // And the subtraction. Every hotspot the map is already publishing gets a
+    // gap; a place the map is NOT publishing gets none, because a gap beside a
+    // driver count would give away the passenger count the floor exists to
+    // withhold. gapOf() returns null there and asks() drops it.
+    const spots = demand.hotspots(DEMAND, { nowMin, today: TODAY(), near });
+    const gaps = spots.map(sp => {
+      const e = windows.find(w => w.at === sp.at && w.window === sp.window);
+      const supply = e ? { said: e.said, ceiling: e.said, floor: e.supplyFloor, rungs: e.rungs }
+        : { said: 0, ceiling: 0, floor: 0, rungs: {} };
+      return gap.gapOf(sp, supply, e ? e.expected : null);
+    }).filter(Boolean);
+
     return send(res, 200, { today: TODAY(), minute: nowMin, windows,
+      gaps, asks: gap.asks(gaps, { near }), rings: gap.RING_KM,
       // khaali counted statements - that part is exact. How many of the people
       // who made them turn up is its own past record applied forward, which is
       // what capacity.mjs calls `predicted` and is a weaker thing.

@@ -20,6 +20,7 @@ import * as DM from './demand.mjs';
 import * as DP from './dispatch.mjs';
 import * as CM from './commit.mjs';
 import * as RL from './reliability.mjs';
+import * as GP from './gap.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
 import * as HR from './hire.mjs';
@@ -2612,6 +2613,112 @@ t('no history at all is not a rate of nothing', () => {
   assert.strictEqual(r.of, 0);
   assert.strictEqual(r.quality, 'unknown');
   assert.strictEqual(RL.expected(12, 0, r), null, 'and twelve who said yes stay twelve who said yes');
+});
+
+console.log('\nthe gap, and knowing when to stop asking');
+
+const spot = (floor, ceiling, at) => ({ at: at || 'Whitefield', window: 510,
+  windowText: '08:30–09:00', floor, ceiling, lat: 12.9698, lng: 77.75 });
+const sup = (said, near) => ({ said, ceiling: said, floor: near || 0,
+  rungs: { 'said-yes': said - (near || 0), 'moving-toward': 0, nearby: near || 0, available: 0, served: 0 } });
+
+t('below the privacy floor there is no gap, and that is the whole defence', () => {
+  // Publish "gap 2" beside "3 said yes" and you have published that five
+  // people are travelling, at a place khaali refused to give a count for. The
+  // gap is only ever arithmetic over numbers the map already shows.
+  assert.strictEqual(GP.gapOf(spot(2, 2), sup(0), null), null, 'two people is not a hotspot');
+  assert.strictEqual(GP.gapOf(spot(0, 2), sup(0), 0), null);
+  assert.ok(GP.gapOf(spot(3, 3), sup(0), null), 'three is');
+  assert.strictEqual(GP.asks([GP.gapOf(spot(2, 2), sup(0), null)]).length, 0);
+});
+
+t('the gap has two integer bounds even with no reliability at all', () => {
+  const g = GP.gapOf(spot(8, 12), sup(3, 1), null);
+  assert.strictEqual(g.gap, null, 'no measured rate, no working number');
+  assert.strictEqual(g.gapCeiling, 11, 'most people, only the drivers khaali can see');
+  assert.strictEqual(g.gapFloor, 5, 'fewest people, every yes turning up');
+  assert.ok(Number.isInteger(g.gapCeiling) && Number.isInteger(g.gapFloor));
+  assert.ok(g.gapFloor <= g.gapCeiling, 'and the bounds are the right way round');
+  // and a negative floor is information, not an error: on the best case there
+  // are already more drivers than the fewest people who could turn up
+  assert.strictEqual(GP.gapOf(spot(4, 12), sup(9), null).gapFloor, -5);
+  assert.ok(g.asking > 0, 'and khaali still asks, on the cautious count');
+  assert.match(g.says, /has not measured/);
+});
+
+t('the radius widens with the gap and never leaves the last ring', () => {
+  assert.strictEqual(GP.radiusFor(0), 0, 'a closed gap is not asked about at all');
+  assert.strictEqual(GP.radiusFor(-3), 0);
+  assert.strictEqual(GP.radiusFor(1), 2);
+  assert.strictEqual(GP.radiusFor(4), 2);
+  assert.strictEqual(GP.radiusFor(5), 5);
+  assert.strictEqual(GP.radiusFor(9), 10);
+  assert.strictEqual(GP.radiusFor(1000), 10, 'never the whole city, however short it is');
+  assert.strictEqual(GP.radiusFor(1000), GP.RING_KM[GP.RING_KM.length - 1]);
+});
+
+t('the ring closes as drivers arrive, and never widens', () => {
+  let last = Infinity;
+  for (let said = 0; said <= 14; said++) {
+    const g = GP.gapOf(spot(10, 12), sup(said), null);
+    assert.ok(g.radiusKm <= last, said + ' drivers widened the ring');
+    assert.ok(g.radiusKm <= 10);
+    last = g.radiusKm;
+  }
+  assert.strictEqual(last, 0, 'and it reaches zero');
+});
+
+t('enough is enough without any reliability - the stop that works on day one', () => {
+  // More heads have said yes than the largest number of people who could
+  // possibly show up. This needs no history and no rate.
+  const g = GP.gapOf(spot(8, 12), sup(12), null);
+  assert.strictEqual(g.enough, true);
+  assert.strictEqual(g.asking, 0);
+  assert.strictEqual(g.radiusKm, 0);
+  assert.match(g.says, /As many drivers/);
+  assert.strictEqual(GP.asks([g]).length, 0, 'and nobody is asked');
+});
+
+t('oversupply is not merely avoided, it is said out loud', () => {
+  // The failure this exists for is a shortage broadcast city-wide: a hundred
+  // drivers for forty passengers, and the sixty who came for nothing paid for
+  // the mistake.
+  const g = GP.gapOf(spot(6, 10), sup(14), 14);
+  assert.strictEqual(g.over, 4);
+  assert.strictEqual(g.crowded, true);
+  assert.strictEqual(g.asking, 0);
+  assert.strictEqual(g.radiusKm, 0);
+  assert.match(g.says, /more drivers have said.*than there are people booked/i);
+});
+
+t('a driver further out than the gap justifies is not asked', () => {
+  const wide = GP.gapOf(spot(14, 16), sup(0), null);       // a big gap: ten km
+  const thin = GP.gapOf(spot(4, 4), sup(1), null);         // a small one: two km
+  const far = { lat: 12.9698 + 0.06, lng: 77.75 };         // about 6.7 km off
+  assert.strictEqual(wide.radiusKm, 10);
+  assert.strictEqual(thin.radiusKm, 2);
+  assert.strictEqual(GP.asks([wide, thin], { near: far }).length, 1, 'only the one that reaches');
+  assert.strictEqual(GP.asks([wide, thin], { near: far })[0].at, wide.at);
+  assert.strictEqual(GP.asks([wide, thin], { near: { lat: 12.9698, lng: 77.75 } }).length, 2,
+    'and standing on it, both');
+});
+
+t('supply counts what it can see and forecasts the rest, never the other way', () => {
+  const commits = [
+    { at: 'Whitefield', window: 510, outcome: null },
+    { at: 'Whitefield', window: 510, outcome: null },
+    { at: 'Whitefield', window: 510, outcome: null },
+    { at: 'Whitefield', window: 510, outcome: 'kept' },        // closed, not supply
+    { at: 'Hebbal', window: 510, outcome: null },              // elsewhere
+    { at: 'Whitefield', window: 540, outcome: null },          // another half hour
+  ];
+  let n = 0;
+  const s = GP.supplyOf(commits, { at: 'Whitefield', window: 510,
+    rungOf: () => (++n === 1 ? { rung: 'nearby' } : { rung: 'said-yes' }) });
+  assert.strictEqual(s.said, 3);
+  assert.strictEqual(s.floor, 1, 'the one khaali can see is near it');
+  assert.strictEqual(s.ceiling, 3);
+  assert.ok(s.floor <= s.ceiling);
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');
