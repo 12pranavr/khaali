@@ -596,6 +596,23 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
 </div>
 
+<style>
+/* khaali in black and white. Three :root selectors so this outranks the
+   theme blocks above it, in either theme, without touching them - delete
+   this style element and every colour goes back exactly as it was. */
+:root:root:root{--k-fff:#ffffff;--k-fbfbfa:#ffffff;--k-fafaf8:#f4f4f6;--k-f1f1ee:#f4f4f6;--k-f4f3ef:#f4f4f6;--k-f0efeb:#eeeef1;--k-eeede9:#eeeef1;--k-f2f2f5:#f4f4f6;--k-f4f4f2:#f4f4f6;--k-e8e7e2:#e9e9ed;--k-e2e0da:#e5e5e9;--k-e6e5e0:#e5e5e9;--k-dedcd6:#e1e1e6;--k-d4d3ce:#d9d9df;--k-e2ccd3:#e5e5e9;--k-c9c9c2:#c9c9d0;--k-c3c7d0:#c9c9d0;--k-c8ccd4:#c9c9d0;--k-dfe3ea:#e5e5e9;--k-101319:#111113;--k-14161a:#111113;--k-1a1e26:#111113;--k-22252b:#1c1c1f;--k-2a2f3a:#26262b;--k-2c3038:#26262b;--k-3a3f48:#3a3a41;--k-40434a:#3a3a41;--k-5a5f6a:#5a5a62;--k-6a6d75:#6d6d76;--k-7a8090:#84848d;--k-8a8a84:#71717a;--k-8b90a0:#9a9aa2;--k-9a9a94:#9a9aa2;--k-9a9ea8:#a4a4ac;--k-a8a8a2:#b5b5bc;--k-b8b8b2:#c2c2c8;--k-5a6b90:#6d6d76;--k-fg-101319:#111113;--k-fg-14161a:#111113;--k-fg-40434a:#3a3a41;--k-fg-5a5f6a:#5a5a62;--k-fg-6a6d75:#6d6d76;--k-fg-7a8090:#84848d;--k-fg-8a8a84:#71717a;--k-fg-8b90a0:#71717a;--k-fg-9a9a94:#71717a;--k-fg-9a9ea8:#7c7c85;--k-fg-a8a8a2:#b5b5bc;--k-fg-b8b8b2:#c2c2c8;--k-fg-c3c7d0:#9a9aa2;--k-fg-c8ccd4:#9a9aa2;--k-fg-c9c9c2:#9a9aa2;--k-fg-dfe3ea:#6d6d76;--k-fg-e8eaef:#111113;--k-fg-5a6b90:#6d6d76;--k-fg-fff:#ffffff;--k-d8385a:#111113;--k-fg-d8385a:#111113;--k-1f3f8f:#111113;--k-2f5fd0:#111113;--k-4d7ef7:#111113;--k-e8455f:#111113;--k-eaf0fd:#f0f0f3;--k-fdf3f5:#f2f2f5;--k-fff8f9:#f2f2f5;--k-f6f8fd:#f4f4f6;--k-f7faff:#f4f4f6;--k-e8eaef:#eeeef1;--k-fg-1f3f8f:#1d4ed8;--k-fg-2f5fd0:#1d4ed8;--k-fg-14663a:#15803d;--k-14663a:#15803d;--k-e6f4ec:#dcfce7;--k-1f9d55:#15803d;--k-fg-1f9d55:#15803d;--k-27ae60:#15803d;--k-d9f2e4:#dcfce7;--k-dbe9e1:#dcfce7;--k-dce9e2:#dcfce7;--k-a8dcbe:#8fd0aa;--k-bfe6cd:#8fd0aa;--k-f2fbf6:#f0faf4;--k-f7fbf9:#f0faf4;--k-fg-8a4a12:#a16207;--k-8a4a12:#a16207;--k-fdf0e3:#fdf3e0;--k-e0a419:#a16207;--k-8a5e07:#a16207;--k-c2870a:#a16207;--k-fg-c2870a:#a16207;--k-e3b505:#a16207;--k-f08c1d:#a16207;--k-fdf0d9:#fdf3e0;--k-fdf1d9:#fdf3e0;--k-fdf8ee:#fdf3e0;--k-a71f3d:#b3261e;--k-fg-a71f3d:#b3261e;--k-a06ae8:#5b5bd6;}
+:root:root:root .k-topbar{background:#ffffff;color:#111113;
+  /* .k-topbar sets twenty tokens for the navy bar; every one of them has to
+     be answered here or the nav keeps its periwinkle on a white ground */
+  --k-fff:#ffffff; --k-fbfbfa:#ffffff; --k-e6e5e0:#e5e5e9; --k-f0efeb:#f4f4f6;
+  --k-f7f6f3:#f4f4f6; --k-fg-14161a:#111113; --k-14161a:#111113;
+  --k-fg-40434a:#3a3a41; --k-40434a:#3a3a41; --k-fg-9a9a94:#6d6d76;
+  --k-fg-8a8a84:#6d6d76; --k-fg-b8b8b2:#84848d; --k-fg-a8a8a2:#84848d;
+  --k-f4f4f2:#f4f4f6; --k-eeede9:#eeeef1; --k-f1f1ee:#f4f4f6; --k-fafaf8:#f4f4f6;
+  --k-e2e0da:#e5e5e9; --k-d4d3ce:#d9d9df; --k-dedcd6:#e1e1e6; --k-e8e7e2:#eeeef1}
+:root:root:root .k-hdrsearch,:root:root:root .k-filters{--k-fff:#f4f4f6;--k-fbfbfa:#f4f4f6}
+:root:root:root body{background:#ececee;background-image:none}
+</style>
 <sc-if value="{{ onPlan }}" hint-placeholder-val="{{ false }}">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="ktk-train" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c-4 0-8 .5-8 4v9.5A3.5 3.5 0 0 0 7.5 19L6 20.5v.5h12v-.5L16.5 19a3.5 3.5 0 0 0 3.5-3.5V6c0-3.5-4-4-8-4Zm-6 5h5v4H6V7Zm7 0h5v4h-5V7Zm-4.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm7 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></symbol>
@@ -604,6 +621,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <symbol id="ktk-walk" viewBox="0 0 24 24"><path fill="currentColor" d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM9.8 8.9 7 11.2l1.3 1.6 2.1-1.7.7 3-2.6 2.6L6 22h2.4l2.3-4.4 2.6 2.1L14.5 22h2.3l-1.6-5.6-2.3-1.9 1-3.6c.9 1.2 2.3 2 4.1 2.1v-2c-1.6-.1-2.7-1-3.3-2.1l-1-1.6c-.5-.8-1.5-1.1-2.4-.8L9.8 8.9Z"/></symbol>
   <symbol id="ktk-car" viewBox="0 0 24 24"><path fill="currentColor" d="M5.8 5.5A2 2 0 0 1 7.7 4h8.6a2 2 0 0 1 1.9 1.5L19.4 10H21v2h-1v6.5a1.5 1.5 0 0 1-3 0V18H7v.5a1.5 1.5 0 0 1-3 0V12H3v-2h1.6l1.2-4.5ZM7.4 6l-.9 4h11l-.9-4H7.4ZM7 13.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm10 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/></symbol>
 </svg>
+<div class="k-mono" style="background:#ececee;color:#111113;min-height:100vh">
 <div style="max-width:1240px;margin:0 auto;padding:24px 22px 70px">
   <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
     <h1 style="margin:0;font:700 24px/1.2 Manrope,sans-serif;letter-spacing:-.02em">{{ pHeadFrom }} &rarr; {{ pHeadTo }}</h1>
@@ -921,7 +939,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
         <div style="{{ r.footStyle }}">
           <sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2">
-            <span style="{{ r.tagStyle }}{{ g.style }}">{{ g.t }}</span>
+            <span style="{{ g.style }}">{{ g.t }}</span>
           </sc-for>
           <div onClick="{{ r.onToggle }}" style="{{ r.toggleStyle }}">{{ r.toggleLabel }}</div>
           <button onClick="{{ r.onChoose }}" style="{{ r.chooseStyle }}">{{ r.chooseLabel }}</button>
@@ -961,6 +979,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       <a href="{{ pTripOpen }}" target="_blank" style="{{ pTripOpenStyle }}">Open the pass &#8599;</a>
     </div>
   </div>
+</div>
 </div>
 </sc-if>
 
@@ -6433,7 +6452,10 @@ class Component extends DCLogic {
   inkPair(){
     let lum = 1;
     try{
-      const v=(getComputedStyle(document.documentElement).getPropertyValue('--k-fff')||'').trim()||'#ffffff';
+      // the Plan page carries its own palette on .k-mono, so ask that element
+      // rather than the document, or the ticket prints for the wrong ground
+      const host=document.querySelector('.k-mono')||document.documentElement;
+      const v=(getComputedStyle(host).getPropertyValue('--k-fff')||'').trim()||'#ffffff';
       const h=v.replace('#','');
       const n=h.length===3?h.split('').map(x=>x+x).join(''):h;
       if(/^[0-9a-f]{6}$/i.test(n)){
@@ -6509,7 +6531,7 @@ class Component extends DCLogic {
     // A journey is not a train, so a row does not lead with SL/3A/2A. It leads
     // with when you leave, when you arrive, what it costs, and whether you will
     // be sitting down - which is the question nobody else answers.
-    const MODE={train:{c:'var(--k-d8385a)',g:'\u25ac',n:'Train'},
+    const MODE={train:{c:'#d0451b',g:'\u25ac',n:'Train'},
       metro:{c:'#8C2877',g:'\u25cf',n:'Metro'},
       bus:{c:'#1f6fd0',g:'\u25b0',n:'Bus'},
       auto:{c:'#2a9d8f',g:'\u25b2',n:'Auto'},
@@ -6530,16 +6552,22 @@ class Component extends DCLogic {
       const tl=c.legs.find(l=>l.mode==='train');
       // the labels come from the allocator, which is the only thing that
       // compared every way against every other
-      const LBL={fastest:['Fastest','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
+      const LBL={fastest:['Fastest','var(--k-eaf0fd)','var(--k-fg-14161a)'],
         cheapest:['Cheapest','var(--k-e6f4ec)','var(--k-fg-14663a)'],
-        'fewest-changes':['Fewest changes','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
-        'least-walking':['Least walking','var(--k-eaf0fd)','var(--k-fg-1f3f8f)'],
+        'fewest-changes':['Fewest changes','var(--k-eaf0fd)','var(--k-fg-14161a)'],
+        'least-walking':['Least walking','var(--k-eaf0fd)','var(--k-fg-14161a)'],
         seated:['You sit','var(--k-e6f4ec)','var(--k-fg-14663a)']};
       const labels=(c.alloc&&c.alloc.labels)||[];
       const isRec=R&&R.recommended===ci;
       const isSel=S.pSelIdx===ci;
-      const tags=labels.filter(k=>LBL[k]).map(k=>({t:LBL[k][0],style:{background:LBL[k][1],color:LBL[k][2]}}));
-      if(c.simulated)tags.push({t:'Has a simulated leg',style:{background:'var(--k-f1f1ee)',color:'var(--k-fg-8a8a84)'}});
+      // one binding, or dc keeps the first and drops the rest - which is how
+      // "Fastest" ended up as dark text with no ground on the ink card
+      const TAGBASE={font:'700 9.5px/1 Manrope,sans-serif',letterSpacing:'.07em',
+        textTransform:'uppercase',padding:'5px 8px',borderRadius:999};
+      const tag=(t,bg,fg2c)=>({t,style:{...TAGBASE,background:isRec?'rgba(255,255,255,.14)':bg,
+        color:isRec?'#ffffff':fg2c}});
+      const tags=labels.filter(k=>LBL[k]).map(k=>tag(LBL[k][0],LBL[k][1],LBL[k][2]));
+      if(c.simulated)tags.push(tag('Has a simulated leg','var(--k-f1f1ee)','var(--k-fg-8a8a84)'));
       const CAPQ={exact:'counted',estimated:'estimated',predicted:'predicted',unknown:'unknown'};
       // A ticket is printed in ink, not in brand colour: the recommended way
       // is the one dark card among white ones, which is the whole hierarchy.
@@ -7111,11 +7139,11 @@ class Component extends DCLogic {
         pRowsStyle:{display:rows.length?'grid':'none',marginTop:18,
           gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,340px),1fr))',
           gap:12,alignItems:'start'},
-      pNoteStyle:{display:rows.length?'block':'none',marginTop:8,
+      pNoteStyle:{gridColumn:'1/-1',display:rows.length?'block':'none',marginTop:8,
         font:'500 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
       // The last mile, offered where she is looking at it. She may have twelve
       // journeys and still want the door instead of the stop.
-      pEndHireWrap:{display:(rows.length&&!hiring)?'flex':'none',gap:9,marginTop:14,padding:'13px 15px',
+      pEndHireWrap:{gridColumn:'1/-1',display:(rows.length&&!hiring)?'flex':'none',gap:9,marginTop:14,padding:'13px 15px',
         borderRadius:11,background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',
         flexWrap:'wrap',alignItems:'center'},
       pEndHireLead:'Want the last mile door to door? khaali does not run these, and the fare is an estimate.',
@@ -7127,7 +7155,7 @@ class Component extends DCLogic {
           font:'700 13px/1 Manrope,sans-serif',border:'1px solid '+(k==='bike'?'#c9701a':'#0f8a7e'),
           background:k==='bike'?'#c9701a':'#0f8a7e',color:'#fff'}})),
       // ...and the way back out again
-      pDropHireWrap:{display:hiring?'flex':'none',gap:9,marginTop:14,alignItems:'center',flexWrap:'wrap'},
+      pDropHireWrap:{gridColumn:'1/-1',display:hiring?'flex':'none',gap:9,marginTop:14,alignItems:'center',flexWrap:'wrap'},
       pDropHire:()=>{this.setState({pModes:[...NET]});setTimeout(()=>this.planSearch(),0);},
       pDropHireLabel:'Drop the '+(hiring==='both'?'car and bike':hiring)+' — public transport only',
       pDropHireStyle:{cursor:'pointer',padding:'9px 15px',borderRadius:999,minHeight:38,
