@@ -118,6 +118,11 @@ h1.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-wei
 .k-planshell{display:grid;grid-template-columns:396px minmax(0,1fr);gap:18px;align-items:start}
 .k-planside{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .k-planpair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+/* Review and confirm: what you are buying on the left, what it costs and how
+   long you have to decide on the right, where it stays while you read. */
+.k-cfshell{display:grid;grid-template-columns:minmax(0,1fr) 392px;gap:18px;align-items:start}
+.k-cfside{display:flex;flex-direction:column;gap:14px;position:sticky;top:16px;min-width:0}
+@media (max-width:1000px){.k-cfshell{grid-template-columns:minmax(0,1fr)}.k-cfside{position:static}}
 @media (max-width:1040px){.k-planshell{grid-template-columns:minmax(0,1fr)}.k-planside{position:static}}
 @media (max-width:720px){.k-planpair{grid-template-columns:minmax(0,1fr)}}
 h2.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-weight:700!important;letter-spacing:-.03em!important}
@@ -1952,12 +1957,48 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 </sc-if>
 
 <sc-if value="{{ onConfirm }}" hint-placeholder-val="{{ false }}">
-<div style="max-width:840px;margin:0 auto;padding:30px 22px 70px">
-  <div style="font:700 24px/1.2 Manrope,sans-serif;margin-bottom:20px">Review and confirm</div>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px;margin-bottom:14px">
-    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:14px">JOURNEY</div>
-    <div style="font:700 17px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ fromName }} → {{ toName }}</div>
-    <div style="font-size:13.5px;color:var(--k-fg-6a6d75)">{{ trainTitle }} · {{ dateLong }} · dep {{ depTime }} · arr {{ arrTime }} · {{ journeyKm }} km</div>
+<div style="padding:22px 20px 70px">
+  <div style="max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
+
+    <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:4px 2px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--k-fg-8a8a84)">STEP 3 OF 3</span>
+        <h1 class="k-hp" style="margin:0;font:700 40px/1 Archivo,sans-serif;letter-spacing:-.04em;color:var(--k-fg-14161a)">Review and confirm</h1>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <span style="width:26px;height:4px;border-radius:2px;background:#1B3A6B;display:block"></span><span style="width:26px;height:4px;border-radius:2px;background:#1B3A6B;display:block"></span><span style="width:26px;height:4px;border-radius:2px;background:#1B3A6B;display:block"></span>
+      </div>
+    </div>
+
+    <div class="k-cfshell">
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+
+        <section style="{{ cfCard }}">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="{{ cfCaps }}">Journey</span>
+            <span style="{{ cfTrainChipStyle }}">{{ cfTrainChip }}</span>
+            <span style="margin-left:auto;font:500 13px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ cfWhen }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:20px">
+            <div style="display:flex;flex-direction:column;gap:2px;flex:0 1 auto;min-width:0">
+              <span style="font:700 34px/1 Archivo,sans-serif;letter-spacing:-.035em;color:var(--k-fg-14161a);font-variant-numeric:tabular-nums">{{ cfDep }}</span>
+              <span style="font:600 13.5px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);overflow-wrap:anywhere">{{ fromName }}</span>
+              <span style="font:600 11px/1.3 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84)">{{ cfFromMeri }}</span>
+            </div>
+            <div style="flex:1 1 90px;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:7px">
+              <span style="font:600 10.5px/1 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84);white-space:nowrap">{{ cfDur }}</span>
+              <div style="display:flex;align-items:center;gap:5px;width:100%">
+                <span style="height:0;border-top:2px dotted var(--k-dedcd6);flex:1;display:block"></span>
+                <span style="width:9px;height:9px;border-radius:999px;background:#1B3A6B;display:block;flex:none"></span>
+                <span style="height:0;border-top:2px dotted var(--k-dedcd6);flex:1;display:block"></span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;flex:0 1 auto;min-width:0;align-items:flex-end;text-align:right">
+              <span style="font:700 34px/1 Archivo,sans-serif;letter-spacing:-.035em;color:var(--k-fg-14161a);font-variant-numeric:tabular-nums">{{ cfArr }}</span>
+              <span style="font:600 13.5px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);overflow-wrap:anywhere">{{ toName }}</span>
+              <span style="font:600 11px/1.3 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84)">{{ cfToMeri }}</span>
+            </div>
+          </div>
     <div style="{{ jrnRestStyle }}">
       <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">{{ jrnRestHead }}</div>
       <sc-for list="{{ jrnRest }}" as="j" hint-placeholder-count="2">
@@ -1967,33 +2008,84 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
       </sc-for>
       <div style="{{ jrnPassNoteStyle }}">{{ jrnPassNote }}</div>
     </div>
-  </div>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px;margin-bottom:14px">
-    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:14px">BERTHS</div>
-    <sc-for list="{{ allotment }}" as="a" hint-placeholder-count="2">
-      <div style="padding:12px 0;border-top:1px solid var(--k-f4f3ef);display:flex;gap:14px;align-items:flex-start">
-        <div style="flex:1">
-          <div style="font:700 15px/1.3 Manrope,sans-serif">{{ a.title }}</div>
-          <div style="{{ a.noteStyle }}">{{ a.note }}</div>
-        </div>
-        <div style="flex:none;text-align:right">
-          <div style="font:700 15px/1.3 Manrope,sans-serif">{{ a.berth }}</div>
-          <div style="font-size:12px;color:var(--k-fg-8a8a84)">{{ a.type }}</div>
-        </div>
-      </div>
-    </sc-for>
-  </div>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px;margin-bottom:16px">
-    <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:14px">FARE</div>
-    <sc-for list="{{ fareRows }}" as="f" hint-placeholder-count="5">
-      <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px">
-        <span style="{{ f.k }}">{{ f.label }}</span><span style="{{ f.v }}">{{ f.value }}</span>
-      </div>
-    </sc-for>
-  </div>
-  <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:22px">
-    <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
-      <div style="flex:1;min-width:230px">
+        </section>
+
+        <section style="{{ cfCard }}">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="{{ cfCaps }}">Your berths</span>
+            <span style="{{ cfHopBadgeStyle }}">{{ cfHopBadge }}</span>
+            <span style="margin-left:auto;font:500 13px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ cfPaxLine }}</span>
+          </div>
+
+          <div style="{{ cfHopWrapStyle }}">
+            <div style="display:flex;height:12px;gap:3px">
+              <sc-for list="{{ cfHopBars }}" as="hb" hint-placeholder-count="2">
+                <span style="{{ hb.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="position:relative;height:14px">
+              <sc-for list="{{ cfHopMarks }}" as="hm" hint-placeholder-count="3">
+                <span style="{{ hm.style }}">{{ hm.t }}</span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ cfBerths }}" as="b" hint-placeholder-count="2">
+              <div style="background:var(--k-fafaf8);border-radius:16px;padding:16px 18px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+                <span style="{{ b.nStyle }}">{{ b.n }}</span>
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+                  <span style="font:700 15.5px/1.3 Archivo,sans-serif;letter-spacing:-.015em;color:var(--k-fg-14161a)">{{ b.title }}</span>
+                  <span style="{{ b.noteStyle }}">{{ b.note }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;flex:none">
+                  <span style="font:700 17px/1.2 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-14161a)">{{ b.berth }}</span>
+                  <span style="font:500 12.5px/1.3 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ b.type }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="{{ cfHopNoteStyle }}">
+            <span style="width:8px;height:8px;border-radius:999px;background:#6B3FA0;display:block;flex:none"></span>
+            <span>{{ cfHopNote }}</span>
+          </div>
+        </section>
+
+        <section style="{{ cfCard }}">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="{{ cfCaps }}">Fare</span>
+            <span style="margin-left:auto;font:500 13px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ cfClassLine }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ cfFare }}" as="f" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;gap:12px;padding:11px 0;border-bottom:1px solid var(--k-f4f3ef)">
+                <span style="font:500 14.5px/1.4 Archivo,sans-serif;color:var(--k-fg-40434a)">{{ f.label }}</span>
+                <span style="height:0;border-top:1px dotted var(--k-dedcd6);flex:1;display:block"></span>
+                <span style="font:600 14.5px/1.4 'JetBrains Mono',monospace;color:var(--k-fg-14161a)">{{ f.value }}</span>
+              </div>
+            </sc-for>
+            <button onClick="{{ cfToggleZero }}" style="{{ cfZeroStyle }}">{{ cfZeroLabel }}</button>
+            <sc-if value="{{ cfZeroOn }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;padding-bottom:6px">
+                <sc-for list="{{ cfZero }}" as="f" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0">
+                    <span style="font:500 14px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ f.label }}</span>
+                    <span style="height:0;border-top:1px dotted var(--k-f0efeb);flex:1;display:block"></span>
+                    <span style="font:500 14px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ f.value }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:12px;padding-top:12px;border-top:2px solid var(--k-14161a)">
+            <span style="font:700 16px/1.3 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ cfTotalLabel }}</span>
+            <span style="flex:1"></span>
+            <span style="font:700 26px/1 Archivo,sans-serif;letter-spacing:-.03em;color:var(--k-fg-14161a)">{{ cfTotal }}</span>
+          </div>
+        </section>
+
+        <section style="{{ cfCard }}">
         <div data-copax="1" style="{{ travWrap }}">
           <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">{{ travHead }}</div>
           <sc-for list="{{ travSlots }}" as="tv" hint-placeholder-count="2">
@@ -2031,11 +2123,31 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </div>
           <div style="font:500 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ travNote }}</div>
         </div>
+        </section>
+      </div>
+
+      <div class="k-cfside">
+
         <div style="{{ holdTimerWrap }}">
-          <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);margin-bottom:10px">BERTHS LOCKED FOR YOU</div>
-          <div style="{{ holdTimerStyle }}">{{ holdTimer }}</div>
-          <div style="font-size:12.5px;color:var(--k-fg-8a8a84);margin-bottom:16px">Nobody else can take these berths until the timer runs out.</div>
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:9px;height:9px">
+              <span style="{{ cfLockPulse }}"></span>
+              <span style="{{ cfLockBead }}"></span>
+            </span>
+            <span style="font:600 13.5px/1.3 Archivo,sans-serif;color:#C8CEDA">{{ cfLockLabel }}</span>
+            <span style="{{ holdTimerStyle }}">{{ holdTimer }}</span>
+          </div>
+          <div style="height:5px;border-radius:3px;background:#26262E;overflow:hidden;margin:16px 0 14px">
+            <span style="{{ cfLockBar }}"></span>
+          </div>
+          <span style="font:500 12.5px/1.5 Archivo,sans-serif;color:#9AA6BC">{{ cfLockNote }}</span>
         </div>
+
+        <div style="{{ cfCard }}">
+          <div style="display:flex;align-items:baseline;gap:12px">
+            <span style="{{ cfCaps }}">Paying</span>
+            <span style="margin-left:auto;font:700 26px/1 Archivo,sans-serif;letter-spacing:-.03em;color:var(--k-fg-14161a)">{{ cfTotal }}</span>
+          </div>
         <div style="{{ payPickWrap }}">
           <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.13em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin:2px 0 9px">How would you like to pay?</div>
           <sc-for list="{{ payMethods }}" as="pm" hint-placeholder-count="4">
@@ -2058,6 +2170,25 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </div>
           </div>
         </div>
+        <div style="{{ wpBlockStyle }}">
+          <div style="font:700 13px/1.3 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ wpHead }}</div>
+          <div style="{{ wpBalStyle }}">{{ wpBalLine }}</div>
+          <div onClick="{{ wpOpenPad }}" style="{{ wpBtnStyle }}">{{ wpBtnLabel }}</div>
+          <div style="{{ wpPadStyle }}">
+            <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:7px">Enter your 6-digit wallet PIN</div>
+            <input type="password" inputmode="numeric" value="{{ wpPin }}" onChange="{{ setWpPin }}" placeholder="••••••" style="width:170px;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 18px/1 'IBM Plex Mono',monospace;letter-spacing:.34em;text-align:center;outline:none"></input>
+            <div style="display:flex;gap:9px;margin-top:10px;flex-wrap:wrap">
+              <button onClick="{{ wpConfirm }}" style="border:none;background:var(--k-14663a,#14663a);color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">{{ wpConfirmLabel }}</button>
+              <button onClick="{{ wpCancel }}" style="border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">Cancel</button>
+            </div>
+            <div style="{{ wpErrStyle }}">{{ wpErrText }}</div>
+            <div style="font:500 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:8px">Prototype PIN: <b>123456</b> · a wrong PIN pays nothing.</div>
+          </div>
+        </div>
+          <div style="{{ qrWrap }}">
+        <div style="background:#fff;border-radius:10px;padding:10px;display:inline-block;line-height:0"><img src="{{ qrSrc }}" width="168" height="168" style="display:block" alt="Payment QR"/></div>
+        <div style="font-size:11.5px;color:var(--k-fg-8a8a84);margin-top:8px;max-width:196px;margin-left:auto;margin-right:auto">Scan with another phone to pay there. Simulated — no real money moves.</div>
+          </div>
         <button onClick="{{ goTicket }}" style="{{ payBtnStyle }}">{{ payLabel }}</button>
         <div style="font-size:12.5px;color:var(--k-fg-8a8a84);margin-top:10px">{{ payCaption }}</div>
         <div style="{{ payTrackWrap }}">
@@ -2081,25 +2212,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div onClick="{{ payClaim }}" style="display:inline-block;margin-top:10px;background:var(--k-14663a,#14663a);color:#fff;font:700 12px/1 Manrope,sans-serif;padding:11px 16px;border-radius:7px;cursor:pointer">Claim it back now &#8594;</div>
           </div>
         </div>
-        <div style="{{ wpBlockStyle }}">
-          <div style="font:700 13px/1.3 Manrope,sans-serif;color:var(--k-fg-14663a)">{{ wpHead }}</div>
-          <div style="{{ wpBalStyle }}">{{ wpBalLine }}</div>
-          <div onClick="{{ wpOpenPad }}" style="{{ wpBtnStyle }}">{{ wpBtnLabel }}</div>
-          <div style="{{ wpPadStyle }}">
-            <div style="font:600 10.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:7px">Enter your 6-digit wallet PIN</div>
-            <input type="password" inputmode="numeric" value="{{ wpPin }}" onChange="{{ setWpPin }}" placeholder="••••••" style="width:170px;padding:12px 14px;border-radius:7px;border:1px solid var(--k-d4d3ce);background:var(--k-fff);color:var(--k-fg-14161a);font:700 18px/1 'IBM Plex Mono',monospace;letter-spacing:.34em;text-align:center;outline:none"></input>
-            <div style="display:flex;gap:9px;margin-top:10px;flex-wrap:wrap">
-              <button onClick="{{ wpConfirm }}" style="border:none;background:var(--k-14663a,#14663a);color:#fff;font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">{{ wpConfirmLabel }}</button>
-              <button onClick="{{ wpCancel }}" style="border:1px solid var(--k-d4d3ce);background:var(--k-fff);font:700 12.5px/1 Manrope,sans-serif;padding:12px 18px;border-radius:7px;cursor:pointer;min-height:42px">Cancel</button>
-            </div>
-            <div style="{{ wpErrStyle }}">{{ wpErrText }}</div>
-            <div style="font:500 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:8px">Prototype PIN: <b>123456</b> · a wrong PIN pays nothing.</div>
-          </div>
         </div>
-      </div>
-      <div style="{{ qrWrap }}">
-        <div style="background:#fff;border-radius:10px;padding:10px;display:inline-block;line-height:0"><img src="{{ qrSrc }}" width="168" height="168" style="display:block" alt="Payment QR"/></div>
-        <div style="font-size:11.5px;color:var(--k-fg-8a8a84);margin-top:8px;max-width:196px;margin-left:auto;margin-right:auto">Scan with another phone to pay there. Simulated — no real money moves.</div>
+
         <div style="margin-top:14px;background:var(--k-fdf0e3);border:1px solid var(--k-e2ccd3);border-radius:8px;padding:11px 13px;text-align:left">
           <div style="font:700 11.5px/1.4 Manrope,sans-serif;color:var(--k-fg-8a4a12)">Payment interrupted? App crashed, money debited?</div>
           <div style="font:500 11px/1.5 Manrope,sans-serif;color:var(--k-fg-8a4a12);margin-top:3px">Your berth stays locked for the full window — resume and you will never pay twice.</div>
@@ -10168,7 +10282,83 @@ class Component extends DCLogic {
         };
       })(),
 
-      allotment,fareRows:[
+      // ---- the head of the page, and the journey as two times ----
+      ...(()=>{
+        const chip=(bg,fg)=>({font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
+          background:bg,color:fg,padding:'5px 9px',borderRadius:6,flex:'none'});
+        const hhmm=m=>this.toHHMM(m).replace(/ [AP]M$/,'');
+        const meri=m=>this.toHHMM(m).slice(-2);
+        const hop=hopConf&&S.picks.length>1;
+        const lo=Math.min(S.from,S.to), hi=Math.max(S.from,S.to);
+        const span=Math.max(1,hi-lo);
+        const HUE=['#1B3A6B','#6B3FA0','#17849B','#9A6B12'];
+        const dm=this.sMin(tr,S.from,'d'), am=this.sMin(tr,S.to,'a');
+        return {
+          cfCaps:{font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.14em',
+            textTransform:'uppercase',color:'var(--k-fg-8a8a84)'},
+          cfCard:{background:'var(--k-fff)',borderRadius:22,padding:'24px 26px',
+            display:'flex',flexDirection:'column',gap:20},
+          cfTrainChip:tr.no+' '+tr.name.toUpperCase(),
+          cfTrainChipStyle:chip('#E9EEF6','#1B3A6B'),
+          cfWhen:dsel.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})
+            +' \u00b7 '+Math.abs(toS.km-fromS.km)+' km',
+          cfDep:hhmm(dm),cfArr:hhmm(am),cfDur:dur,
+          cfFromMeri:fromS.c+' \u00b7 '+meri(dm),
+          cfToMeri:toS.c+' \u00b7 '+meri(am),
+
+          // ---- a seat-hop is two berths over one stretch, so draw the stretch
+          cfHopBadge:hop?('SEAT HOP \u00b7 '+S.picks.length+' BERTHS'):'',
+          cfHopBadgeStyle:{...chip('#EFE7F7','#5B3390'),display:hop?'inline-block':'none'},
+          cfPaxLine:nPax+(nPax>1?' passengers':' passenger')+', '
+            +(hop?'1 ticket':nPax+(nPax>1?' berths':' berth')),
+          cfHopWrapStyle:{display:hop?'flex':'none',flexDirection:'column',gap:10},
+          cfHopBars:hop?S.picks.map((pk,i)=>({style:{
+            flex:String(Math.max(1,Math.abs((pk.seg?pk.seg.to:hi)-(pk.seg?pk.seg.from:lo)))),
+            background:HUE[i%HUE.length],borderRadius:4,display:'block'}})):[],
+          cfHopMarks:hop?S.picks.map((pk,i)=>{
+            const at=pk.seg?pk.seg.from:lo;
+            const pos=((at-lo)/span)*100;
+            return {t:ST[at].c+' '+hhmm(this.sMin(tr,at,'d')),
+              style:{position:'absolute',top:0,
+                left:i===0?'0':(pos.toFixed(1)+'%'),
+                transform:i===0?'none':'translateX(-50%)',whiteSpace:'nowrap',
+                font:"700 10.5px/1 'JetBrains Mono',monospace",color:HUE[i%HUE.length]}};})
+            .concat([{t:toS.c+' '+hhmm(am),
+              style:{position:'absolute',top:0,right:0,whiteSpace:'nowrap',
+                font:"700 10.5px/1 'JetBrains Mono',monospace",
+                color:HUE[(S.picks.length-1)%HUE.length]}}]):[],
+          cfHopNote:(hop&&S.picks[1]&&S.picks[1].seg)
+            ?('One walk down the coach at '+ST[S.picks[1].seg.from].n+', '
+              +hhmm(this.sMin(tr,S.picks[1].seg.from,'d'))
+              +'. Nobody boards your next berth before you reach it.'):'',
+          cfHopNoteStyle:{display:(hop&&S.picks[1]&&S.picks[1].seg)?'flex':'none',
+            alignItems:'center',gap:11,background:'#EFE7F7',borderRadius:14,padding:'14px 16px',
+            font:'600 13.5px/1.45 Manrope,sans-serif',color:'#4A2A78'},
+          cfBerths:allotment.map((x,i)=>({...x,n:String(i+1),
+            nStyle:{width:26,height:26,borderRadius:8,flex:'none',display:'flex',
+              alignItems:'center',justifyContent:'center',color:'#fff',
+              font:"700 12px/1 'JetBrains Mono',monospace",
+              background:hop?HUE[i%HUE.length]:'var(--k-14161a)'}})),
+          cfClassLine:cls.label+(hop?(' \u00b7 seat-hop \u00b7 '+S.picks.length+' berths')
+            :(' \u00b7 '+S.quota+' quota')),
+
+          // ---- the lock, as something you can watch rather than read ----
+          cfLockPct:(()=>{if(!srvHold)return '0%';
+            const ms=Math.max(0,srvHold.expiresAt-Date.now());
+            return Math.max(0,Math.min(100,(ms/300000)*100)).toFixed(1)+'%';})(),
+          cfLockDot:(()=>{if(!srvHold)return '#7FB2FF';
+            const ms=srvHold.expiresAt-Date.now();
+            return ms<=0?'#D8232A':ms<60000?'#E0A030':'#7FB2FF';})(),
+          cfLockLabel:srvHold?(((srvHold.expiresAt-Date.now())<=0)?'Berths released':'Berths locked for you'):'',
+          cfLockNote:srvHold?(((srvHold.expiresAt-Date.now())<=0)
+            ?'The window ran out and the berths went back into the pool. Search again to pick them up.'
+            :'Nobody else can take these berths until the timer runs out.'):'',
+        };
+      })(),
+
+      // ---- the fare, built once and read twice ----
+      ...(()=>{
+        const rows=[
         {label:(anyHold||anyPre)?(cls.label+' · any berth × '+nPax):hopConf?(cls.label+' · seat-hop · '+S.picks.length+' berths, '+nTravC+' passenger'+(nTravC>1?'s':'')):(cls.label+' berth fare × '+nPax),
           value:'₹'+money(berthSum),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
         {label:'Reservation charge',value:'₹'+money(20*nTravC),k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}},
@@ -10181,10 +10371,30 @@ class Component extends DCLogic {
           const q=this.tripQuote(trip);
           return [{label:'Trip pass \u00b7 '+legs.map(l=>(l.mode==='metro'?'metro':'bus')).join(' and '),
             value:q?('\u20b9'+q.fare):'\u2026',k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600}}];})(),
-        {label:(S.pBookChain&&(S.pBookChain.legs||[]).length)?'Total for the whole journey':'Total payable',
-          value:'₹'+money(total+(()=>{const q=this.tripQuote(S.pBookChain);return q?q.fare:0;})()),
-          k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}
-      ],
+        ];
+        const NA='\u2014';
+        const grand='\u20b9'+money(total+(()=>{const q=this.tripQuote(S.pBookChain);return q?q.fare:0;})());
+        const label=(S.pBookChain&&(S.pBookChain.legs||[]).length)?'Total for the whole journey':'Total payable';
+        const zero=rows.filter(r=>r.value===NA);
+        return {
+          fareRows:rows.concat([{label,value:grand,
+            k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}]),
+          // A charge of nothing is not a charge. It is still worth being able
+          // to check that khaali did not quietly add one, so it folds away
+          // rather than disappearing.
+          cfFare:rows.filter(r=>r.value!==NA),
+          cfZero:zero.map(r=>({...r,value:'does not apply'})),
+          cfZeroOn:!!S.cfZero,
+          cfZeroStyle:{display:zero.length?'block':'none',border:'none',background:'transparent',
+            padding:'12px 0',textAlign:'left',font:'600 13px/1 Manrope,sans-serif',
+            color:'var(--k-fg-1f3f8f)',cursor:'pointer'},
+          cfZeroLabel:S.cfZero?'Hide the charges that do not apply'
+            :(zero.length+' charge'+(zero.length===1?' does':'s do')+' not apply on this ticket'),
+          cfToggleZero:()=>this.setState({cfZero:!S.cfZero}),
+          cfTotalLabel:label,cfTotal:grand,
+        };
+      })(),
+      allotment,
       pnr:S.viewPnr||'451'+String(7829063+S.dayIdx*13+S.seed+parseInt(tr.no)).slice(0,7),
       fromCode:fromS.c,toCode:toS.c,ticketDur:dur,ticketClass:clsL,
       ticketTotal:(()=>{const bkT=S.bookings.find(b=>b.pnr===S.viewPnr);
@@ -11626,9 +11836,26 @@ class Component extends DCLogic {
       holdTimer:(()=>{if(!srvHold)return null;
         const ms=Math.max(0,srvHold.expiresAt-Date.now());
         return Math.floor(ms/60000)+':'+String(Math.floor(ms%60000/1000)).padStart(2,'0');})(),
-      holdTimerStyle:{font:"700 34px/1 'IBM Plex Mono',monospace",marginBottom:6,
-        color:srvHold&&srvHold.expiresAt-Date.now()<60000?'var(--k-fg-d8385a)':'var(--k-fg-14161a)'},
-      holdTimerWrap:{display:srvHold?'block':'none'},
+      holdTimerStyle:{marginLeft:'auto',font:"700 22px/1 'JetBrains Mono',monospace",
+        letterSpacing:'-.01em',
+        color:srvHold&&srvHold.expiresAt-Date.now()<=0?'#FF9A9A':'#ffffff'},
+      holdTimerWrap:{display:srvHold?'flex':'none',flexDirection:'column',
+        background:'#0A0A0A',color:'#fff',borderRadius:22,padding:'22px 24px'},
+      // the pulse and the bead are the same colour; the pulse is the one that
+      // leaves, so the eye is caught by a thing that is still running
+      cfLockPulse:{position:'absolute',width:9,height:9,borderRadius:999,
+        background:(()=>{if(!srvHold)return '#7FB2FF';const ms=srvHold.expiresAt-Date.now();
+          return ms<=0?'#D8232A':ms<60000?'#E0A030':'#7FB2FF';})(),
+        animation:'ki-pulse 2.2s ease-out infinite',display:'block'},
+      cfLockBead:{width:9,height:9,borderRadius:999,display:'block',
+        background:(()=>{if(!srvHold)return '#7FB2FF';const ms=srvHold.expiresAt-Date.now();
+          return ms<=0?'#D8232A':ms<60000?'#E0A030':'#7FB2FF';})()},
+      cfLockBar:{display:'block',height:5,borderRadius:3,
+        width:(()=>{if(!srvHold)return '0%';
+          const ms=Math.max(0,srvHold.expiresAt-Date.now());
+          return Math.max(0,Math.min(100,(ms/300000)*100)).toFixed(1)+'%';})(),
+        background:(()=>{if(!srvHold)return '#7FB2FF';const ms=srvHold.expiresAt-Date.now();
+          return ms<=0?'#D8232A':ms<60000?'#E0A030':'#7FB2FF';})()},
       payLabel:(srvHold&&this.missingPax(nPax).length)
           ?('Choose '+this.missingPax(nPax).length+' more traveller'+(this.missingPax(nPax).length>1?'s':''))
         :srvHold?'Pay ₹'+money(total)+' now'
