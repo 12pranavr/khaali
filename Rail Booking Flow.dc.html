@@ -5725,11 +5725,31 @@ class Component extends DCLogic {
   /** One tap. For a planned journey it is a TRIP pass - the bus and the metro
       on this ticket, priced by the server and spent when they are ridden.
       Otherwise it is the day pass the city page has always offered. */
+  /**
+   * The legs a pass on this ticket would be FOR, or null.
+   *
+   * Either the journey she chose on the plan page, or - for a ticket booked
+   * straight off the Trains page - the rest of the way khaali worked out on
+   * its own. Both are rides with two ends and a fare; only a walk is not.
+   * One reader, because the button that offers the pass and the call that
+   * buys it must never disagree about what is being bought.
+   */
+  passLegsFor(rec){
+    if(!rec)return null;
+    const J=this.hasJourney(rec)?rec.journey:null;
+    if(J&&J.legs&&J.legs.length)return J.legs;
+    const P=this.jnFor(rec);
+    if(P&&P.ok&&Array.isArray(P.legs)){
+      const ride=P.legs.filter(l=>l.mode==='metro'||l.mode==='bus');
+      if(ride.length)return ride;
+    }
+    return null;
+  }
   async getPass(rec){
     if(this._passBusy)return;this._passBusy=true;this.setState({passErr:''});
     const holder=((rec.travellers||[])[0]||{}).name||(rec.names||[])[0]||null;
-    const J=this.hasJourney(rec)?rec.journey:null;
-    const body=J?{kind:'trip',legs:J.legs,holder,date:this.dateIsoFor(rec.dayIdx||0)}
+    const legs=this.passLegsFor(rec);
+    const body=legs?{kind:'trip',legs,holder,date:this.dateIsoFor(rec.dayIdx||0)}
       :{holder,date:this.dateIsoFor(rec.dayIdx||0)};
     try{const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify(body)},9000);
@@ -5753,6 +5773,12 @@ class Component extends DCLogic {
     const planned=(J&&J.rides&&J.rides[0])||null;      // the ride this journey needs
     const ride=rec?this.ridesOf()[rec.pnr]:null;       // the one she has booked
     const show=!!(rec&&rec.status!=='refunded'&&(J||rec.to===1));
+    // the ride this ticket's pass would be for, and what it costs when khaali
+    // already knows - the metro plan prices itself, a planned journey is
+    // priced by the server when the pass is cut
+    const short=n=>String(n||'').replace(/^.*, /,'');
+    const passLegs=rec?this.passLegsFor(rec):null;
+    const passFare=(!J&&P&&P.ok&&P.fare)?P.fare.qr:null;
     const purple='#8C2877';
     const crowdTone=w=>w==='crush'?{bg:'var(--k-fdf3f5)',fg:'var(--k-fg-d8385a)'}:w==='busy'?{bg:'var(--k-fdf0e3)',fg:'var(--k-fg-8a4a12)'}:{bg:'var(--k-e6f4ec)',fg:'var(--k-fg-14663a)'};
     const steps=[];
@@ -5814,12 +5840,16 @@ class Component extends DCLogic {
       jnFareStyle:{display:(P&&P.ok)?'block':'none',font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)',marginTop:12,paddingTop:10,borderTop:'1px solid var(--k-f0efeb)'},
       // the pass: one tap, then it is the card
       jnPassBtn:()=>rec&&this.getPass(rec),
-      jnPassBtnStyle:{display:(show&&!pass&&(!J||(J.legs&&J.legs.length)))?'block':'none',marginTop:12,border:'none',width:'100%',
-        background:purple,color:'#fff',font:'700 14px/1 Manrope,sans-serif',padding:'15px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
+      // Nothing to sell is nothing to offer: with no ride khaali can name,
+      // the only thing left is a day pass, and only when the last metro has
+      // gone is that the honest answer rather than the lazy one.
+      jnPassBtnStyle:{display:(show&&!pass&&(passLegs||(P&&!P.ok)))?'block':'none',marginTop:12,border:'none',width:'100%',
+        background:purple,color:'#fff',font:'700 14px/1.4 Manrope,sans-serif',padding:'14px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
       // the button names the ride she is buying, not the mode it happens to use
-      jnPassBtnLabel:(J&&J.legs&&J.legs.length)
-        ?('Trip pass \u2014 '+J.legs.map(l=>l.from+' \u2192 '+l.to).join(', then ')+', once')
-        :('Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus'+((P&&P.ok)?'':' (for the day you travel)')),
+      jnPassBtnLabel:passLegs
+        ?('Trip pass'+(passFare?(' \u00b7 \u20b9'+passFare):'')+' \u2014 '
+          +passLegs.map(l=>short(l.from)+' \u2192 '+short(l.to)).join(', then ')+', once')
+        :'Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus (the last metro has gone)',
       jnPassErr:S.passErr||'',
       jnPassErrStyle:{display:S.passErr?'block':'none',marginTop:8,font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
       jnPassWrap:{display:(show&&pass)?'flex':'none',gap:14,alignItems:'center',marginTop:12,padding:14,
