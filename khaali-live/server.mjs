@@ -255,8 +255,10 @@ setInterval(matchOrders, 20000).unref();
     if (r.t === 'sosmedia') { const a = ALERTS.get(r.id); if (a) a.media = r.media; }
     if (r.t === 'sosgone') { const a = ALERTS.get(r.id); if (a) sos.remove(a); }
     if (r.t === 'pass' && r.pass && r.pass.id) PASSES.set(r.pass.id, { ...r.pass, rides: (r.pass.rides || []).slice() });
-    if (r.t === 'passride') { const p = PASSES.get(r.id); if (p && r.ride) p.rides.push(r.ride); }
+    if (r.t === 'passride') { const p = PASSES.get(r.id); if (p && r.ride) journey.applyRide(p, r.ride); }
     if (r.t === 'passgone') { const p = PASSES.get(r.id); if (p) journey.cancelPass(p, r.at); }
+    if (r.t === 'passexpire') { const p = PASSES.get(r.id); if (p) journey.expirePass(p, r.at); }
+    if (r.t === 'passblock') { const p = PASSES.get(r.passId); if (p) p.payId = r.id; }
     if (r.t === 'ride' && r.ride && r.ride.id) RIDES.set(r.ride.id, { ...r.ride });
     if (r.t === 'ridegone') { const x = RIDES.get(r.id); if (x) hire.cancelRide(x, r.at); }
   }
@@ -267,11 +269,23 @@ setInterval(matchOrders, 20000).unref();
       captured: o.status === 'filled' ? o.paid : 0, fill: o.fill || null, pnr: o.pnr || null };
     global.__tk.pays.set(o.payId, s);
   }
+  // the money behind a pass outlives a restart the same way an order's does
+  for (const ps of PASSES.values()) {
+    if (!ps.payId || ps.kind !== 'trip') continue;
+    const took = ps.rides.length > 0;
+    const over = ps.status === 'expired' || ps.status === 'cancelled';
+    global.__tk.pays.set(ps.payId, { id: ps.payId, kind: 'pass', passId: ps.id, who: ps.who,
+      amount: ps.fare, method: 'wallet', title: ps.id, endsAt: ps.expiresAt || null,
+      status: took ? 'captured' : over ? 'released' : 'authorised',
+      captured: took ? ps.fare : 0 });
+  }
   const openN = [...ORDERS.values()].filter(o => o.status === 'open').length;
   if (ORDERS.size) console.log(`orders: ${ORDERS.size} replayed, ${openN} open`);
   setTimeout(matchOrders, 500).unref();
 }
 const simShiftMin = () => Math.round((simNow().getTime() - Date.now()) / 60000);
+const SIMDATE = () => { const d = simNow();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -717,6 +731,73 @@ function chartAtFor(no, date) {
   return new Date(date + 'T00:00:00').getTime() + (dep % 1440) * 60000 - store.CHART_BEFORE_MS;
 }
 // The chart prepares itself. Every minute, any train whose four-hours-out
+// ---------------------------------------------------------------------------
+// The money set aside for a trip pass.
+//
+// It is the same payment session Tatkal and the order book use - pending,
+// authorised, captured, released, in tatkal.mjs - because this is the same
+// idea and a second machine for it would be a second machine to keep honest.
+// The only difference is that nothing here waits on a bank: the pass is cut
+// after the railway payment has already gone through, so the block is created
+// already authorised. A pending block would let a conductor scan a pass whose
+// money was never set aside, and she would ride for nothing.
+
+function blockForPass(pass, method, now) {
+  const id = crypto.randomBytes(9).toString('hex');
+  const legs = pass.legs || [];
+  const title = legs.length
+    ? (legs[0].from + ' \u2192 ' + legs[legs.length - 1].to)
+    : 'the rest of the journey';
+  const s = { id, kind: 'pass', passId: pass.id, who: pass.who, amount: pass.fare,
+    method: method || 'wallet', title,
+    // when an AUTHORISED block dies. Not `expiresAt`: in tatkal.mjs that is the
+    // window in which a PENDING request may still be answered, and authorise()
+    // reads it.
+    endsAt: pass.expiresAt || null,
+    status: 'authorised', authorisedAt: now, captured: 0 };
+  global.__tk.pays.set(id, s);
+  pass.payId = id;
+  journal.append({ t: 'passblock', id, passId: pass.id, who: pass.who, amount: s.amount, at: now });
+  return s;
+}
+
+/** What a phone may know about the money behind its pass. */
+function blockOf(pass) {
+  const s = pass && pass.payId && global.__tk.pays.get(pass.payId);
+  if (!s) return null;
+  return { payId: s.id, amount: s.amount, status: s.status,
+    captured: s.captured || 0, endsAt: s.endsAt || null, at: s.settledAt || s.authorisedAt || null };
+}
+
+/**
+ * Give it back. One place, so the sweep and a cancellation cannot end a block
+ * two different ways. settle() is a no-op on anything that is not an approved
+ * block, so releasing one that was already taken does nothing at all.
+ */
+function releasePassBlock(pass, why, now) {
+  const s = pass && pass.payId && global.__tk.pays.get(pass.payId);
+  if (!s) return null;
+  const r = tatkal.settle(s, false, now);
+  if (!r.ok) return null;
+  journal.append({ t: 'passrelease', id: s.id, passId: pass.id, why, at: now });
+  sseSend({ type: 'passpay', id: s.id, passId: pass.id, who: s.who, status: 'released',
+    amount: s.amount, captured: 0, why });
+  return s;
+}
+
+/** The door took it. The whole fare, once - a trip pass is the getting there,
+    not a strip of rides, so half a journey is not half a price. */
+function takePassBlock(pass, now) {
+  const s = pass && pass.payId && global.__tk.pays.get(pass.payId);
+  if (!s) return null;
+  const r = tatkal.settle(s, true, now, pass.fare);
+  if (!r.ok) return null;
+  journal.append({ t: 'passtake', id: s.id, passId: pass.id, amount: r.captured, at: now });
+  sseSend({ type: 'passpay', id: s.id, passId: pass.id, who: s.who, status: 'captured',
+    amount: s.amount, captured: r.captured });
+  return s;
+}
+
 // moment has passed on the demo clock and still has an unseated pool is
 // charted. Idempotent, so the demo button and the timer never collide.
 setInterval(() => {
@@ -732,6 +813,20 @@ setInterval(() => {
     }
   }
 }, 60000);
+// Twenty-four hours after it was cut, a trip pass is over and the money set
+// aside for it goes back. On the demo clock, so shifting time forward is how
+// this gets shown rather than something you wait a day for.
+setInterval(() => {
+  const now = simNow().getTime();
+  for (const ps of PASSES.values()) {
+    if (ps.status !== 'valid' || !journey.passOver(ps, now)) continue;
+    if (!journey.expirePass(ps, now).ok) continue;
+    journal.append({ t: 'passexpire', id: ps.id, at: now });
+    releasePassBlock(ps, 'expired', now);
+    sseSend({ type: 'pass', id: ps.id, who: ps.who, status: 'expired' });
+  }
+}, 60000);
+
 setInterval(() => {
   const line = `data: ${JSON.stringify({ type: 'tick', at: Date.now() })}\n\n`;
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
@@ -1601,8 +1696,8 @@ async function api(req, res, url) {
     let b; try { b = await readBody(req); } catch { return send(res, 400, { ok: false, error: 'bad json' }); }
     const who = await whoIs(req);
     if (!who) return send(res, 401, { ok: false, needsAuth: true, error: 'Sign in to hold a pass.' });
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : TODAY();
-    const id = crypto.randomBytes(6).toString('hex');
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || '')) ? b.date : SIMDATE();
+    const id = crypto.randomBytes(12).toString('hex');
     const holder = b.holder ? String(b.holder).slice(0, 60) : null;
     let r, skipped = [];
     if (String(b.kind || '') === 'trip') {
@@ -1617,7 +1712,13 @@ async function api(req, res, url) {
     if (!r.ok) return send(res, 400, { ok: false, error: r.reason });
     PASSES.set(id, r.pass);
     journal.append({ t: 'pass', pass: r.pass });
+    // The fare is set aside, not taken. A trip pass is the only kind with a
+    // block: a day pass covers a day rather than a journey, and there is no
+    // single door that says it was used.
+    if (r.pass.kind === 'trip' && r.pass.fare > 0)
+      blockForPass(r.pass, String(b.method || 'wallet'), simNow().getTime());
     return send(res, 200, { ok: true, pass: journey.publicOf(r.pass),
+      block: blockOf(r.pass),
       skipped: skipped.length ? skipped : null,
       scanUrl: '/scan/' + id, qr: '/api/qr?d=' + encodeURIComponent(lanBase(req) + '/scan/' + id) });
   }
@@ -1625,7 +1726,8 @@ async function api(req, res, url) {
     const who = await whoIs(req);
     if (!who) return send(res, 401, { needsAuth: true });
     return send(res, 200, { passes: [...PASSES.values()].filter(x => x.who === who)
-      .sort((a, b) => b.issuedAt - a.issuedAt).slice(0, 10).map(journey.publicOf) });
+      .sort((a, b) => b.issuedAt - a.issuedAt).slice(0, 10)
+      .map(x => ({ ...journey.publicOf(x), block: blockOf(x) })) });
   }
   // ------------------------------------------------------------- the ride --
   //
@@ -1689,10 +1791,16 @@ async function api(req, res, url) {
     const ps = PASSES.get(mPass[1]);
     if (!ps || ps.who !== who) return send(res, 404, { error: 'no such pass' });
     if (req.method === 'DELETE') {
-      journey.cancelPass(ps, simNow().getTime());
-      journal.append({ t: 'passgone', id: ps.id, at: ps.cancelledAt });
+      const now = simNow().getTime();
+      // only a live pass can be cancelled; one that lapsed or was ridden keeps
+      // the reason it actually ended
+      if (journey.cancelPass(ps, now).ok) {
+        journal.append({ t: 'passgone', id: ps.id, at: ps.cancelledAt });
+        releasePassBlock(ps, 'cancelled', now);
+      }
     }
-    return send(res, 200, { ok: true, pass: journey.publicOf(ps), scanUrl: '/scan/' + ps.id,
+    return send(res, 200, { ok: true, pass: journey.publicOf(ps), block: blockOf(ps),
+      scanUrl: '/scan/' + ps.id,
       qr: '/api/qr?d=' + encodeURIComponent(lanBase(req) + '/scan/' + ps.id) });
   }
   // The door. A conductor or a gate opens the QR and taps once. Open on purpose:
@@ -1703,14 +1811,26 @@ async function api(req, res, url) {
     if (!ps) return send(res, 404, { ok: false, error: 'no such pass' });
     if (req.method === 'POST') {
       let b; try { b = await readBody(req); } catch { b = {}; }
+      const nowScan = simNow().getTime();
       const r = journey.scan(ps, { by: b.by ? String(b.by).slice(0, 40) : null,
-        mode: b.mode, where: b.where ? String(b.where).slice(0, 40) : null }, simNow().getTime());
-      if (!r.ok) return send(res, 409, { ok: false, error: r.reason, validOn: r.validOn || null, pass: journey.publicOf(ps) });
-      if (!r.repeat) journal.append({ t: 'passride', id: ps.id, ride: r.ride });
+        mode: b.mode, where: b.where ? String(b.where).slice(0, 40) : null }, nowScan);
+      if (!r.ok) return send(res, 409, { ok: false, error: r.reason, validOn: r.validOn || null,
+        pass: journey.publicOf(ps), block: blockOf(ps) });
+      if (!r.repeat) {
+        journal.append({ t: 'passride', id: ps.id, ride: r.ride });
+        // She boarded, so the fare is hers to pay: the block becomes a payment,
+        // once, for the whole journey. A second tap on the same door is a
+        // repeat and never gets here; a second tap later finds a block that is
+        // already captured, and settle() leaves it alone.
+        //
+        // The money never decides whether the door opens. If this fails she
+        // still gets on the bus.
+        takePassBlock(ps, nowScan);
+      }
       return send(res, 200, { ok: true, ride: r.ride, repeat: !!r.repeat,
-        leg: r.leg || null, spent: !!r.spent, pass: journey.publicOf(ps) });
+        leg: r.leg || null, spent: !!r.spent, pass: journey.publicOf(ps), block: blockOf(ps) });
     }
-    return send(res, 200, { ok: true, pass: journey.publicOf(ps), today: TODAY() });
+    return send(res, 200, { ok: true, pass: journey.publicOf(ps), block: blockOf(ps), today: TODAY() });
   }
 
   // ------------------------------------------------------------- sos --

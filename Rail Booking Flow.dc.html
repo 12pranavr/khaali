@@ -2110,6 +2110,17 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <span style="flex:1"></span>
             <span style="font:700 26px/1 Archivo,sans-serif;letter-spacing:-.03em;color:var(--k-fg-14161a)">{{ cfTotal }}</span>
           </div>
+          <div style="{{ cfBlockStyle }}">
+            <span style="font:700 15px/1.3 Archivo,sans-serif;color:var(--k-fg-40434a)">{{ cfBlockLabel }}</span>
+            <span style="flex:1"></span>
+            <span style="font:700 20px/1 Archivo,sans-serif;letter-spacing:-.02em;color:var(--k-fg-40434a)">{{ cfBlockValue }}</span>
+          </div>
+          <div style="{{ cfBlockNoteStyle }}">{{ cfBlockNote }}</div>
+          <div style="{{ cfWholeStyle }}">
+            <span style="font:500 12.5px/1.4 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ cfWholeLabel }}</span>
+            <span style="flex:1"></span>
+            <span style="font:600 12.5px/1.4 'JetBrains Mono',monospace;color:var(--k-fg-8a8a84)">{{ cfWhole }}</span>
+          </div>
         </section>
 
         <section style="{{ cfCard }}">
@@ -2395,6 +2406,8 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div style="font:700 14px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ jnPassHead }}</div>
             <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-40434a);margin-top:3px">{{ jnPassSub }}</div>
             <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--k-fg-8a8a84);margin-top:5px">{{ jnPassNote }}</div>
+            <div><span style="{{ jnPassBlockStyle }}">{{ jnPassBlock }}</span></div>
+            <div style="{{ jnPassBlockNoteStyle }}">{{ jnPassBlockNote }}</div>
             <div onClick="{{ jnPassCancel }}" style="{{ jnPassCancelStyle }}">Cancel this pass</div>
           </div>
         </div>
@@ -3862,11 +3875,17 @@ class Component extends DCLogic {
     this._isleFit();
     window.addEventListener('resize',this._isleFit);
     setTimeout(this._isleFit,400);
+    // a pass may have been ridden, or have lapsed, while this page was not
+    // being looked at
+    setTimeout(()=>this.reconcilePasses(),1200);
+    this._passVis=()=>{if(!document.hidden)this.reconcilePasses();};
+    document.addEventListener('visibilitychange',this._passVis);
     this.routeBoot();
     this.srvBoot();}
   componentWillUnmount(){clearInterval(this._t);clearInterval(this._h);clearInterval(this._sp);
     clearInterval(this._lkT);document.removeEventListener('keydown',this._isleEsc);
     window.removeEventListener('resize',this._isleFit);
+    document.removeEventListener('visibilitychange',this._passVis);
     try{this._es&&this._es.close();}catch(e){}
     if(this._pop)window.removeEventListener('popstate',this._pop);
     document.removeEventListener('mousedown',this._sd);}
@@ -4564,6 +4583,8 @@ class Component extends DCLogic {
         if(m.type==='charted'&&m.pnr)this.onCharted(m);
         if(m.type==='chart')this.syncAv();
         if(m.type==='tkpay')this.loadTk(true);
+        if(m.type==='passpay')this.onPassPay(m);
+        if(m.type==='pass'&&m.id)this.passRefresh(m.id);
         if(m.type==='order')this.onOrderEvent(m);
         if(m.type==='dl'&&this.state.dlAsk&&m.id===this.state.dlAsk.id)this.pollLocker(m.id);
       }catch(_){}};
@@ -5904,10 +5925,91 @@ class Component extends DCLogic {
     try{const r=await this.authFetch('/api/pass',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify(body)},9000);
       const j=await r.json().catch(()=>({}));
-      if(j&&j.ok)this.passSet(rec.pnr,{...j.pass,qr:j.qr,scanUrl:j.scanUrl,skipped:j.skipped||null});
+      if(j&&j.ok){
+        this.passSet(rec.pnr,{...j.pass,block:j.block||null,qr:j.qr,scanUrl:j.scanUrl,skipped:j.skipped||null});
+        this.passBlockHold(j.pass,j.block);
+      }
       else this.setState({passErr:(j&&j.error)||'khaali could not issue the pass. Nothing was charged.'});
     }catch(e){this.setState({passErr:'khaali could not issue the pass. Nothing was charged.'});}
     this._passBusy=false;
+  }
+  /**
+   * Set the fare aside. Not taken - the door takes it, and nothing else does.
+   *
+   * The wallet is deliberately not topped up if she is short. tkBlockWallet()
+   * does that for the Tatkal demo, where the block IS the thing being shown;
+   * here it would be inventing money in the middle of a purchase. The block
+   * stands either way - the server holds it - and the page says she is short.
+   */
+  passBlockHold(pass,block){
+    if(!pass||!block||block.status!=='authorised'||!(block.amount>0))return;
+    const legs=(pass.legs||[]).map(l=>l.from+' \u2192 '+l.to).join(', then ');
+    this.walletHold(block.amount,'Trip pass \u2014 blocked, not taken'+(legs?' \u00b7 '+legs:''),
+      'tp:'+block.payId);
+    const w=this.wallet();
+    const short=this.walletHeld()-w.bal;
+    if(short>0)this.setState({notices:[{t:'₹'+block.amount+' blocked for the trip pass',
+      sub:'Your wallet is short by ₹'+short+' against everything now blocked. Top up before you board — nothing has been taken.',
+      page:'wallet'}].concat(this.state.notices||[]).slice(0,6)});
+  }
+  /** The door took it, or the clock gave it back. Either way the wallet says so
+      once, and saying it twice does nothing. */
+  onPassPay(m){
+    const me=(function(){try{return localStorage.getItem('khaali-who')}catch(e){return null}})();
+    if(!me||(m.who&&m.who!==me))return;
+    const k=m.id+':'+m.status;this._passSeen=this._passSeen||new Set();
+    if(this._passSeen.has(k))return;this._passSeen.add(k);
+    const ref='tp:'+m.id;
+    if(m.status==='captured'){
+      this.walletCapture(ref,'Trip pass used \u2014 ₹'+m.captured+' taken from the block',null,m.captured);
+      this.setState({notices:[{t:'Trip pass used \u00b7 ₹'+m.captured+' taken',
+        sub:'You boarded, so the block became the fare. One fare, once \u2014 the rest of the trip is on the same ticket.',
+        page:'wallet'}].concat(this.state.notices||[]).slice(0,6)});
+    }
+    if(m.status==='released'){
+      const why=m.why==='cancelled'?'cancelled':'not used';
+      this.walletRelease(ref,'Trip pass '+why+' \u2014 block released, nothing taken');
+      this.setState({notices:[{t:'Trip pass '+(why==='cancelled'?'cancelled':'expired')+' \u00b7 ₹'+m.amount+' released',
+        sub:'₹0 was debited \u2014 no refund, because nothing was taken. Nothing to claim, nothing to chase.',
+        page:'wallet'}].concat(this.state.notices||[]).slice(0,6)});
+    }
+    this.passRefresh(m.passId);
+  }
+  /** Whatever the server now says about one pass, written back over the copy
+      the phone kept at issue. */
+  async passRefresh(passId){
+    if(!passId)return;
+    const map=this.passes();
+    const key=Object.keys(map).find(k=>map[k]&&map[k].id===passId);
+    if(!key)return;
+    try{const r=await this.authFetch('/api/pass/'+passId,{},9000);
+      const j=await r.json().catch(()=>({}));
+      if(j&&j.ok&&j.pass)this.passSet(key,{...map[key],...j.pass,block:j.block||null});}catch(e){}
+  }
+  /**
+   * The event stream is not a promise. She may have been on a train with no
+   * signal when the conductor tapped, or asleep when the block lapsed. So on
+   * every return to the page, ask the server what became of every pass it
+   * still holds and settle the wallet against the answer. Both wallet calls
+   * do nothing when the hold has already gone, so this is safe to run often.
+   */
+  async reconcilePasses(){
+    if(this._recPass)return;this._recPass=true;
+    try{
+      const map=this.passes();
+      for(const key of Object.keys(map)){
+        const p=map[key];if(!p||!p.id)continue;
+        let j=null;
+        try{const r=await this.authFetch('/api/pass/'+p.id,{},9000);j=await r.json();}catch(e){continue;}
+        if(!j||!j.ok||!j.pass)continue;
+        this.passSet(key,{...p,...j.pass,block:j.block||null});
+        const b=j.block;if(!b||!b.payId)continue;
+        if(b.status==='captured')
+          this.walletCapture('tp:'+b.payId,'Trip pass used \u2014 ₹'+b.captured+' taken from the block',null,b.captured);
+        if(b.status==='released')
+          this.walletRelease('tp:'+b.payId,'Trip pass not used \u2014 block released, nothing taken');
+      }
+    }finally{this._recPass=false;}
   }
   async dropPass(rec){
     const p=this.passes()[rec.pnr];if(!p)return;
@@ -6013,6 +6115,8 @@ class Component extends DCLogic {
         ?((pass.legs||[]).map(l=>l.from+' \u2192 '+l.to+(l.ridden?' (travelled)':'')).join('  \u00b7  ')
           +' \u00b7 '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
           +' \u00b7 '+(pass.status==='used'?'travelled \u2014 this ticket is over'
+            :pass.status==='expired'?'the 24 hours are up \u2014 this ticket is over'
+            :pass.status==='cancelled'?'cancelled'
             :pass.status!=='valid'?pass.status:'any departure, once'))
         :('Good on '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
           +' \u00b7 '+(pass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')
@@ -6024,8 +6128,46 @@ class Component extends DCLogic {
             ?(' The '+pass.skipped.map(x=>x.name).join(' and ')+' seat is not khaali\u2019s to sell; buy it at the counter.')
             :''))
         :'Show this at the gate or to the conductor. Each tap is a ride, not a deduction.',
+      // ---- the money set aside for this pass, and what became of it ----
+      ...(()=>{
+        const b=(pass&&pass.block)||null;
+        const st=b?b.status:null;
+        const R='\u20b9';
+        const tone=st==='captured'?{bg:'var(--k-e6f4ec)',fg:'var(--k-fg-14663a)'}
+          :st==='released'?{bg:'var(--k-f1f1ee)',fg:'var(--k-fg-6a6d75)'}
+          :{bg:'var(--k-eaf0fd)',fg:'var(--k-fg-1f3f8f)'};
+        const when=(b&&b.at)?(' \u00b7 '+this.toHHMM(
+          new Date(b.at).getHours()*60+new Date(b.at).getMinutes()).toLowerCase()):'';
+        const chip=!b?''
+          :st==='captured'?(R+b.captured+' taken'+when)
+          :st==='released'?((pass.status==='cancelled'?'Cancelled':'Expired')+' \u00b7 '+R+'0 debited')
+          :(R+b.amount+' blocked, not taken');
+        const note=!b?''
+          :st==='captured'
+            ?('You boarded, so the block became the fare. One fare, once \u2014 the rest of this trip '
+              +'is on the same '+R+b.captured+' whether you take it or not.')
+          :(st==='released'&&pass.status==='cancelled')
+            ?('You cancelled it, so the block went back untouched. '+R+'0 was debited \u2014 nothing to '
+              +'refund, nothing to chase.')
+          :st==='released'
+            ?('The 24 hours are up. '+R+'0 was debited \u2014 no refund, because nothing was taken. The '
+              +'money is in your bank; it never left it. A trip pass is that journey, and this one has gone.')
+          :('The money is set aside in your bank; it has not moved. The first time a conductor or a gate '
+            +'scans this, '+R+b.amount+' is taken \u2014 once, for the whole trip. Not scanned within 24 '
+            +'hours and it is released.');
+        return {
+          jnPassBlock:chip,
+          jnPassBlockStyle:{display:b?'inline-block':'none',marginTop:7,
+            font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+            padding:'6px 10px',borderRadius:6,background:tone.bg,color:tone.fg},
+          jnPassBlockNote:note,
+          jnPassBlockNoteStyle:{display:b?'block':'none',marginTop:7,
+            font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+        };
+      })(),
       jnPassCancel:()=>rec&&this.dropPass(rec),
-      jnPassCancelStyle:{font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',marginTop:8,textDecoration:'underline'},
+      jnPassCancelStyle:{display:(pass&&pass.status==='valid')?'block':'none',
+        font:'600 11.5px/1 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',cursor:'pointer',marginTop:8,textDecoration:'underline'},
       jnPassOpen:pass?(pass.scanUrl||'#'):'#',
 
       // ---- the hired ride, booked on this same ticket ----
@@ -6404,7 +6546,7 @@ class Component extends DCLogic {
             ||this.trackMetroPanel((p.legs||[]).find(l=>l.mode==='metro'&&!l.ridden)||(p.legs||[]).find(l=>l.mode==='metro')))
           :null,
         onOpen:()=>{},note:'',noteStyle:gone};
-      (p.date===today&&p.status!=='used'?live:past).push(card);
+      (p.date===today&&p.status==='valid'?live:past).push(card);
     });
 
     // the car or the bike, and whether it has turned up
@@ -10449,7 +10591,7 @@ class Component extends DCLogic {
           rows:passOn?legs.map(l=>row({label:String(l.from).replace(/^.*, /,'')+' \u2192 '+String(l.to).replace(/^.*, /,''),
             value:q?(R+((q.legs.find(x=>x.to===l.to)||{}).fare||0)):'\u2026'})):[],
           zero:[],
-          sum:sub('Trip pass',passOn?(q?R+q.fare:'\u2026'):'not taken'),
+          sum:sub('Trip pass',passOn?(q?(R+q.fare+' blocked'):'\u2026'):'not blocked'),
           keep:'',keepStyle:{display:'none'},
           dropStyle:{display:'block'},drop:dropBtn(passOn,'pass'),
           faded:{opacity:passOn?1:.55},
@@ -10468,12 +10610,14 @@ class Component extends DCLogic {
           faded:{opacity:rideOn?1:.55},
         });
 
-        const grand=R+money(trainSum+passSum);
-        const label=passOn?'Total for the whole journey':'Total payable';
+        // What is taken today, and what is only set aside. They were one
+        // number, and the one number was never the one that moved.
+        const grand=R+money(trainSum);
+        const label=passOn?'Paid now':'Total payable';
 
         return {
           // the old flat list, kept for the ticket page which still reads it
-          fareRows:trainRows.concat(passOn&&q?[{label:'Trip pass',value:R+q.fare}]:[])
+          fareRows:trainRows.concat(passOn&&q?[{label:'Trip pass \u00b7 blocked',value:R+q.fare}]:[])
             .concat([{label,value:grand,k:{fontWeight:700,color:'var(--k-fg-14161a)'},v:{fontWeight:700,fontSize:15}}])
             .map(r=>({k:{color:'var(--k-fg-40434a)'},v:{fontWeight:600},...r})),
 
@@ -10495,12 +10639,27 @@ class Component extends DCLogic {
             background:'var(--k-e6f4ec)',borderRadius:14,padding:'13px 16px',
             font:'600 13px/1.45 Archivo,sans-serif',color:'var(--k-fg-14663a)'},
           cfPackNote:chargeable>1
-            ?('One ticket for the whole way, and one pass for the rest of it. khaali takes no booking fee, '
+            ?('One ticket for the whole way, and one pass for the rest of it \u2014 the pass is blocked, not '
+              +'charged: boarding takes it, and 24 hours releases it. khaali takes no booking fee, '
               +'no convenience fee and nothing for choosing a berth \u2014 you pay the railway'
               +String.fromCharCode(8217)+'s fare and the railway'
               +String.fromCharCode(8217)+'s charges, and nothing else.'):'',
 
           cfTotalLabel:label,cfTotal:grand,
+          // the money set aside for the rest of the way, said on its own
+          cfBlockStyle:{display:(passOn&&passSum)?'flex':'none',alignItems:'baseline',gap:12,
+            padding:'11px 0 0'},
+          cfBlockLabel:'Blocked, not taken',
+          cfBlockValue:R+money(passSum),
+          cfBlockNote:(passOn&&passSum)
+            ?('Your bank sets this aside for the bus and the metro. It is taken the first time a conductor '
+              +'or a gate scans your pass, and only then. Not scanned within 24 hours and it is released '
+              +'\u2014 '+R+'0 debited, nothing to refund, nothing to claim, nothing to chase.'):'',
+          cfBlockNoteStyle:{display:(passOn&&passSum)?'block':'none',marginTop:8,
+            font:'500 12px/1.55 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
+          cfWholeStyle:{display:(passOn&&passSum)?'flex':'none',alignItems:'baseline',gap:12,marginTop:10},
+          cfWholeLabel:'Most this journey can cost',
+          cfWhole:R+money(trainSum+passSum),
           // what commit needs to know: only what she kept is bought
           cfKeepPass:passOn,cfKeepRide:rideOn,
         };
@@ -10970,8 +11129,10 @@ class Component extends DCLogic {
             color:w.bal>0?'var(--k-fg-14663a)':'var(--k-fg-8a8a84)',
             background:w.bal>0?'var(--k-e6f4ec)':'transparent'},
           walletBalBig:'\u20b9'+this.walletAvail(),
+          // every kind of block says why it is there; this line used to say
+          // "only if a berth is allotted" over a trip pass, which is not true
           walletHeldLine:this.walletHeld()?('\u20b9'+this.walletHeld()+' more is blocked, not taken \u2014 '
-            +(w.held[w.held.length-1].note)+'. It is debited only if a berth is allotted.'):'',
+            +(w.held[w.held.length-1].note)+'.'):'',
           walletHeldStyle:{display:this.walletHeld()?'block':'none',marginTop:8,maxWidth:420,
             font:'600 11.5px/1.5 Manrope,sans-serif',color:'var(--k-fg-c2870a)'},
           walletTx:w.tx.map(t2=>({

@@ -344,6 +344,17 @@ export function priceTripLegs(legs) {
  */
 export const COVER_OF = { bus: 'bmtc', metro: 'metro' };
 
+/**
+ * How long a trip pass lives.
+ *
+ * It used to be the calendar date it was issued for, which is wrong for the
+ * journey that leaves at 11:55 pm: its bus is at 00:20, on a date the pass has
+ * never heard of, and the gate refuses a ticket she is standing in front of.
+ * Twenty-four hours from the moment it is cut covers any journey khaali will
+ * plan, and ends at a definite instant that the money behind it can share.
+ */
+export const PASS_MS = 86400000;
+
 export function newTripPass({ id, who, date, holder, legs }, now = Date.now()) {
   if (!id || !who || !date) return { ok: false, reason: 'incomplete' };
   if (!Array.isArray(legs) || !legs.length) return { ok: false, reason: 'no-legs' };
@@ -360,7 +371,9 @@ export function newTripPass({ id, who, date, holder, legs }, now = Date.now()) {
     legs: legs.map((l, i) => ({ n: i + 1, mode: l.mode, cover: COVER_OF[l.mode],
       name: l.name || null, route: l.route || null, from: l.from, to: l.to,
       km: l.km != null ? l.km : null, fare: l.fare, ridden: null })),
-    fare, status: 'valid', issuedAt: now, rides: [],
+    fare, status: 'valid', issuedAt: now, expiresAt: now + PASS_MS,
+    // the block set aside against this pass, filled in by whoever cuts it
+    payId: null, rides: [],
   } };
 }
 
@@ -378,9 +391,16 @@ export function scan(p, { by, mode, where } = {}, now = Date.now()) {
   if (p.status !== 'valid') return { ok: false, reason: p.status };
   if (!PASS_MODES.includes(mode)) return { ok: false, reason: 'bad-mode' };
   if (!p.covers.includes(mode)) return { ok: false, reason: 'not-covered' };
-  const day = new Date(now);
-  const iso = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
-  if (iso !== p.date) return { ok: false, reason: 'wrong-day', validOn: p.date };
+  // A trip pass runs on its own clock: twenty-four hours from when it was cut,
+  // so a journey that crosses midnight is still holding a ticket the gate will
+  // take. A day pass is still a day, because that is what a day pass is.
+  if (p.expiresAt != null) {
+    if (now >= p.expiresAt) return { ok: false, reason: 'expired', validOn: p.date };
+  } else {
+    const day = new Date(now);
+    const iso = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+    if (iso !== p.date) return { ok: false, reason: 'wrong-day', validOn: p.date };
+  }
   // On a trip pass the door is crossing off a NAMED ride - this bus, these two
   // stops - and there is only one of it. Which bus she is on does not matter,
   // and neither does the hour: the 1:30 is the same ticket as the 1:00 she
@@ -398,19 +418,56 @@ export function scan(p, { by, mode, where } = {}, now = Date.now()) {
   if (p.kind === 'trip' && !leg) return { ok: false, reason: 'leg-done' };
   const ride = { n: p.rides.length + 1, mode, by: by || null, where: where || null, at: now,
     leg: leg ? leg.n : null };
-  p.rides.push(ride);
-  if (leg) {
-    leg.ridden = now;
-    // the journey is over when its last leg is behind her
-    if (p.legs.every(l => l.ridden)) p.status = 'used';
-  }
+  applyRide(p, ride);
   return { ok: true, ride, leg: leg || null, spent: p.status === 'used' };
+}
+
+/**
+ * Record a ride on the pass it belongs to.
+ *
+ * Both the door and the journal come through here. They used to disagree:
+ * `scan` crossed the leg off and spent the pass, while replay pushed the ride
+ * and did neither - so a restart handed back a pass whose legs were all
+ * rideable again. Harmless while a pass was free; a fare taken twice now that
+ * one is not. One function, so they cannot drift again.
+ */
+export function applyRide(p, ride) {
+  if (!p || !ride) return { ok: false, reason: 'missing' };
+  if (!p.rides.some(r => r.n === ride.n)) p.rides.push(ride);
+  const leg = (p.kind === 'trip' && ride.leg != null && p.legs) ? p.legs[ride.leg - 1] : null;
+  if (leg && !leg.ridden) leg.ridden = ride.at;
+  // the journey is over when its last leg is behind her
+  if (p.kind === 'trip' && p.legs && p.legs.every(l => l.ridden) && p.status === 'valid')
+    p.status = 'used';
+  return { ok: true, leg: leg || null };
 }
 
 export function cancelPass(p, now = Date.now()) {
   if (!p) return { ok: false, reason: 'missing' };
+  if (p.status !== 'valid') return { ok: false, reason: p.status };
   p.status = 'cancelled'; p.cancelledAt = now;
   return { ok: true };
+}
+
+/**
+ * The twenty-four hours are up.
+ *
+ * One way, and only from 'valid': a pass that was ridden stays ridden and a
+ * pass that was cancelled stays cancelled, so the reason it ended is never
+ * overwritten by the reason it would have ended anyway. There is no renewal -
+ * a trip pass is that journey, and this one has gone.
+ */
+export function expirePass(p, now = Date.now()) {
+  if (!p) return { ok: false, reason: 'missing' };
+  if (p.status !== 'valid') return { ok: false, reason: p.status };
+  p.status = 'expired'; p.expiredAt = now;
+  return { ok: true };
+}
+
+/** Is this pass past its twenty-four hours? A day pass never is: it is judged
+    by its date, at the door. */
+export function passOver(p, now = Date.now()) {
+  return !!(p && p.expiresAt != null && now >= p.expiresAt);
 }
 
 /** What a phone, or a conductor's phone, is allowed to see. */
@@ -418,7 +475,8 @@ export function publicOf(p) {
   if (!p) return null;
   return { id: p.id, date: p.date, holder: p.holder, covers: p.covers, fare: p.fare,
     kind: p.kind || 'day', legs: p.legs || null,
-    status: p.status, issuedAt: p.issuedAt, rides: p.rides.length,
+    status: p.status, issuedAt: p.issuedAt, expiresAt: p.expiresAt || null,
+    block: p.block || null, rides: p.rides.length,
     legsLeft: p.kind === 'trip' ? p.legs.filter(l => !l.ridden).length : null,
     last: p.rides.length ? p.rides[p.rides.length - 1] : null };
 }

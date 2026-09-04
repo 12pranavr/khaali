@@ -2057,6 +2057,115 @@ t('a leg khaali cannot place is refused, never guessed at', () => {
   assert.strictEqual(JY.priceTripLegs([]).ok, false);
 });
 
+console.log('\nthe pass is blocked, not taken');
+
+// A trip pass now has money set aside against it. The rules that matter:
+// twenty-four hours, one capture at the door, one release if nobody comes,
+// and nothing that can take the same fare twice.
+
+const tripFor = (id, ms) => JY.newTripPass({ id, who: 'h', date: '2026-09-10',
+  legs: [{ mode: 'bus', name: 'BMTC KIA-9', from: 'Kempegowda', to: 'Hebbala', fare: 10 },
+         { mode: 'metro', from: 'Whitefield', to: 'Majestic', fare: 80 }] }, ms == null ? at : ms).pass;
+
+t('a trip pass lives twenty-four hours from the moment it is cut', () => {
+  const p = tripFor('b1');
+  assert.strictEqual(p.expiresAt, at + 86400000);
+  assert.ok(!JY.passOver(p, p.expiresAt - 1), 'not over a second early');
+  assert.ok(JY.passOver(p, p.expiresAt), 'over on the second');
+  // the point of the change: a journey that crosses midnight still has a ticket
+  const pastMidnight = new Date('2026-09-11T00:20:00+05:30').getTime();
+  assert.ok(JY.scan(tripFor('b1b'), { mode: 'bmtc', where: 'KIA-9' }, pastMidnight).ok,
+    'the 00:20 bus is still on the pass the 23:14 booking bought');
+});
+
+t('a pass that lapses says so, and cannot be brought back', () => {
+  const p = tripFor('b2');
+  assert.ok(JY.expirePass(p, p.expiresAt).ok);
+  assert.strictEqual(p.status, 'expired');
+  assert.strictEqual(JY.scan(p, { mode: 'bmtc' }, p.expiresAt).reason, 'expired');
+  assert.strictEqual(JY.expirePass(p, p.expiresAt + 1).reason, 'expired', 'one way');
+  assert.strictEqual(JY.cancelPass(p, p.expiresAt + 1).reason, 'expired',
+    'a lapsed pass keeps the reason it actually ended');
+});
+
+t('a ridden pass and a cancelled one refuse to expire over the top of it', () => {
+  const ridden = tripFor('b3');
+  JY.scan(ridden, { mode: 'bmtc', where: 'KIA-9' }, at + 1000);
+  JY.scan(ridden, { mode: 'metro', where: 'KGWA' }, at + 90000);
+  assert.strictEqual(ridden.status, 'used');
+  assert.strictEqual(JY.expirePass(ridden, ridden.expiresAt).reason, 'used');
+  const gone = tripFor('b4');
+  JY.cancelPass(gone, at + 10);
+  assert.strictEqual(JY.expirePass(gone, gone.expiresAt).reason, 'cancelled');
+});
+
+t('the door takes the whole fare, once, however much of the trip she rides', () => {
+  const p = tripFor('b5');
+  const s = { id: 'pay5', kind: 'pass', amount: p.fare, status: 'authorised', captured: 0 };
+  // she rides the bus and walks the rest: she used it, so it is taken in full
+  assert.ok(JY.scan(p, { mode: 'bmtc', where: 'KIA-9' }, at + 1000).ok);
+  const took = tatkal.settle(s, true, at + 1000, p.fare);
+  assert.strictEqual(took.captured, 90, 'the trip is the price, not the legs ridden');
+  assert.strictEqual(p.status, 'valid', 'the metro leg is still hers to take');
+  // a second door later cannot take it again
+  assert.strictEqual(tatkal.settle(s, true, at + 90000, p.fare).reason, 'captured');
+  assert.strictEqual(s.captured, 90);
+});
+
+t('a repeat tap on the same door is not a second fare', () => {
+  const p = tripFor('b6');
+  const one = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, at + 1000);
+  const two = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, at + 21000);
+  assert.ok(one.ok && two.ok);
+  assert.ok(!one.repeat, 'the first is a ride');
+  assert.ok(two.repeat, 'the second, inside a minute, is the same tap');
+  assert.strictEqual(p.rides.length, 1, 'one ride, so one capture upstream');
+});
+
+t('nobody came: the block is released and nothing was ever taken', () => {
+  const p = tripFor('b7');
+  const s = { id: 'pay7', kind: 'pass', amount: p.fare, status: 'authorised', captured: 0 };
+  assert.ok(JY.expirePass(p, p.expiresAt).ok);
+  const back = tatkal.settle(s, false, p.expiresAt);
+  assert.strictEqual(back.status, 'released');
+  assert.strictEqual(s.captured, 0, '\u20b90, so there is nothing to refund');
+});
+
+t('a block already taken is not released by the clock that follows it', () => {
+  const s = { id: 'pay8', kind: 'pass', amount: 90, status: 'authorised', captured: 0 };
+  tatkal.settle(s, true, at, 90);
+  assert.strictEqual(s.status, 'captured');
+  assert.strictEqual(tatkal.settle(s, false, at + 86400000).reason, 'captured');
+  assert.strictEqual(s.captured, 90, 'the sweep cannot un-take a fare');
+});
+
+t('a restart does not hand back a leg she has already ridden', () => {
+  // the regression: replay pushed the ride but never crossed the leg off, so a
+  // ridden pass came back rideable - and with money behind it, chargeable twice
+  const live = tripFor('b9');
+  JY.scan(live, { by: 'conductor', mode: 'bmtc', where: 'KIA-9' }, at + 1000);
+  JY.scan(live, { by: 'gate', mode: 'metro', where: 'KGWA' }, at + 90000);
+  assert.strictEqual(live.status, 'used');
+  const fresh = tripFor('b9');
+  for (const ride of live.rides) JY.applyRide(fresh, ride);
+  assert.deepStrictEqual(fresh.legs.map(l => !!l.ridden), [true, true]);
+  assert.strictEqual(fresh.status, 'used', 'the pass is spent again after a restart');
+  assert.strictEqual(JY.scan(fresh, { mode: 'bmtc' }, at + 120000).reason, 'used');
+  // and replaying the same ride twice does not double it
+  JY.applyRide(fresh, live.rides[0]);
+  assert.strictEqual(fresh.rides.length, 2);
+});
+
+t('the blocked number is the number the pass costs, always', () => {
+  const priced = JY.priceTripLegs([
+    { mode: 'metro', fromId: 'KDGD', toId: 'KGWA', from: 'Kadugodi Tree Park', to: 'Majestic' }]);
+  assert.ok(priced.ok, priced.error);
+  const sum = priced.legs.reduce((n, l) => n + l.fare, 0);
+  const p = JY.newTripPass({ id: 'b10', who: 'h', date: '2026-09-10', legs: priced.legs }, at).pass;
+  assert.strictEqual(p.fare, sum,
+    'what the review page blocks and what the door takes are one number');
+});
+
 t('a trip pass refuses a leg it cannot price, and a train it does not sell', () => {
   assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10', legs: [] }).reason, 'no-legs');
   assert.strictEqual(JY.newTripPass({ id: 'x', who: 'h', date: '2026-09-10',
@@ -2067,11 +2176,14 @@ t('a trip pass refuses a leg it cannot price, and a train it does not sell', () 
     legs: [{ mode: 'walk', from: 'a', to: 'b', fare: 0 }] }).reason, 'bad-leg');
 });
 
-t('the wrong day and a cancelled pass still refuse a trip pass', () => {
+t('a lapsed trip pass and a cancelled one both refuse, and say which', () => {
   const p = JY.newTripPass({ id: 't5', who: 'h', date: '2026-09-10',
     legs: [{ mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
   const day = new Date('2026-09-10T09:00:00+05:30').getTime();
-  assert.strictEqual(JY.scan(p, { mode: 'metro' }, day + 86400000).reason, 'wrong-day');
+  const fresh = () => JY.newTripPass({ id: 't5b', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
+  assert.ok(JY.scan(fresh(), { mode: 'metro' }, at + 86399000).ok, 'good to the last second');
+  assert.strictEqual(JY.scan(fresh(), { mode: 'metro' }, at + 86400000).reason, 'expired');
   JY.cancelPass(p, day);
   assert.strictEqual(JY.scan(p, { mode: 'metro' }, day).reason, 'cancelled');
 });
