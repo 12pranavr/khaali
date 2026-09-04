@@ -588,6 +588,138 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   </div>
 </div>
 
+<sc-if value="{{ onPlan }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1240px;margin:0 auto;padding:24px 22px 70px">
+  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+    <h1 style="margin:0;font:700 24px/1.2 Manrope,sans-serif;letter-spacing:-.02em">{{ pHeadFrom }} &rarr; {{ pHeadTo }}</h1>
+    <div style="font-size:13.5px;color:var(--k-fg-8a8a84)">{{ pHeadSub }}</div>
+  </div>
+  <div style="font-size:13px;color:var(--k-fg-6a6d75);margin-bottom:14px">The whole way, in one place: the train, the walk nobody mentions, the metro, and a day pass for the city. Book the train here; the pass is waiting on your ticket.</div>
+
+  <div class="k-searchgrid" style="margin-top:20px;background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:13px;padding:15px 16px;display:grid;grid-template-columns:minmax(0,1fr) 46px minmax(0,1fr) auto auto;gap:12px;align-items:end">
+    <div class="k-stnwrap" style="min-width:0;position:relative">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">From</div>
+      <input value="{{ pFromTxt }}" onChange="{{ setPFromTxt }}" onFocus="{{ openPFrom }}" placeholder="Station or metro stop" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
+      <div style="{{ pFromPanel }}">
+        <sc-for list="{{ pFromSuggs }}" as="o" hint-placeholder-count="5">
+          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="k-swap" onClick="{{ pSwap }}" title="Swap" style="height:46px;width:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;color:var(--k-fg-d8385a);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#8646;</div>
+    <div class="k-stnwrap" style="min-width:0;position:relative">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">To</div>
+      <input value="{{ pToTxt }}" onChange="{{ setPToTxt }}" onFocus="{{ openPTo }}" placeholder="Station or metro stop" style="width:100%;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;padding:0 12px;font:600 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none;box-sizing:border-box"></input>
+      <div style="{{ pToPanel }}">
+        <sc-for list="{{ pToSuggs }}" as="o" hint-placeholder-count="5">
+          <div class="k-stnrow" onClick="{{ o.onPick }}" style="{{ o.row }}"><span style="{{ o.nStyle }}">{{ o.n }}</span><span style="{{ o.cStyle }}">{{ o.c }}</span><span style="{{ o.kmStyle }}">{{ o.km }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="k-calwrap" style="position:relative">
+      <div style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84);margin-bottom:7px">Date</div>
+      <div style="display:flex;align-items:center;height:46px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:9px;overflow:hidden">
+        <div onClick="{{ dayPrev }}" style="{{ dayPrevStyle }}">&#8249;</div>
+        <div onClick="{{ toggleCal }}" style="min-width:118px;text-align:center;font:700 14.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);cursor:pointer">{{ dateBtnText }}</div>
+        <div onClick="{{ dayNext }}" style="{{ dayNextStyle }}">&#8250;</div>
+      </div>
+      <div class="k-calwrap k-calpop3" style="{{ calPanel }}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="{{ calHeadStyle }}">{{ calHead }}</div>
+          <div onClick="{{ calPrev.onClick }}" style="{{ calPrev.style }}">{{ calPrev.glyph }}</div>
+          <div onClick="{{ calNext.onClick }}" style="{{ calNext.style }}">{{ calNext.glyph }}</div>
+        </div>
+        <div style="display:flex">
+          <sc-for list="{{ calDows }}" as="d" hint-placeholder-count="7"><div style="{{ d.style }}">{{ d.t }}</div></sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;width:315px">
+          <sc-for list="{{ calCells }}" as="c" hint-placeholder-count="35">
+            <div onClick="{{ c.onClick }}" style="{{ c.style }}"><span>{{ c.t }}</span><span style="{{ c.nStyle }}">{{ c.n }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div onClick="{{ pSearch }}" style="height:46px;padding:0 26px;border-radius:9px;background:var(--k-d8385a);color:var(--k-fg-fff);font:800 14.5px/1 Manrope,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center">Search</div>
+  </div>
+
+  <div style="margin-top:13px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:9px">
+      <span style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
+      <input type="time" value="{{ pAfterVal }}" onChange="{{ setPAfter }}" style="height:40px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:8px;padding:0 10px;font:600 13.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none"></input>
+    </div>
+    <div onClick="{{ togglePStep }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+      <span style="{{ pStepBox }}">{{ pStepTick }}</span>
+      <span style="font:600 13px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
+    </div>
+  </div>
+
+  <div style="{{ pBusyStyle }}">Working out the trains, the walk and the metro&hellip;</div>
+  <div style="{{ pErrStyle }}">{{ pErrText }}</div>
+
+  <div style="{{ pEmptyStyle }}">Pick where you are starting and where you are going, then press Search. khaali plans a train into the city and the Purple Line beyond it &mdash; and says so plainly when a pair is not on this demo yet.</div>
+
+  <div style="{{ pMetroStyle }}">
+    <div style="font:800 20px/1.2 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ pMetroHead }}</div>
+    <div style="font:600 13px/1.6 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:6px">{{ pMetroLine }}</div>
+    <sc-for list="{{ pMetroSteps }}" as="st" hint-placeholder-count="2">
+      <div style="display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--k-f0efeb);margin-top:10px">
+        <div style="flex:none;width:11px;height:11px;border-radius:50%;margin-top:4px;{{ st.dotStyle }}"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font:700 13.5px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ st.title }}</div>
+          <div style="font:600 12.5px/1.55 Manrope,sans-serif;color:var(--k-fg-40434a);margin-top:2px">{{ st.sub }}</div>
+        </div>
+      </div>
+    </sc-for>
+    <div style="font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb)">{{ pMetroFare }}</div>
+  </div>
+
+  <div style="{{ pRowsStyle }}">
+    <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="4">
+      <div class="k-resrow" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:18px 20px;margin-bottom:12px">
+        <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+          <div class="k-restrain" onClick="{{ r.onOpen }}" style="flex:none;width:210px;cursor:pointer">
+            <div style="font:700 15.5px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ r.name }}</div>
+            <div style="font:400 11.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.no }} &middot; runs daily</div>
+            <div style="{{ r.liveStyle }}">{{ r.live }}</div>
+          </div>
+          <div class="k-restimes" style="flex:none;display:flex;align-items:center;gap:12px">
+            <div style="text-align:right"><div style="font:700 16px/1.2 Manrope,sans-serif">{{ r.dep }}</div><div style="font-size:11px;color:var(--k-fg-8a8a84)">{{ r.fromCode }}</div></div>
+            <div style="width:64px;text-align:center"><div style="font-size:11px;color:var(--k-fg-8a8a84);margin-bottom:3px">{{ r.dur }}</div><div style="height:2px;background:var(--k-e6e5e0);border-radius:2px"></div></div>
+            <div><div style="font:700 16px/1.2 Manrope,sans-serif">{{ r.arr }}</div><div style="font-size:11px;color:var(--k-fg-8a8a84)">{{ r.toCode }}</div></div>
+          </div>
+          <div class="k-rescells" style="flex:1;min-width:280px;display:flex;gap:9px;flex-wrap:wrap">
+            <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3">
+              <div onClick="{{ c.onClick }}" style="{{ c.style }}">
+                <div style="font:700 12px/1.2 Manrope,sans-serif">{{ c.k }} &middot; &#8377;{{ c.price }}</div>
+                <div style="{{ c.freeStyle }}">{{ c.freeText }}</div>
+                <div style="font:600 10.5px/1.3 Manrope,sans-serif;color:var(--k-fg-1f3f8f)">{{ c.partText }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <button class="k-bookbtn" onClick="{{ r.onBook }}" style="{{ r.bookStyle }}">{{ r.bookLabel }}</button>
+        </div>
+        <div style="{{ r.stepsStyle }}">
+          <sc-for list="{{ r.steps }}" as="st" hint-placeholder-count="2">
+            <div style="display:flex;gap:12px;padding:7px 0">
+              <div style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:4px;{{ st.dotStyle }}"></div>
+              <div style="flex:1;min-width:0">
+                <div style="font:700 13px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ st.title }}</div>
+                <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ st.sub }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="{{ r.endStyle }}">
+            <span style="{{ r.endBig }}">{{ r.endText }}</span>
+            <span style="{{ r.passStyle }}">{{ r.passText }}</span>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+    <div style="{{ pNoteStyle }}">{{ pNoteText }}</div>
+  </div>
+</div>
+</sc-if>
+
 <sc-if value="{{ onResults }}" hint-placeholder-val="{{ false }}">
 <div style="max-width:1240px;margin:0 auto;padding:24px 22px 70px">
   <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
@@ -3140,7 +3272,8 @@ class Component extends DCLogic {
   // One path per page, so back/forward work and any screen can be linked.
   ROUTES={home:'/',results:'/trains',map:'/route-map',train:'/train',
     showtimes:'/departures',seats:'/berths',confirm:'/confirm',ticket:'/ticket',
-    bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop',wallet:'/wallet',tatkal:'/fair-tatkal'};
+    bookings:'/my-bookings',about:'/about',favorites:'/favorites',odds:'/waitlist-odds',hop:'/seat-hop',wallet:'/wallet',tatkal:'/fair-tatkal',
+    plan:'/plan'};
   // Pages whose meaning depends on which journey you picked.
   JOURNEY_PAGES=['results','train','showtimes','seats','confirm','ticket','odds','hop'];
   // Pages that need state a URL cannot carry (a live hold, a fresh booking).
@@ -4655,6 +4788,251 @@ class Component extends DCLogic {
     };
   }
 
+  /* ------------------------------------------- plan a journey --
+     Its own page. The Trains page books a train; this books a JOURNEY, which
+     on this corridor means a train and then the city - the walk nobody
+     mentions, the metro, and a day pass. The rows below are the Trains rows,
+     deliberately: the same times, the same fares, the same free counts, the
+     same Book. What is added is the rest of the way, and the time she
+     actually arrives, which is the only thing worth sorting a journey by. */
+
+  /** Everywhere khaali can plan from or to: the corridor, and the line. */
+  planPlaces(){
+    if(this._pp)return this._pp;
+    const rail=this.ST.map((s,i)=>({k:'rail',id:s.c,i,n:s.n,sub:'Railway station',c:s.c}));
+    const metro=(this.state.pMetro||[]).map((m,mi)=>({k:'metro',id:m.id,mi,n:m.n,
+      sub:'Namma Metro \u00b7 Purple Line',c:m.id,kn:m.kn}));
+    this._pp=rail.concat(metro);
+    return this._pp;
+  }
+  planPlace(k,id){return this.planPlaces().find(p=>p.k===k&&p.id===id)||null;}
+  /** The metro is fetched once; until it lands the page plans trains only. */
+  planBoot(){
+    if(this._pmBusy||this.state.pMetro)return;
+    this._pmBusy=true;
+    this.tfetch('/api/metro',null,8000).then(r=>r.json()).then(j=>{
+      this._pp=null;this.setState({pMetro:j.stops||[],pBoard:j.board||null});
+    }).catch(()=>{}).finally(()=>{this._pmBusy=false;});
+  }
+  planAfterMin(){
+    const v=this.state.pAfter;
+    if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}
+    if((this.state.dayIdx||0)>0)return 0;            // a future day starts at midnight
+    const d=this.simNowDate();return d.getHours()*60+d.getMinutes();
+  }
+  planDur(a,b){const d=(((b-a)%1440)+1440)%1440;return Math.floor(d/60)+'h '+String(d%60).padStart(2,'0')+'m';}
+
+  /**
+   * The search. A rail origin sets the booking state to the TRAIN leg, so the
+   * Book button, the fares and the free counts are the same machinery the
+   * Trains page uses - there is no second booking flow to keep in step.
+   */
+  async planSearch(){
+    const S=this.state;
+    const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
+    const T=this.planPlace(S.pToK||'metro',S.pToId||'KGWA');
+    if(!F||!T)return;
+    if(F.k===T.k&&F.id===T.id)return this.setState({pRes:{err:'Pick two different places.'}});
+    if(F.k==='metro'&&T.k==='rail')
+      return this.setState({pRes:{err:'khaali can plan a train into the city, and a ride along the Purple Line. Metro back onto a train is not on this demo yet \u2014 that is the same code with more data, and it is better to say so than to guess.'}});
+    const after=this.planAfterMin();
+    this.setState({pBusy:true,pRes:null});
+
+    // metro to metro: no train, one ride
+    if(F.k==='metro'&&T.k==='metro'){
+      try{
+        const r=await this.tfetch('/api/journey?arrive='+after+'&from='+encodeURIComponent(F.id)
+          +'&to='+encodeURIComponent(T.id)+(S.pStep?'&needs=step-free':''),null,9000);
+        const j=await r.json();
+        this.setState({pBusy:false,pRes:{kind:'metro',plan:j}});
+      }catch(e){this.setState({pBusy:false,pRes:{err:'khaali could not reach the planner. Try again.'}});}
+      return;
+    }
+
+    // a rail origin. The train leg ends where the metro begins, or at the
+    // destination station when both ends are on the corridor.
+    const WFD=this.ST.findIndex(x=>x.c==='WFD');
+    const railTo=T.k==='rail'?T.i:WFD;
+    if(F.i===railTo)return this.setState({pBusy:false,pRes:{err:'That is the same station.'}});
+    this._c={};
+    this.setState({from:F.i,to:railTo,allCls:true,picks:[],holdId:null,hold:null});
+
+    const legs=this.TRAINS.filter(x=>this.serves(x,F.i,railTo)).map(x=>{
+      const dM=this.sMin(x,F.i,'d'),aM=this.sMin(x,railTo,'a');
+      if(dM==null||aM==null)return null;
+      const dep=(((dM%1440)+1440)%1440);
+      return {x,dM,aM,dep,arrMin:(((aM%1440)+1440)%1440)};
+    }).filter(Boolean).filter(o=>o.dep>=after).sort((a,b)=>a.dep-b.dep).slice(0,24);
+
+    if(!legs.length){
+      this.setState({pBusy:false,pRes:{kind:'rail',rows:[],from:F,to:T,
+        err:'No train from '+F.n+' toward '+this.ST[railTo].n+' after '+this.toHHMM(after)+'. Try an earlier time, or the next day.'}});
+      return;
+    }
+    if(T.k==='rail'){
+      this.setState({pBusy:false,pRes:{kind:'rail',from:F,to:T,
+        rows:legs.map(o=>({...o,plan:null,endMin:o.arrMin}))}});
+      return;
+    }
+    // one call for every train's continuation, not one call per train
+    let plans=[];
+    try{
+      const r=await this.tfetch('/api/journeys?arrivals='+legs.map(o=>o.arrMin).join(',')
+        +'&to='+encodeURIComponent(T.id)+(S.pStep?'&needs=step-free':''),null,12000);
+      const j=await r.json();plans=j.plans||[];
+    }catch(e){}
+    const rows=legs.map((o,i)=>{
+      const pl=plans[i]||null;
+      return {...o,plan:pl,endMin:(pl&&pl.ok)?pl.arrive:o.arrMin+999};
+    }).sort((a,b)=>a.endMin-b.endMin);
+    this.setState({pBusy:false,pRes:{kind:'chain',from:F,to:T,rows}});
+  }
+
+  planBindings(){
+    const S=this.state,gone={display:'none'};
+    // the line is fetched the moment the page is open, not when a field is
+    // touched: the destination defaults to Majestic and must resolve to a real
+    // stop before the first Search
+    if(S.page==='plan')this.planBoot();
+    const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
+    const T=this.planPlace(S.pToK||'metro',S.pToId||'KGWA');
+    const R=S.pRes||null;
+    const money=v=>String(v);
+    const suggs=(which)=>{
+      const txt=which==='from'?(S.pTxtF!=null?S.pTxtF:''):(S.pTxtT!=null?S.pTxtT:'');
+      const q=String(txt).trim().toLowerCase();
+      const other=which==='from'?T:F;
+      return this.planPlaces()
+        .filter(p=>!(other&&p.k===other.k&&p.id===other.id))
+        .filter(p=>!q||p.n.toLowerCase().indexOf(q)>=0||p.id.toLowerCase().indexOf(q)>=0||(p.kn||'').indexOf(txt.trim())>=0)
+        .slice(0,7)
+        .map(p=>({n:p.n,c:p.k==='rail'?p.c:'METRO',km:p.k==='rail'?'rail':'metro',
+          row:{display:'flex',alignItems:'baseline',gap:10,padding:'10px 13px',cursor:'pointer',
+            borderBottom:'1px solid var(--k-f4f3ef)'},
+          nStyle:{flex:1,font:'600 13.5px/1.3 Manrope,sans-serif',color:'var(--k-fg-14161a)'},
+          cStyle:{font:"600 10px/1 'IBM Plex Mono',monospace",color:p.k==='rail'?'var(--k-fg-d8385a)':'#8C2877'},
+          kmStyle:{font:"500 10.5px/1 'IBM Plex Mono',monospace",color:'var(--k-fg-8a8a84)',width:44,textAlign:'right'},
+          onPick:()=>{this.setState(which==='from'
+            ?{pFromK:p.k,pFromId:p.id,pTxtF:null,pOpen:null}
+            :{pToK:p.k,pToId:p.id,pTxtT:null,pOpen:null});}}));
+    };
+    const panel=(which)=>({display:S.pOpen===which?'block':'none',position:'absolute',
+      top:'calc(100% + 5px)',left:0,minWidth:260,zIndex:90,background:'var(--k-fff)',
+      border:'1px solid var(--k-e6e5e0)',borderRadius:9,overflow:'hidden',
+      boxShadow:'0 14px 34px rgba(40,45,90,.18)'});
+
+    // ---- the rows: a train, then the rest of the way ----
+    const rows=(R&&R.rows||[]).map(o=>{
+      const x=o.x, cx=this.cxOf(x.no,S.dayIdx), pl=o.plan;
+      const steps=[];
+      if(pl&&pl.ok){
+        pl.legs.forEach(l=>{
+          if(l.mode==='walk')steps.push({dotStyle:{background:'var(--k-8a8a84)'},
+            title:'Walk '+Math.round(l.km*1000)+' m \u00b7 about '+l.min+' min',
+            sub:(l.entrance?l.entrance.n+' of ':'')+l.to+(l.entrance&&l.entrance.lift?' \u00b7 lift':'')});
+          else steps.push({dotStyle:{background:l.color},
+            title:l.line+' \u00b7 every '+l.every+' min',
+            sub:l.stops+' stops \u00b7 about '+Math.round(l.runMin)+' min \u00b7 off at '+l.alight});
+        });
+      }
+      const endText=pl?(pl.ok?(R.to.n.replace(/^.*, /,'')+' by '+pl.arriveText)
+        :(pl.line||'No metro at that hour')):null;
+      return {
+        name:x.name,no:x.no,dep:this.toHHMM(o.dM),arr:this.toHHMM(o.aM),
+        dur:this.planDur(o.dM,o.aM),
+        fromCode:this.ST[S.from]?this.ST[S.from].c:'',toCode:this.ST[S.to]?this.ST[S.to].c:'',
+        live:cx?('CANCELLED \u00b7 '+cx.reason):'Scheduled \u00b7 departs '+this.toHHMM(o.dM),
+        liveStyle:{font:'700 10.5px/1.3 Manrope,sans-serif',letterSpacing:'.05em',marginTop:5,
+          color:cx?'var(--k-fg-d8385a)':'var(--k-fg-6a6d75)'},
+        cells:this.CLS.map(c=>{const nn=this.counts(c.k,x.no);const none=nn.free+nn.part===0;
+          return {k:c.k,price:money(this.fare(c.k,Math.abs(this.ST[S.to].km-this.ST[S.from].km))),
+            freeText:none?'Sold out':nn.free+' free',partText:none?'':'+'+nn.part+' en route',
+            freeStyle:{font:'600 11px/1.3 Manrope,sans-serif',color:none?'var(--k-fg-a8a8a2)':nn.free?'var(--k-fg-14663a)':'var(--k-fg-a8a8a2)',margin:'3px 0 1px'},
+            style:{border:'1px solid '+(none?'var(--k-eeede9)':'var(--k-dce9e2)'),
+              background:none?'var(--k-fafaf8)':'var(--k-f7fbf9)',
+              borderRadius:6,padding:'9px 12px',minWidth:104,cursor:none?'default':'pointer'},
+            onClick:none?()=>{}:()=>{this._c={};this.setState({train:x.no,cls:c.k,allCls:false,pax:1,picks:[],
+              classModal:true,onlyThis:true,hov:null});}};}),
+        bookLabel:cx?'Cancelled':'Book',
+        bookStyle:cx?{flex:'none',border:'1px solid var(--k-eeede9)',background:'var(--k-fafaf8)',
+            color:'var(--k-fg-a8a8a2)',font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',
+            borderRadius:6,cursor:'default',minHeight:44}
+          :{flex:'none',border:'none',background:'var(--k-d8385a)',color:'var(--k-fg-fff)',
+            font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:6,
+            cursor:'pointer',minHeight:44},
+        onBook:cx?()=>{}:()=>{this._c={};
+          this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[],pax:1});},
+        onOpen:()=>{this.setState({train:x.no,page:'train',routeOpen:true});window.scrollTo(0,0);},
+        steps,
+        stepsStyle:{display:steps.length?'block':'none',marginTop:12,paddingTop:12,
+          borderTop:'1px dashed var(--k-dedcd6)'},
+        endText:endText||'',
+        endStyle:{display:endText?'flex':'none',alignItems:'baseline',gap:10,flexWrap:'wrap',marginTop:10},
+        endBig:{font:'800 15px/1.2 Manrope,sans-serif',color:(pl&&pl.ok)?'var(--k-fg-14663a)':'var(--k-fg-8a4a12)'},
+        passText:(pl&&pl.ok)?('\u20b9'+pl.fare.qr+' day pass \u2014 metro and any BMTC bus, on your ticket after you book'):'',
+        passStyle:{font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+      };
+    });
+
+    const mp=(R&&R.kind==='metro')?R.plan:null;
+    return {
+      // the form
+      pFromTxt:S.pTxtF!=null?S.pTxtF:(F?F.n:''),
+      pToTxt:S.pTxtT!=null?S.pTxtT:(T?T.n:''),
+      setPFromTxt:e=>this.setState({pTxtF:e.target.value,pOpen:'from'}),
+      setPToTxt:e=>this.setState({pTxtT:e.target.value,pOpen:'to'}),
+      openPFrom:()=>{this.planBoot();this.setState({pOpen:'from'});},
+      openPTo:()=>{this.planBoot();this.setState({pOpen:'to'});},
+      pFromSuggs:suggs('from'),pToSuggs:suggs('to'),
+      pFromPanel:panel('from'),pToPanel:panel('to'),
+      pSwap:()=>{if(!F||!T)return;this.setState({pFromK:T.k,pFromId:T.id,pToK:F.k,pToId:F.id,pTxtF:null,pTxtT:null});},
+      pAfterVal:S.pAfter||'',
+      setPAfter:e=>this.setState({pAfter:e.target.value}),
+      pStepOn:!!S.pStep,
+      togglePStep:()=>this.setState({pStep:!S.pStep}),
+      pStepBox:{width:17,height:17,borderRadius:4,flex:'none',
+        border:'1px solid '+(S.pStep?'var(--k-d8385a)':'var(--k-d4d3ce)'),
+        background:S.pStep?'var(--k-d8385a)':'var(--k-fff)',color:'#fff',
+        font:'700 11px/17px Manrope,sans-serif',textAlign:'center'},
+      pStepTick:S.pStep?'\u2713':'',
+      pSearch:()=>this.planSearch(),
+
+      // the head
+      pHeadFrom:F?F.n:'',pHeadTo:T?T.n:'',
+      pHeadSub:(F&&T)?((F.k==='rail'?'Railway':'Metro')+' to '+(T.k==='rail'?'railway':'metro')
+        +((R&&R.rows&&R.rows.length)?' \u00b7 '+R.rows.length+(R.rows.length===1?' way to go':' ways to go')
+          :(R&&R.kind==='metro')?' \u00b7 one ride, no train':'')):'',
+
+      // the results
+      pBusyStyle:{display:S.pBusy?'block':'none',padding:'26px 4px',
+        font:'700 14px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+      pErrStyle:{display:(R&&R.err)?'block':'none',marginTop:18,padding:'14px 16px',borderRadius:10,
+        background:'var(--k-fdf3f5)',border:'1px solid var(--k-e2ccd3)',
+        font:'600 13px/1.6 Manrope,sans-serif',color:'var(--k-fg-a71f3d)'},
+      pErrText:(R&&R.err)||'',
+      pRows:rows,
+      pRowsStyle:{display:rows.length?'block':'none',marginTop:18},
+      pNoteStyle:{display:rows.length?'block':'none',marginTop:8,
+        font:'500 12px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
+      pNoteText:'Sorted by when you actually get there, not when the train leaves. Train times and fares are khaali\u2019s; the metro comes from BMRCL\u2019s published timetable.',
+
+      // metro only
+      pMetroStyle:{display:mp?'block':'none',marginTop:18,background:'var(--k-fff)',
+        border:'1px solid var(--k-e6e5e0)',borderRadius:11,padding:'20px 22px'},
+      pMetroOk:(mp&&mp.ok)?'block':'none',
+      pMetroHead:(mp&&mp.ok)?((T?T.n.replace(/^.*, /,''):'')+' by '+mp.arriveText):'',
+      pMetroLine:(mp&&!mp.ok)?(mp.line||''):'',
+      pMetroSteps:(mp&&mp.ok)?mp.legs.map(l=>({dotStyle:{background:l.color||'var(--k-8a8a84)'},
+        title:l.mode==='walk'?('Walk '+Math.round(l.km*1000)+' m \u00b7 about '+l.min+' min'):(l.line+' \u00b7 every '+l.every+' min'),
+        sub:l.mode==='walk'?l.to:(l.stops+' stops \u00b7 about '+Math.round(l.runMin)+' min \u00b7 off at '+l.alight)})):[],
+      pMetroFare:(mp&&mp.ok)?('\u20b9'+mp.fare.qr+' by QR \u00b7 \u20b9'+mp.fare.smartcard+' by smart card'+(mp.fare.peak?' (peak)':'')):'',
+
+      pEmptyStyle:{display:(!S.pBusy&&!R)?'block':'none',marginTop:22,padding:'30px 24px',
+        background:'var(--k-fff)',border:'1px solid var(--k-e6e5e0)',borderRadius:12,
+        font:'600 13.5px/1.7 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+    };
+  }
+
   orderBindings(){
     const S=this.state,ST=this.ST;
     const chip=(on)=>({font:'700 12px/1 Manrope,sans-serif',padding:'10px 12px',borderRadius:7,cursor:'pointer',
@@ -6042,6 +6420,7 @@ class Component extends DCLogic {
         if(k==='ArrowDown'){e.preventDefault();this.setState({searchOpen:true,searchSel:(sel+1)%hitsTop.length});}
         else if(k==='ArrowUp'){e.preventDefault();this.setState({searchOpen:true,searchSel:(sel-1+hitsTop.length)%hitsTop.length});}
         else if(k==='Enter'){e.preventDefault();hitsTop[sel].act();}},
+      onPlan:S.page==='plan',
       onHome:S.page==='home',onResults:S.page==='results',onMap:S.page==='map',onTrain:S.page==='train',onShowtimes:S.page==='showtimes',onSeats:S.page==='seats',
       onConfirm:S.page==='confirm',onTicket:S.page==='ticket',onAbout:S.page==='about',
       onBookings:S.page==='bookings',onFavorites:S.page==='favorites',onOdds:S.page==='odds',onHop:S.page==='hop',onWallet:S.page==='wallet',onTatkal:S.page==='tatkal',
@@ -6051,18 +6430,19 @@ class Component extends DCLogic {
       // its one real job — picking a boarding point — is offered mid-booking
       // by the class modal's link. The page itself stays alive at its URL.
       // 'Plan a journey' is the whole trip - train, walk, metro, pass - and it
-      // lives on the live map, which is its own page. The menu takes you there.
-      nav:[{l:'Trains',p:'home'},{l:'Plan a journey',p:'plan',href:'/live-map#plan'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
+      // is its own page. The map is for watching trains; Trains is for booking
+      // one. None of the three borrows another's screen.
+      nav:[{l:'Trains',p:'home'},{l:'Plan a journey',p:'plan'},{l:'Seat hop',p:'hop'},{l:'Waitlist odds',p:'odds'},{l:'Fair Tatkal',p:'tatkal'},{l:'Route map',p:'map'},{l:'Favorites',p:'favorites'},{l:'Wallet',p:'wallet'},{l:'My bookings',p:'bookings'},{l:'About',p:'about'}].map(x=>({
         label:x.l,style:{font:'600 13.5px/1 Manrope,sans-serif',cursor:'pointer',padding:'12px 0',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-40434a)',borderBottom:'2px solid '+(S.page===x.p?'var(--k-d8385a)':'transparent')},
         sheetStyle:{font:'700 15px/1 Manrope,sans-serif',cursor:'pointer',padding:'16px 22px',
           color:S.page===x.p?'var(--k-fg-d8385a)':'var(--k-fg-14161a)',
           borderBottom:'1px solid var(--k-f0efeb)',
           background:S.page===x.p?'var(--k-fdf3f5)':'transparent'},
-        onClick:()=>{this.setState({navOpen:false});if(x.href){location.href=x.href;return;}this.go(x.p);}})),
+        onClick:()=>{this.setState({navOpen:false});this.go(x.p);}})),
       navBurger:()=>this.setState({navOpen:!S.navOpen}),
       navBurgerIcon:S.navOpen?'\u2715':'\u2630',
-      navBurgerLabel:(()=>{const cur={home:'Trains',map:'Route map',hop:'Seat hop',odds:'Waitlist odds',
+      navBurgerLabel:(()=>{const cur={home:'Trains',plan:'Plan a journey',map:'Route map',hop:'Seat hop',odds:'Waitlist odds',
         favorites:'Favorites',wallet:'Wallet',bookings:'My bookings',about:'About'}[S.page];
         return S.navOpen?'Close':(cur||'Menu');})(),
       navSheet:{display:S.navOpen?'block':'none',background:'var(--k-fff)',
@@ -6825,6 +7205,7 @@ class Component extends DCLogic {
         return {
           ...this.orderBindings(),
           ...this.sosBindings(),
+          ...this.planBindings(),
           goWallet:()=>this.go('wallet'),
           walletBal:String(this.walletAvail())+(this.walletHeld()?' \u00b7 '+this.walletHeld()+' blocked':''),
           walletChip:{flex:'none',cursor:'pointer',font:"700 12.5px/1 'IBM Plex Mono',monospace",

@@ -1114,6 +1114,18 @@ async function api(req, res, url) {
     const from = q.get('from') || null, to = q.get('to') || null;
     return send(res, 200, journey.plan({ arriveAt: arrive, needs, from, to }));
   }
+  // Many plans in one call. A journey search offers a dozen trains, each
+  // arriving at its own minute, and each needing its own continuation; asking
+  // for them one at a time would be a dozen round trips on a phone signal.
+  if (p === '/api/journeys') {
+    const arrivals = String(q.get('arrivals') || '').split(',')
+      .map(x => parseInt(x, 10)).filter(x => x >= 0 && x < 2880).slice(0, 40);
+    if (!arrivals.length) return send(res, 400, { ok: false, error: 'arrivals is a list of minutes' });
+    const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
+    const from = q.get('from') || null, to = q.get('to') || null;
+    return send(res, 200, { plans: arrivals.map(a => journey.plan({ arriveAt: a, needs, from, to })) });
+  }
+
   // Issue a day pass. It is hers, it costs the metro fare, and it is scanned,
   // not consumed.
   if (p === '/api/pass' && req.method === 'POST') {
@@ -1959,6 +1971,7 @@ const PARENT = path.resolve(DIR, '..');
 const APP_ROUTES = new Set([
   '/', '/index.html', '/trains', '/route-map', '/train',
   '/departures', '/berths', '/confirm', '/ticket', '/my-bookings', '/about', '/favorites', '/waitlist-odds', '/seat-hop', '/wallet', '/fair-tatkal',
+  '/plan',
 ]);
 
 function serveStatic(res, urlPath) {

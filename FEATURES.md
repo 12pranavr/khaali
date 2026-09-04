@@ -1229,22 +1229,51 @@ Passes and rides are journalled and replayed at boot.
 
 ### Where you plan the whole journey
 
-**Plan a journey** in the menu opens the live map with a planner on the right:
-origin, destination, swap, leave-at, "I need a lift or a ramp", Search, and
-your recent searches. It plans between the corridor's 14 railway stations and
-the Purple Line's 23 metro stops - and the search box will find anywhere in
-Karnataka, then snap to the nearest of those and say so in the field rather
-than quietly substituting.
+**Plan a journey** is its own page at `/plan`, in the menu beside Trains. Three
+features, three screens, none borrowing another's: **Trains** books a train,
+**Plan a journey** books a journey, **the live map** watches trains move.
 
-Train -> metro gives the train leg, the 150 m walk, the metro leg, the arrival
-time and the fares, and one button - *Book the train . the day pass is on your
-ticket* - which opens the corridor search with the stations filled in. Metro ->
-metro gives the ride alone. A pair khaali cannot do yet says so.
+From and To accept the corridor's 14 railway stations and the Purple Line's 23
+metro stops in one list, each labelled which it is. Date, *leave after*, and
+*I need a lift or a ramp*.
 
-The chain is drawn on the map: train in red, walk dotted, metro in the line's
-own purple. Map / Satellite is a pill top-left (CARTO Voyager streets with
-Kannada labels from OpenStreetMap; Esri imagery for satellite). No API key, no
-billing, nothing that can run up a bill from a public URL.
+The results are the Trains rows, deliberately - the same times, fares, free
+counts, cancelled states and the same **Book** button - with the rest of the way
+underneath:
+
+```
+SHESHADRI EX      10:30 ──0h44m── 11:14    SL ₹85    3A ₹290   [ Book ]
+17210 · runs daily  BWT            WFD     230 free  118 free
+─────────────────────────────────────────────────────────────────────
+ ●  Walk 150 m · about 3 min — Entrance A of Kadugodi Tree Park · lift
+ ●  Purple Line · every 8 min — 20 stops · about 44 min · off at 12:05 PM
+    Majestic by 12:05 PM   ₹80 day pass on your ticket after you book
+```
+
+**Sorted by when you actually arrive**, not when the train leaves - the only
+sort that means anything for a journey. Book sets the booking state to the
+*train leg* and opens the same class-and-quota modal the Trains page uses, so
+there is no second booking flow to keep in step; the pass is on the ticket
+afterwards.
+
+Four cases, each answered honestly: rail to rail is just trains; rail to metro
+is the chain above; metro to metro is one card with no train; metro back onto a
+train says plainly that it is not on this demo yet.
+
+Continuations for a whole result list come from one call to
+`/api/journeys?arrivals=a,b,c&to=X` rather than one call per train.
+
+### The map
+
+`/live-map` is a map: the corridor, live train positions, the Purple Line
+tinted by how busy each station is at that hour, and a place search that finds
+a station, a metro stop, or anywhere in Karnataka. Map / Satellite is a pill
+top-left.
+
+Tiles are **keyless**: OpenStreetMap's own for streets (Kannada labels come
+free with them), Esri for satellite and for dark. CARTO's basemaps now require
+an API key and stamp *API KEY REQUIRED* across the map without one, which is
+exactly what they did on production until this was fixed.
 
 ### Scope, on purpose
 
