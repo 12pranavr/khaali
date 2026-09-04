@@ -24,6 +24,7 @@ import * as GP from './gap.mjs';
 import * as PL from './pool.mjs';
 import * as PV from './providers.mjs';
 import * as LD from './load.mjs';
+import * as BL from './busload.mjs';
 import * as RD from './road.mjs';
 import * as M from './metro.mjs';
 import * as BM from './bmtc.mjs';
@@ -3069,6 +3070,127 @@ t('a train at half capacity is not a jam, whatever a road at half speed is', () 
   assert.strictEqual(LD.bandOf(0.78, 'exact', 'road').band, 'red');
   assert.strictEqual(LD.bandOf(0.82, 'exact', 'rail').band, 'yellow');
   assert.strictEqual(LD.bandOf(0.99, 'exact', 'rail').band, 'red');
+});
+
+console.log('\nhow full a bus is, and how khaali came to think so');
+
+const SEG = { routeId: '500D-1', routeName: '500D', segIdx: 12, nSegs: 30, dir: 0,
+  fromStop: 'Whitefield', toStop: 'Marathahalli' };
+const taps = (n, extra) => BL.indexScans(
+  Array.from({ length: n }, (_, i) => ({ route: '500D', from: 'Whitefield', to: 'Marathahalli',
+    at: 1000, who: 'p' + i, ...(extra || {}) })), { now: 1000 });
+
+t('a count is a floor, and there is no percentage in it to render', () => {
+  // Three people tapping on says nothing about the forty already aboard. It
+  // supports one statement - at least three got on - and the object is shaped
+  // so that a reader who wanted a percentage would not find one.
+  const r = BL.reading(SEG, { scans: taps(12), minute: 9 * 60 });
+  assert.strictEqual(r.rung, 'counted');
+  assert.strictEqual(r.load, null, 'a counted rung carries no load at all');
+  assert.strictEqual(r.unit, 'people');
+  assert.strictEqual(r.floor, 12);
+  assert.doesNotMatch(r.says, /%/, r.says);
+  assert.doesNotMatch(r.says, /\bfull\b/, r.says);
+  assert.match(r.says, /At least 12 people/);
+  assert.match(r.says, /does not know who else is aboard/);
+});
+
+t('too few people to publish is not a small number, it is no number', () => {
+  const two = BL.reading(SEG, { scans: taps(2), minute: 9 * 60 });
+  assert.notStrictEqual(two.rung, 'counted', 'two taps describes two people');
+  assert.strictEqual(two.floor, null, 'and it carries no count at all, not even 2');
+  assert.strictEqual(BL.FLOOR, DM.FLOOR, 'the same floor, and the same argument, as the demand map');
+  assert.strictEqual(BL.reading(SEG, { scans: taps(3), minute: 9 * 60 }).rung, 'counted');
+});
+
+t('a count raises a band and never lowers one', () => {
+  const many = BL.reading(SEG, { scans: taps(60), minute: 3 * 60 });
+  assert.strictEqual(many.band.band, 'red', '60 people against a crush of 75 forces red');
+  assert.strictEqual(many.band.atLeast, true, 'and says it is a bound, not a reading');
+  // at 3am the model would say green; four people cannot argue it up, and
+  // cannot argue anything down either
+  const few = BL.reading(SEG, { scans: taps(4), minute: 3 * 60 });
+  assert.strictEqual(few.band.band, 'unknown', 'four people is not a claim about a bus');
+  assert.strictEqual(few.rung, 'counted', 'though it is still a count');
+});
+
+t('one person scanning five times is one person', () => {
+  const same = BL.indexScans(Array.from({ length: 5 }, () =>
+    ({ route: '500D', from: 'Whitefield', to: 'Marathahalli', at: 1000, who: 'her' })), { now: 1000 });
+  assert.strictEqual(BL.reading(SEG, { scans: same, minute: 9 * 60 }).rung, 'modelled',
+    'five taps by one person is one person, which is under the floor');
+});
+
+t('a tap from an hour ago is not a bus that is here now', () => {
+  const old = BL.indexScans(Array.from({ length: 12 }, (_, i) =>
+    ({ route: '500D', from: 'Whitefield', to: 'Marathahalli', at: 0, who: 'p' + i })),
+    { now: 90 * 60000 });
+  assert.strictEqual(BL.reading(SEG, { scans: old, minute: 9 * 60 }).rung, 'modelled');
+});
+
+t('the demo model never once claims to be a measurement', () => {
+  for (let i = 0; i < 200; i++) {
+    const r = BL.reading({ ...SEG, routeId: 'r' + (i % 17), segIdx: i % 30, dir: i % 2 },
+      { minute: (i * 7) % 1440 });
+    assert.strictEqual(r.quality, 'simulated', 'reading ' + i);
+    assert.strictEqual(r.rung, 'modelled');
+    assert.strictEqual(r.demo, true);
+    assert.doesNotMatch(r.source, /measur|counted|actual|observed/i, r.source);
+    assert.match(r.says, /demo model/);
+    assert.ok(r.load >= 0 && r.load <= 1);
+  }
+});
+
+t('the same question twice gives the same answer, on any machine', () => {
+  // A hash, not a seeded generator: no state, no ordering, and a map that does
+  // not shimmer between two identical requests.
+  const a = BL.reading(SEG, { minute: 9 * 60 });
+  const b = BL.reading(SEG, { minute: 9 * 60 });
+  assert.deepStrictEqual(a, b);
+  const raw = BL.modelLoad({ routeId: '500D-1', segIdx: 12, nSegs: 30, minute: 540, dir: 0 });
+  assert.strictEqual(Math.round(raw * 100) / 100, a.load, 'the reading is the model, rounded once');
+});
+
+t('change any one thing and the number moves', () => {
+  // The failure this catches is a model that has quietly collapsed to a
+  // constant, which is exactly what a boarding-position ramp is once you hold
+  // the route fixed.
+  const at = o => BL.modelLoad({ routeId: '500D-1', segIdx: 12, nSegs: 30, minute: 540, dir: 0, ...o });
+  const base = at({});
+  assert.notStrictEqual(at({ routeId: 'other-1' }), base, 'the route did nothing');
+  assert.notStrictEqual(at({ segIdx: 2 }), base, 'where along the route did nothing');
+  assert.notStrictEqual(at({ minute: 3 * 60 }), base, 'the hour did nothing');
+  assert.notStrictEqual(at({ dir: 1 }), base, 'the direction did nothing');
+  // and the shape is a hump, not a ramp to the terminus
+  const along = [0, 5, 12, 18, 25, 29].map(segIdx => at({ segIdx }));
+  assert.ok(Math.max(...along) > along[along.length - 1],
+    'the model has a bus at its fullest pulling into the terminus, which is the old ramp');
+});
+
+t('an operator would be believed over a model, and nobody is an operator yet', () => {
+  const feed = { loadFor: () => ({ load: 0.42, source: 'BMTC ETM' }) };
+  const r = BL.reading(SEG, { feed, minute: 9 * 60 });
+  assert.strictEqual(r.rung, 'declared');
+  assert.strictEqual(r.quality, 'exact');
+  assert.strictEqual(r.load, 0.42);
+  assert.match(r.source, /BMTC ETM/);
+  // one that throws, or answers nothing, is one khaali did not hear from
+  assert.strictEqual(BL.reading(SEG, { feed: { loadFor: () => { throw new Error('down'); } },
+    minute: 9 * 60 }).rung, 'modelled');
+  assert.strictEqual(BL.reading(SEG, { feed: { loadFor: () => null }, minute: 9 * 60 }).rung, 'modelled');
+  // whether anything is registered is providers.mjs's own test to make; this
+  // one must not depend on global state another test owns
+});
+
+t('a simulated leg is worth more than silence and less than a timetable', () => {
+  // Without this entry pressure() fell through to 0.3 and weighed a modelled
+  // bus exactly as badly as one khaali knew nothing about - which would have
+  // moved recommendations the day busload started answering.
+  assert.ok(CAP.QUALITY_WEIGHT.simulated > CAP.QUALITY_WEIGHT.unknown);
+  assert.ok(CAP.QUALITY_WEIGHT.simulated < CAP.QUALITY_WEIGHT.estimated);
+  assert.ok(CAP.QUALITY_WEIGHT.counted > CAP.QUALITY_WEIGHT.estimated);
+  assert.ok(CAP.QUALITY_WEIGHT.counted < CAP.QUALITY_WEIGHT.exact);
+  for (const q of CAP.QUALITY) assert.ok(CAP.QUALITY_WEIGHT[q] != null, q + ' has no weight');
 });
 
 console.log('\nallocation: which way, and why - on a network that does not exist');

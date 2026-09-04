@@ -56,6 +56,7 @@ import * as metro from './metro.mjs';
 import * as hire from './hire.mjs';
 import * as road from './road.mjs';
 import * as load from './load.mjs';
+import * as busload from './busload.mjs';
 import * as traffic from './traffic.mjs';
 import crypto from 'node:crypto';
 
@@ -1076,6 +1077,78 @@ store.subscribe(m => {
   if (['held', 'released', 'booked', 'chart', 'reset'].includes(m.type)) railCache.clear();
 });
 
+/**
+ * Everybody khaali has watched board a bus in the last half hour.
+ *
+ * This is the owner's idea, and it is the only rung on the bus ladder that
+ * counts a person rather than modelling one. A conductor scanning a trip pass
+ * IS a ticket being issued: public/scan.html records it, `{t:'passride'}`
+ * journals it, and the pass leg it points at names the route and the two stops.
+ * So khaali already had the mechanism; it was only ever throwing the answer
+ * away.
+ *
+ * What it does NOT give is an occupancy. khaali sees its own passengers and
+ * nobody else's, so a count here is a floor - "at least this many got on" -
+ * and busload.mjs is built so that a floor cannot become a percentage on the
+ * way to a screen.
+ *
+ * Rebuilt every thirty seconds from PASSES, which is already in memory.
+ */
+let scansAt = 0, scanIndex = busload.indexScans([], { now: 0 });
+function scansNow() {
+  const now = simNow().getTime();
+  if (now - scansAt < 30000 && scansAt) return scanIndex;
+  const rides = [];
+  for (const ps of PASSES.values()) {
+    for (const r of ps.rides || []) {
+      if (r.mode !== 'bmtc') continue;
+      const leg = (ps.legs || [])[(r.leg || 0) - 1];
+      if (!leg || !leg.route) continue;
+      rides.push({ route: leg.route, from: leg.from, to: leg.to, at: r.at, who: ps.who });
+    }
+  }
+  scanIndex = busload.indexScans(rides, { now });
+  scansAt = now;
+  return scanIndex;
+}
+
+/**
+ * How full each bus leg of a chain is, for capacity.annotate to hang on.
+ *
+ * The WORST stretch she is actually on, not the one she steps into. Boarding at
+ * the second stop of forty-three is boarding an empty bus, and reporting that
+ * as the leg's crowding would tell her the ride is quiet when the half hour she
+ * spends on it is the half hour everybody else gets on. It is the same rule
+ * load.worstOf exists for: a journey is as crowded as its worst leg, because an
+ * hour of sitting does not undo twenty minutes of being crushed.
+ *
+ * She rides to the end of the pattern unless the ticket said otherwise, which
+ * is the assumption bmtc.legFound already makes when `stops` is missing.
+ */
+function busLoadFor(minute) {
+  const scans = scansNow();
+  const weekday = ![0, 6].includes(simNow().getDay());
+  return (l) => {
+    const nSegs = Math.max(1, l.nStops || 1);
+    const board = Math.max(0, Math.min(nSegs - 1, l.boardIdx || 0));
+    const off = l.stops > 0 ? Math.min(nSegs - 1, board + l.stops) : nSegs - 1;
+    const at = l.depMin != null ? l.depMin : minute;
+    const seg = { routeId: String(l.id || l.name || ''), routeName: l.name || l.id || '',
+      nSegs, dir: board <= nSegs / 2 ? 0 : 1, fromStop: l.from, toStop: l.to };
+    // sample the stretch rather than every stop of it; six is plenty for a hump
+    const at6 = [];
+    const step = Math.max(1, Math.round((off - board) / 5));
+    for (let i = board; i <= off; i += step) at6.push(i);
+    if (at6[at6.length - 1] !== off) at6.push(off);
+    const reads = at6.map(segIdx => busload.reading({ ...seg, segIdx }, { scans, minute: at, weekday }));
+    // a counted rung wins outright: somebody watched those people get on
+    const counted = reads.find(r => r.rung === 'counted');
+    if (counted) return counted;
+    const worst = reads.reduce((a, b) => (a && a.load >= b.load ? a : b), null);
+    return worst || reads[0];
+  };
+}
+
 /** The pooled offer this ride is one leg of, if there is one. */
 function pooledWith(rd) {
   return [...OFFERS.values()].find(o => o.riders && o.riders.length > 1
@@ -1900,7 +1973,7 @@ async function api(req, res, url) {
       const r = journey.journeys({ from: { kind: fk, id: fid }, to: { kind: tk, id: tid }, after: t,
         modes: [...journey.MODES], counts: (no, f, tt) => { try { return store.countsFor(String(no), date, 'SL', f, tt).free; } catch { return null; } } });
       if (!r.ok) return [];
-      return capacity.annotate(r.chains, { trainCap });
+      return capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap });
     };
     const out = sim.simulate({ candidates, n, start, end, profile });
     out.from = fid; out.to = tid; out.date = date;
@@ -1980,7 +2053,7 @@ async function api(req, res, url) {
           error: 'khaali could not get from stop ' + (i + 1) + ' to stop ' + (i + 2)
             + (modes.length < journey.ALL_MODES.length ? ' with the modes you chose for that hop.' : '.') });
       }
-      capacity.annotate(r.chains, { trainCap });
+      capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap });
       r.chains.forEach(c => c.legs.forEach(l => {
         if (l.mode === 'bus' && !l.path && l.fromLat && l.toLat) {
           try { l.path = bmtc.pathForRoute(l.id, l.fromLat, l.fromLng, l.toLat, l.toLng); } catch { l.path = null; }
@@ -2055,7 +2128,7 @@ async function api(req, res, url) {
     }
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
-    capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
+    capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
       if (!(fi >= 0 && ti >= 0)) return null;
       const k = store.countsFor(String(no), date, 'SL', fi, ti);
       return { free: k.free, total: k.free + k.part + k.taken + k.locked };
@@ -3180,7 +3253,7 @@ async function api(req, res, url) {
           en = 'I could not find a way from ' + A.name + ' to ' + B.name + ' with what khaali knows'
             + (modes.length ? ' using only ' + use.join(' and ') : '') + '.';
         } else {
-          capacity.annotate(r.chains, { trainCap: (no, fi, ti) => {
+          capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
             if (!(fi >= 0 && ti >= 0)) return null;
             const k = store.countsFor(String(no), date, 'SL', fi, ti);
             return { free: k.free, total: k.free + k.part + k.taken + k.locked };

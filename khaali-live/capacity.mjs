@@ -3,29 +3,48 @@
 // Capacity is a first-class thing here, not a guess hidden in a colour. Every
 // leg of a journey gets a snapshot with four fields that matter: how full it
 // is (0..1), how many people the vehicle takes, where the number came from,
-// and its QUALITY - exact, estimated, predicted, or unknown.
+// and its QUALITY.
 //
 //   exact      counted. A train's berths for this stretch, read from the same
 //              inventory the booking page sells from.
+//   counted    a floor somebody actually counted - tickets through a door. It
+//              is a true lower bound and not a complete measurement: three
+//              people boarding does not tell you the bus is not full.
 //   estimated  derived from a structural fact. A bus boarded at stop 3 of 37
 //              is nearly empty; that is arithmetic on the timetable, not a
 //              measurement.
 //   predicted  history. A metro station's own hourly entries, averaged over
 //              weekdays. Tomorrow at nine will look like last Tuesday at nine.
+//   simulated  a model khaali wrote to fill a screen. Worth more than silence
+//              and less than a timetable, and it says which it is everywhere
+//              it is shown.
 //   unknown    we do not know. Unknown is NOT zero and NOT "probably 40%".
 //              It is carried as null and the confidence says so.
 //
 // Nothing here talks to a language model. This file is arithmetic.
 
-export const QUALITY = ['exact', 'estimated', 'predicted', 'unknown'];
+export const QUALITY = ['exact', 'counted', 'estimated', 'predicted', 'simulated', 'unknown'];
 
 /** Modes that are not the network: a footpath, and anything she hires for
     herself. None of them may add to - or subtract from - network pressure. */
 export const HIRED = ['car', 'bike'];
 export const OFF_NETWORK = ['walk', 'auto', ...HIRED];
 
-/** How much a quality label is worth when a recommendation leans on it. */
-export const QUALITY_WEIGHT = { exact: 1.0, estimated: 0.7, predicted: 0.6, unknown: 0.3 };
+/**
+ * How much a quality label is worth when a recommendation leans on it.
+ *
+ * `simulated` had no entry here, which was a bug waiting for the first module
+ * to produce one: pressure() reads QUALITY_WEIGHT[q] with a 0.3 fallback, so a
+ * leg khaali modelled would have weighed exactly as badly as a leg khaali knew
+ * nothing about, and quietly moved recommendations. A demo model is worse than
+ * a timetable and better than silence, and it now says so.
+ *
+ * `counted` is a floor somebody actually counted - people through a door - and
+ * sits just under `exact` because it is a true lower bound rather than a
+ * complete measurement.
+ */
+export const QUALITY_WEIGHT = { exact: 1.0, counted: 0.9, estimated: 0.7,
+  predicted: 0.6, simulated: 0.4, unknown: 0.3 };
 
 /** People a vehicle carries. Train and metro seated counts are structural;
     the rest are operator figures and say so. */
@@ -65,6 +84,16 @@ export function snapshot(leg, facts = {}) {
       quality: 'exact', source: 'berth inventory for this stretch, ' + free + ' of ' + total + ' free' };
   }
   if (leg.mode === 'bus') {
+    // busload.mjs decides this now, and hands the answer in - it knows about
+    // the hour, the direction and whoever tapped a ticket, none of which a
+    // boarding position knows about. The ramp below is what is left when
+    // nothing was passed, and it is labelled for what it is.
+    if (facts.load && facts.load.quality) {
+      const r = facts.load;
+      return { ...base, occupancy: r.load, capacity: VEHICLE.bus.crush,
+        quality: r.quality, floor: r.floor != null ? r.floor : null,
+        atLeast: !!r.atLeast, demo: !!r.demo, source: r.source };
+    }
     const at = (facts.boardIdx != null && facts.nStops) ? facts.boardIdx / facts.nStops : null;
     if (at == null) return { ...base, capacity: VEHICLE.bus.crush, source: 'boarding position unknown' };
     return { ...base, occupancy: busLoadAt(at), capacity: VEHICLE.bus.crush,
@@ -91,7 +120,7 @@ export function snapshot(leg, facts = {}) {
  * Put a snapshot on every leg of every chain. `trainCap(no, from, to)` returns
  * { free, total } from the live inventory, or null when it cannot.
  */
-export function annotate(chains, { trainCap = null } = {}) {
+export function annotate(chains, { trainCap = null, busLoad = null } = {}) {
   chains.forEach(c => {
     c.legs.forEach(l => {
       let facts = {};
@@ -99,6 +128,7 @@ export function annotate(chains, { trainCap = null } = {}) {
         try { facts = trainCap(l.id, l.fromIdx, l.toIdx) || {}; } catch { facts = {}; }
       } else if (l.mode === 'bus') {
         facts = { boardIdx: l.boardIdx, nStops: l.nStops };
+        if (busLoad) { try { facts.load = busLoad(l) || null; } catch { facts.load = null; } }
       } else if (l.mode === 'metro') {
         facts = { level: l.crowdAlight ? l.crowdAlight.level : null };
       }
