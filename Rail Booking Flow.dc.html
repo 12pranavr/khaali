@@ -3001,6 +3001,11 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </sc-for>
           </div>
         </div>
+        <div style="{{ c.olTitleStyle }}">{{ c.olTitle }}</div>
+        <sc-for list="{{ c.olLines }}" as="o" hint-placeholder-count="3">
+          <div style="{{ o.tStyle }}">{{ o.t }}</div>
+        </sc-for>
+        <div style="{{ c.olFootStyle }}">{{ c.olFoot }}</div>
         <div style="{{ c.noteStyle }}">{{ c.note }}</div>
       </div>
     </sc-for>
@@ -6518,7 +6523,28 @@ class Component extends DCLogic {
       cur:st.stage==='arrived'?1:(running?0:-1),board:0,alight:1,
       state:running?'running':(st.stage==='arrived'?'arrived':'waiting'),
       badge:running?'ON THE WAY':(st.stage==='arrived'?'ARRIVED':'BOOKED'),
-      line:st.label||'Booked',here:'Your '+r.kind+' is here'});
+      line:st.label||'Booked',here:'Your ride is here'});
+  }
+  /**
+   * What khaali can honestly say about the last mile she is heading for.
+   *
+   * The sentences come from the server, which counts them; this only puts them
+   * on the card. The line they sit on: "six drivers have said they will be
+   * around Whitefield" is a statement about the board, and "a vehicle will be
+   * waiting" is a promise about the road. khaali is only ever on the board.
+   *
+   * And it does not warm up with the clock. If nobody says yes and nobody
+   * shares where they are, this reads at 8:35 exactly as it read at 8:00.
+   */
+  trackOutlook(r){
+    const o=r.outlook;
+    if(!o||!o.lines||!o.lines.length)return null;
+    return {
+      title:'Around '+o.at+', '+o.windowText,
+      lines:o.lines,
+      foot:'khaali has not sent anybody. It publishes this last mile to whoever is looking at its '
+        +'demand page, and one of them may accept it \u2014 until one does, nobody is on the way.',
+    };
   }
   trackBindings(){
     const S=this.state,gone={display:'none'};
@@ -6589,11 +6615,25 @@ class Component extends DCLogic {
         panel:(r.date===today)?this.trackCabPanel(r):null,
         onOpen:()=>{},
         note:'khaali owns no vehicle. Once a driver has accepted, this is where the ride should have got to by now, from the booking and the clock \u2014 not from watching anybody.',
-        noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6}};
+        noteStyle:{display:'block',font:'500 11px/1.5 Manrope,sans-serif',color:'var(--k-fg-8a8a84)',marginTop:6},
+        outlook:this.trackOutlook(r)};
       ((r.date===today&&st.stage!=='arrived'&&st.stage!=='cancelled')?live:past).push(card);
     });
 
     const deco=c=>({...c,
+      // What khaali counted about the place she is heading for. Counts and
+      // places only: nothing here has her ride as its subject.
+      hasOutlook:!!c.outlook,
+      olTitle:c.outlook?c.outlook.title:'',
+      olTitleStyle:{display:c.outlook?'block':'none',marginTop:12,paddingTop:12,
+        borderTop:'1px solid var(--k-f0efeb)',
+        font:"700 9.5px/1 'JetBrains Mono',monospace",letterSpacing:'.12em',
+        textTransform:'uppercase',color:'var(--k-fg-8a8a84)'},
+      olLines:c.outlook?c.outlook.lines.map(t=>({t,
+        tStyle:{font:'500 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-40434a)',marginTop:6}})):[],
+      olFoot:c.outlook?c.outlook.foot:'',
+      olFootStyle:{display:c.outlook?'block':'none',marginTop:8,
+        font:'500 11px/1.55 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},
       // the panel, when there is one; otherwise the row just shows its status
       hasPanel:!!c.panel,
       panelStyle:{display:c.panel?'block':'none',marginTop:12,paddingTop:12,borderTop:'1px solid var(--k-f0efeb)'},

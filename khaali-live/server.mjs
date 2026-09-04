@@ -931,6 +931,56 @@ setInterval(() => {
   }
 }, 30000);
 
+/**
+ * What khaali can honestly tell a passenger about the last mile ahead of them.
+ *
+ * THE LINE, and every sentence below sits on the right side of it:
+ *
+ *   "Six drivers have said they will be around Whitefield" is a statement
+ *   about the board. "A vehicle will be waiting for you" is a promise about
+ *   the road. khaali is only ever on the board.
+ *
+ * So every subject here is a count, a place or a driver - never her ride. No
+ * future tense about what will happen to her, no arrival time, and no vehicle
+ * count dressed up as availability: khaali cannot see a vehicle, only somebody
+ * who said they would be somewhere and, if they let it, roughly where they are.
+ *
+ * The sentences themselves live in gap.outlookLines(), pure, so that the test
+ * which reads every one of them looking for a promise can actually reach them.
+ * This only counts what to hand it.
+ */
+function outlookFor(ride) {
+  if (!ride || ride.pickupMin == null) return null;
+  const now = simNow(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const window = demand.windowOf(ride.pickupMin);
+  const spot = demand.hotspots(DEMAND, { nowMin, today: TODAY() })
+    .find(h => h.at === ride.from && h.window === window);
+
+  const live = [...COMMITS.values()].filter(c => !c.outcome && c.at === ride.from && c.window === window);
+  const rungs = { nearby: 0, available: 0, 'moving-toward': 0 };
+  for (const c of live) {
+    const r = commit.rungOf(c, { now: now.getTime(), holding: holdingA(c.driver), served: servedFrom(c) });
+    if (rungs[r.rung] != null) rungs[r.rung]++;
+  }
+  const near = rungs.nearby + rungs.available;
+  const rate = reliability.rateFor(HISTORY, { at: ride.from, minute: window });
+  const said = live.length;
+
+  const lines = gap.outlookLines({ at: ride.from, spot, said, near,
+    moving: rungs['moving-toward'], rate });
+
+  if (!lines.length) return null;
+  return {
+    at: ride.from, window, windowText: demand.windowText(window),
+    booked: spot ? { floor: spot.floor, ceiling: spot.ceiling } : null,
+    said, near, rate: rate.rate == null ? null : { kept: rate.kept, of: rate.of, quality: rate.quality },
+    lines,
+    // khaali carries the offer. It has not sent anybody, and this is not a
+    // statement that it will.
+    promise: false, simulated: true,
+  };
+}
+
 /** Did this driver actually take a ride from that place in that half hour?
     The strongest evidence a commitment was kept, and it needs no position. */
 function servedFrom(c) {
@@ -2151,7 +2201,8 @@ async function api(req, res, url) {
         .sort((a, b) => b.bookedAt - a.bookedAt).slice(0, 10)
         .map(x => ({ ...hire.publicOf(x),
           // the stage is only allowed to say a driver is coming if one accepted
-          status2: hire.statusOf(x, minute, { today: TODAY(), offer: OFFERS.get(x.id) || null }) })) });
+          status2: hire.statusOf(x, minute, { today: TODAY(), offer: OFFERS.get(x.id) || null }),
+          outlook: outlookFor(x) })) });
   }
   const mRide = p.match(/^\/api\/ride\/([a-f0-9]+)$/);
   if (mRide) {
@@ -2172,7 +2223,8 @@ async function api(req, res, url) {
     }
     const now2 = simNow(), min2 = now2.getHours() * 60 + now2.getMinutes();
     return send(res, 200, { ok: true, ride: hire.publicOf(rd),
-      status2: hire.statusOf(rd, min2, { today: TODAY(), offer: OFFERS.get(rd.id) || null }) });
+      status2: hire.statusOf(rd, min2, { today: TODAY(), offer: OFFERS.get(rd.id) || null }),
+      outlook: outlookFor(rd) });
   }
 
   const mPass = p.match(/^\/api\/pass\/([a-f0-9]+)$/);

@@ -140,6 +140,54 @@ export function asks(gaps, { near = null, limit = 6 } = {}) {
   return out.slice(0, Math.max(1, limit));
 }
 
+/**
+ * What khaali may say to a PASSENGER about the last mile ahead of her.
+ *
+ * THE LINE, and every sentence this returns sits on the right side of it:
+ *
+ *   "Six drivers have said they will be around Whitefield" is a statement
+ *   about the board. "A vehicle will be waiting for you" is a promise about
+ *   the road. khaali is only ever on the board.
+ *
+ * So the subject of every sentence is a count, a place, or a driver - never
+ * her ride. No future tense about what happens to her, no arrival time, and no
+ * vehicle count dressed as availability, because khaali cannot see a vehicle:
+ * only somebody who said they would be somewhere and, if they allowed it,
+ * roughly where they are.
+ *
+ * It also does not warm up with the clock. Every line here is caused by
+ * something that happened - a booking, a yes, a position shared. If none of
+ * those happen, what this says at 08:35 is word for word what it said at
+ * 08:00. A reassurance that grows as the hour approaches, driven by nothing,
+ * is the most comfortable lie available in this whole feature.
+ *
+ * It lives here, pure, rather than in the route that renders it, so that the
+ * test which reads every one of these sentences looking for a promise can
+ * actually reach them.
+ */
+export function outlookLines({ at, spot = null, said = 0, near = 0, moving = 0, rate = null } = {}) {
+  const lines = [];
+  if (spot) lines.push(spot.floor === spot.ceiling
+    ? (spot.ceiling + ' people are booked around ' + spot.at + ' for ' + spot.windowText + '.')
+    : (spot.floor + ' to ' + spot.ceiling + ' people are booked around ' + spot.at
+      + ' for ' + spot.windowText + '.'));
+  if (said) lines.push(said + (said === 1 ? ' driver has' : ' drivers have')
+    + ' said they expect to be around ' + at + ' in that half hour.');
+  if (said && rate && rate.rate != null) lines.push(rate.says.charAt(0).toUpperCase() + rate.says.slice(1) + '.');
+  if (said && (!rate || rate.rate == null)) lines.push('khaali has not measured how many of those turn up.');
+  // Not "three vehicles are available" - khaali has not seen a vehicle. Three
+  // people who said they would be here are here, which is a smaller claim and
+  // is the true one.
+  if (near) lines.push(near + ' of them ' + (near === 1 ? 'is' : 'are') + ' near ' + at + ' now.');
+  else if (moving) lines.push(moving + ' of them ' + (moving === 1 ? 'is' : 'are')
+    + ' closer than when they said so.');
+  return lines;
+}
+
+/** The sentence under all of them, which is the one that has to be there. */
+export const OUTLOOK_FOOT = 'khaali has not sent anybody. It publishes this last mile to whoever is '
+  + 'looking at its demand page, and one of them may accept it — until one does, nobody is on the way.';
+
 const km = (a, b) => {
   if (!a || !b || a.lat == null || b.lat == null) return null;
   const R = 6371, r = Math.PI / 180;

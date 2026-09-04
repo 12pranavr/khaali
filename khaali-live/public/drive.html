@@ -54,6 +54,7 @@
   button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
   button:disabled{opacity:.45;cursor:default}
   .says.rate{padding:0 0 8px 21px;color:#7c828f}
+  .says.rung{padding:0 0 6px 21px;color:#5bd48b}
   .says.gap{padding:0 0 8px 21px;color:#e0a419}
   .says.gap.full,.says.gap.crowded{color:#5bd48b}
   .ask{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 0 10px 21px}
@@ -196,6 +197,21 @@ function render() {
        Never the ratio on its own: "31 of the last 50" can be checked against
        its denominator and "62%" cannot, and this page has no business showing
        a figure a driver has to take on trust. */
+    /* How far along those drivers are - and only the rungs khaali can honestly
+       fill. Two of the five never touch a position: "said yes" is the record,
+       and "free" is whether they are holding a ride, which is khaali's own
+       state. A driver parked outside with a passenger in the car is near the
+       place and is NOT free, which reading it off a position would have got
+       exactly backwards. */
+    const r = sup.rungs || {};
+    const ladder = [['nearby', r.nearby, 'near it'], ['available', r.available, 'near it and free'],
+      ['moving-toward', r['moving-toward'], 'on their way'], ['served', r.served, 'already took one']]
+      .filter(x => x[1] > 0).map(x => x[1] + ' ' + x[2]);
+    if (ladder.length) {
+      card.appendChild($('<div class="says rung">khaali can see ' + esc(ladder.join(', ')) +
+        '. The rest have only said so.</div>'));
+    }
+
     if (sup.said && sup.rate) {
       card.appendChild($('<div class="says rate">' + esc(sup.rate.says) + '.' +
         (sup.rate.rate == null ? ''

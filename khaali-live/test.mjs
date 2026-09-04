@@ -2721,6 +2721,45 @@ t('supply counts what it can see and forecasts the rest, never the other way', (
   assert.ok(s.floor <= s.ceiling);
 });
 
+t('nothing khaali tells a passenger is a promise about her ride', () => {
+  // "Six drivers have said they will be around Whitefield" is a statement
+  // about the board. "A vehicle will be waiting" is a promise about the road.
+  const rate = RL.rateFor(rows(31, 'kept').concat(rows(19, 'missed')), { at: 'Whitefield', minute: 8 * 60 });
+  const every = [
+    GP.outlookLines({ at: 'Whitefield', spot: spot(18, 25) }),
+    GP.outlookLines({ at: 'Whitefield', spot: spot(18, 25), said: 6 }),
+    GP.outlookLines({ at: 'Whitefield', spot: spot(18, 25), said: 6, rate }),
+    GP.outlookLines({ at: 'Whitefield', spot: spot(18, 25), said: 6, rate, near: 3 }),
+    GP.outlookLines({ at: 'Whitefield', spot: spot(18, 25), said: 6, rate, moving: 2 }),
+    GP.outlookLines({ at: 'Whitefield', said: 1 }),
+    [GP.OUTLOOK_FOOT],
+  ].flat();
+  assert.ok(every.length > 8);
+  for (const line of every) {
+    assert.doesNotMatch(line, /will be waiting|guarantee|assured|reserved for you/i, line);
+    assert.doesNotMatch(line, /your (car|bike|cab|vehicle|driver|ride)/i, line);
+    assert.doesNotMatch(line, /\bwill (arrive|come|be there|pick)/i, line);
+    assert.doesNotMatch(line, /\bavailable\b/i, 'khaali cannot see a vehicle, so it cannot call one available: ' + line);
+    assert.doesNotMatch(line, /\d+%/, line);
+  }
+  assert.match(GP.OUTLOOK_FOOT, /nobody is on the way/);
+});
+
+t('what a passenger is told is caused by something, not by the clock', () => {
+  // If nobody says yes and nobody shares, 08:35 must read word for word as
+  // 08:00 did. A reassurance that grows as the hour approaches, driven by
+  // nothing that happened, is the most comfortable lie in this whole feature.
+  const quiet = { at: 'Whitefield', spot: spot(18, 25) };
+  assert.deepStrictEqual(GP.outlookLines(quiet), GP.outlookLines(quiet));
+  assert.strictEqual(GP.outlookLines(quiet).length, 1, 'a booking count, and nothing else');
+  // and every further line needs a thing that happened
+  assert.strictEqual(GP.outlookLines({ ...quiet, said: 6 }).length, 3, 'a yes, and the honest gap in it');
+  assert.match(GP.outlookLines({ ...quiet, said: 6 })[2], /has not measured/);
+  assert.strictEqual(GP.outlookLines({ ...quiet, said: 6, near: 3 }).length, 4);
+  assert.match(GP.outlookLines({ ...quiet, said: 6, near: 3 })[3], /3 of them are near Whitefield now/);
+  assert.strictEqual(GP.outlookLines({ at: 'X' }).length, 0, 'and with nothing counted, it says nothing');
+});
+
 console.log('\nallocation: which way, and why - on a network that does not exist');
 
 // A -> B -> C -> D. A direct train A->D, a bus A->B, a train B->D. Every
