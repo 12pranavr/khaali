@@ -1444,7 +1444,8 @@ async function api(req, res, url) {
         mode: b.mode, where: b.where ? String(b.where).slice(0, 40) : null }, simNow().getTime());
       if (!r.ok) return send(res, 409, { ok: false, error: r.reason, validOn: r.validOn || null, pass: journey.publicOf(ps) });
       if (!r.repeat) journal.append({ t: 'passride', id: ps.id, ride: r.ride });
-      return send(res, 200, { ok: true, ride: r.ride, repeat: !!r.repeat, pass: journey.publicOf(ps) });
+      return send(res, 200, { ok: true, ride: r.ride, repeat: !!r.repeat,
+        leg: r.leg || null, spent: !!r.spent, pass: journey.publicOf(ps) });
     }
     return send(res, 200, { ok: true, pass: journey.publicOf(ps), today: TODAY() });
   }

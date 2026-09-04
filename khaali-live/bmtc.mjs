@@ -169,12 +169,48 @@ export function directBus({ fromLat, fromLng, toLat, toLng, after = 0, within = 
   return out.sort((x, y) => x.arrive - y.arrive || x.min - y.min).slice(0, limit);
 }
 
+/**
+ * A leg the planner already built, found again in BMTC's own data.
+ *
+ * A ticket comes back to the server as a route number and two indices into that
+ * route's pattern. Both are checked against the pattern here, and the stops,
+ * the distance and the fare are read off it - so the fare on the ticket is
+ * BMTC's, whatever the phone believed. Returns null when the route, the pattern
+ * or the indices do not exist, and null means null.
+ */
+export function legFound({ route, boardIdx, nStops, stops } = {}) {
+  const D = data();
+  const k = Number(boardIdx), n = Number(nStops), s = Number(stops);
+  if (!Number.isInteger(k) || k < 0) return null;
+  const r = D.routes.find(x => x.n === String(route || ''));
+  if (!r) return null;
+  const cands = r.p.filter(p => (Number.isInteger(n) && n > 0 ? p.s.length === n : true) && k < p.s.length);
+  for (const p of cands) {
+    // the alight index she was given, or the last stop of the pattern if the
+    // ticket has forgotten - never a stop the bus does not reach
+    const j = Number.isInteger(s) && s > 0 ? k + s : p.s.length - 1;
+    if (!(j > k && j < p.s.length)) continue;
+    const a = D.stops[p.s[k]], b = D.stops[p.s[j]];
+    if (!a || !b) continue;
+    const A = { name: a[1], lat: a[2], lng: a[3] }, B = { name: b[1], lat: b[2], lng: b[3] };
+    const d = km(A, B);
+    return { route: r.n, headsign: r.ln || null, from: A, to: B, stops: j - k,
+      km: Math.round(d * 10) / 10, fare: fareFor(d) };
+  }
+  return null;
+}
+
 /** How many stops and routes are loaded - for /api/meta and the tests. */
 export function stats() { const D = data(); return { stops: D.stops.length, routes: D.routes.length, patterns: D.routes.reduce((n, r) => n + r.p.length, 0), source: D.source }; }
 
 /** Stops by name, for the pickers. Platform variants of one station collapse
     to one entry; the many stops sharing a name collapse to the first. */
-const base = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// "Kempegowda Bus Station - Platform 30" is Kempegowda Bus Station. The stop
+// list already drops the platform from its own names; a name coming back the
+// other way - off a leg, out of a ticket - has to lose it too, or the station
+// with thirty platforms is a station khaali claims not to know.
+const noPlatform = t => String(t || '').replace(/\s*[-–]\s*platform.*$/i, '').trim();
+const base = t => noPlatform(t).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 // Kannada transliteration keeps or drops a final a - per word ("Shivajinagara
 // Bus Station") or only at the end ("Indira Nagar" for "Indiranagara"). Both
 // forms of both sides are compared, with spaces removed.

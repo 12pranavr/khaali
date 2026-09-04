@@ -273,7 +273,20 @@ export function priceTripLegs(legs) {
     } else if (mode === 'bus') {
       const known = BUSES.find(b => b.id === String((l && l.id) || ''));
       if (known && known.op !== 'BMTC') {
-        skipped.push({ mode: 'bus', name: known.op + ' ' + known.id, from: known.from, to: known.to, why: 'not-bmtc' });
+        // "KSRTC KSRTC BNG-BLR" is nobody's idea of a bus name
+        const label = known.id.startsWith(known.op) ? known.id : known.op + ' ' + known.id;
+        skipped.push({ mode: 'bus', name: label, from: known.from, to: known.to, why: 'not-bmtc' });
+        continue;
+      }
+      // First the route itself: a number and two indices into its own pattern
+      // are exact, and the stops and the fare are read straight off BMTC's
+      // data. Names are the fallback, for a leg that has lost its indices.
+      const found = (!known && _bmtc)
+        ? _bmtc.legFound({ route: l.id, boardIdx: l.boardIdx, nStops: l.nStops, stops: l.stops })
+        : null;
+      if (found) {
+        out.push({ mode: 'bus', name: String((l && l.name) || ('BMTC ' + found.route)).slice(0, 40),
+          route: found.route, from: found.from.name, to: found.to.name, km: found.km, fare: found.fare });
         continue;
       }
       const a = known ? { name: known.from, lat: known.fromLat, lng: known.fromLng }
@@ -282,6 +295,7 @@ export function priceTripLegs(legs) {
         : (_bmtc ? _bmtc.stopNamed(to) : null);
       if (!a || !b2) return { ok: false, error: 'khaali does not know that bus stop, so it will not price the ride.' };
       out.push({ mode: 'bus', name: String((l && l.name) || 'BMTC').slice(0, 40),
+        route: known ? known.id : (l.id || null),
         from: a.name, to: b2.name, fare: busFare({ fromLat: a.lat, fromLng: a.lng, toLat: b2.lat, toLng: b2.lng }) });
     } else return { ok: false, error: 'A trip pass covers the bus and the metro. The train is on the ticket.' };
   }
@@ -292,22 +306,29 @@ export function priceTripLegs(legs) {
 }
 
 /**
- * A ticket for ONE trip, not a day. It covers exactly the bus and metro legs of
- * the journey she chose, it costs what those legs cost, and it is spent when
- * they have been ridden - one ride per mode it covers. That is the difference a
- * person can hold in their head: a day pass is a right to ride, a trip pass is
- * this trip and no other.
+ * A ticket for ONE trip, not a day. It names the rides she is buying - this
+ * bus, from this stop to that one - and it is spent when she has taken them.
+ *
+ * What it is NOT is a number of rides. She is not buying "two rides"; she is
+ * buying Kempegowda Bus Station to CBI on the KIA-9. If she misses the 1:00 she
+ * takes the 1:30 on the same ticket, because the ticket was never about a
+ * departure. It is about getting there, once.
+ *
+ * So each leg is carried separately and crossed off separately, and the pass
+ * ends when the last one is. That is the difference a person can hold in their
+ * head: a day pass is a right to ride, a trip pass is this journey and no other.
  *
  * `legs` must already be priced by the caller from khaali's own tables. This
  * function does not price anything, because it cannot check a fare it is told.
  */
+export const COVER_OF = { bus: 'bmtc', metro: 'metro' };
+
 export function newTripPass({ id, who, date, holder, legs }, now = Date.now()) {
   if (!id || !who || !date) return { ok: false, reason: 'incomplete' };
   if (!Array.isArray(legs) || !legs.length) return { ok: false, reason: 'no-legs' };
-  const MODE_COVER = { bus: 'bmtc', metro: 'metro' };
   const covers = [];
   for (const l of legs) {
-    const c = MODE_COVER[l && l.mode];
+    const c = COVER_OF[l && l.mode];
     if (!c) return { ok: false, reason: 'bad-leg' };
     if (!(l.fare >= 0)) return { ok: false, reason: 'unpriced-leg' };
     if (!covers.includes(c)) covers.push(c);
@@ -315,9 +336,17 @@ export function newTripPass({ id, who, date, holder, legs }, now = Date.now()) {
   const fare = legs.reduce((n, l) => n + l.fare, 0);
   return { ok: true, pass: {
     id, who, date, holder: holder || null, covers, kind: 'trip',
-    legs: legs.map(l => ({ mode: l.mode, name: l.name || null, from: l.from, to: l.to, fare: l.fare })),
+    legs: legs.map((l, i) => ({ n: i + 1, mode: l.mode, cover: COVER_OF[l.mode],
+      name: l.name || null, route: l.route || null, from: l.from, to: l.to,
+      km: l.km != null ? l.km : null, fare: l.fare, ridden: null })),
     fare, status: 'valid', issuedAt: now, rides: [],
   } };
+}
+
+/** The next leg of a trip pass that this door can cross off, or null. */
+export function nextLeg(p, mode) {
+  if (!p || p.kind !== 'trip' || !Array.isArray(p.legs)) return null;
+  return p.legs.find(l => l.cover === mode && !l.ridden) || null;
 }
 
 /** The conductor's or the gate's tap. Marks a ride; refuses the wrong day,
@@ -331,16 +360,30 @@ export function scan(p, { by, mode, where } = {}, now = Date.now()) {
   const day = new Date(now);
   const iso = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
   if (iso !== p.date) return { ok: false, reason: 'wrong-day', validOn: p.date };
-  // the same door twice in a minute is one tap, not two rides
+  // On a trip pass the door is crossing off a NAMED ride - this bus, these two
+  // stops - and there is only one of it. Which bus she is on does not matter,
+  // and neither does the hour: the 1:30 is the same ticket as the 1:00 she
+  // missed. What matters is that she does not ride it twice.
+  //
+  // The double tap is answered first. A conductor pressing twice has not used
+  // the ride up and must not be told the ride is behind her - on a trip pass
+  // that reading would be a refusal, which is the one thing a second tap on the
+  // same door must never produce.
   const last = p.rides[p.rides.length - 1];
   if (last && last.mode === mode && last.where === (where || null) && now - last.at < 60000)
-    return { ok: true, ride: last, repeat: true };
-  const ride = { n: p.rides.length + 1, mode, by: by || null, where: where || null, at: now };
+    return { ok: true, ride: last, repeat: true,
+      leg: (p.legs && last.leg != null) ? p.legs[last.leg - 1] : null };
+  const leg = p.kind === 'trip' ? nextLeg(p, mode) : null;
+  if (p.kind === 'trip' && !leg) return { ok: false, reason: 'leg-done' };
+  const ride = { n: p.rides.length + 1, mode, by: by || null, where: where || null, at: now,
+    leg: leg ? leg.n : null };
   p.rides.push(ride);
-  // A trip pass is spent by the trip: one ride on each mode it covers, and then
-  // it is done. A day pass is never used up - that is what makes it a day pass.
-  if (p.kind === 'trip' && p.rides.length >= p.covers.length) p.status = 'used';
-  return { ok: true, ride, spent: p.status === 'used' };
+  if (leg) {
+    leg.ridden = now;
+    // the journey is over when its last leg is behind her
+    if (p.legs.every(l => l.ridden)) p.status = 'used';
+  }
+  return { ok: true, ride, leg: leg || null, spent: p.status === 'used' };
 }
 
 export function cancelPass(p, now = Date.now()) {
@@ -355,7 +398,7 @@ export function publicOf(p) {
   return { id: p.id, date: p.date, holder: p.holder, covers: p.covers, fare: p.fare,
     kind: p.kind || 'day', legs: p.legs || null,
     status: p.status, issuedAt: p.issuedAt, rides: p.rides.length,
-    ridesLeft: p.kind === 'trip' ? Math.max(0, p.covers.length - p.rides.length) : null,
+    legsLeft: p.kind === 'trip' ? p.legs.filter(l => !l.ridden).length : null,
     last: p.rides.length ? p.rides[p.rides.length - 1] : null };
 }
 

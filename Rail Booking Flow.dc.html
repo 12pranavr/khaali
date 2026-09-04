@@ -4896,9 +4896,9 @@ class Component extends DCLogic {
       jnPassBtn:()=>rec&&this.getPass(rec),
       jnPassBtnStyle:{display:(show&&!pass)?'block':'none',marginTop:12,border:'none',width:'100%',
         background:purple,color:'#fff',font:'700 14px/1 Manrope,sans-serif',padding:'15px 16px',borderRadius:8,cursor:'pointer',minHeight:48,textAlign:'center'},
+      // the button names the ride she is buying, not the mode it happens to use
       jnPassBtnLabel:J
-        ?('Trip pass \u2014 covers the '+(J.modes.length===2?'bus and the metro':J.modes[0]==='bus'?'bus':'metro')
-          +' on this journey')
+        ?('Trip pass \u2014 '+J.legs.map(l=>l.from+' \u2192 '+l.to).join(', then ')+', once')
         :('Day pass \u00b7 \u20b980 \u2014 metro and any BMTC bus'+((P&&P.ok)?'':' (for the day you travel)')),
       jnPassErr:S.passErr||'',
       jnPassErrStyle:{display:S.passErr?'block':'none',marginTop:8,font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-d8385a)'},
@@ -4907,12 +4907,19 @@ class Component extends DCLogic {
       jnPassQr:pass?pass.qr:'',
       jnPassQrStyle:{flex:'none',width:96,height:96,borderRadius:8,background:'#fff',padding:4},
       jnPassHead:pass?(((pass.kind==='trip')?'Trip pass':'Day pass')+' \u00b7 \u20b9'+pass.fare+' \u00b7 '+(pass.holder||'you')):'',
-      jnPassSub:pass?('Good on '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
-        +' \u00b7 '+(pass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')
-        +' \u00b7 '+(pass.status!=='valid'?pass.status
-          :(pass.kind==='trip'?((pass.ridesLeft===1?'one ride left':pass.ridesLeft+' rides left')):'never used up'))):'',
+      // A trip ticket says WHERE, not how many. "Two rides" is a thing she has
+      // to count; "Kempegowda Bus Station to CBI" is the thing she is doing.
+      jnPassSub:pass?(pass.kind==='trip'
+        ?((pass.legs||[]).map(l=>l.from+' \u2192 '+l.to+(l.ridden?' (travelled)':'')).join('  \u00b7  ')
+          +' \u00b7 '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+          +' \u00b7 '+(pass.status==='used'?'travelled \u2014 this ticket is over'
+            :pass.status!=='valid'?pass.status:'any departure, once'))
+        :('Good on '+new Date(pass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+          +' \u00b7 '+(pass.covers||[]).map(m=>m==='bmtc'?'BMTC':'metro').join(' and ')
+          +' \u00b7 '+(pass.status!=='valid'?pass.status:'never used up'))):'',
       jnPassNote:(pass&&pass.kind==='trip')
-        ?('Show this at the gate or to the conductor. One ride on each leg \u2014 the pass expires when the trip is done.'
+        ?('This is a ticket for the journey, not for a departure. Miss the bus and the next one is the same '
+          +'ticket \u2014 it is the getting there that is paid for, once.'
           +((pass.skipped&&pass.skipped.length)
             ?(' The '+pass.skipped.map(x=>x.name).join(' and ')+' seat is not khaali\u2019s to sell; buy it at the counter.')
             :''))
@@ -5309,6 +5316,9 @@ class Component extends DCLogic {
     const legs=((c&&c.legs)||[]).filter(l=>l.mode==='bus'||l.mode==='metro').map(l=>({
       mode:l.mode,id:l.id||null,name:l.mode==='metro'?(l.line||'Metro'):(l.name||'BMTC'),
       from:l.from,to:l.to,fromId:l.fromId||null,toId:l.toId||null,
+      // a bus is named by its route and where on it she gets on and off; the
+      // server prices the ride from those, not from the two stop names
+      boardIdx:l.boardIdx!=null?l.boardIdx:null,nStops:l.nStops||null,stops:l.stops||null,
       dep:l.dep||l.board||null,arr:l.arr||l.alight||null,every:l.every||null,source:l.source||null}));
     return {legs,depText:c?c.depText:'',arrText:c?c.arrText:'',
       modes:[...new Set(legs.map(l=>l.mode))],fare:c?c.fare:0};
@@ -5762,7 +5772,7 @@ class Component extends DCLogic {
       pTripHeadStyle:{font:'700 14px/1.4 Manrope,sans-serif',
         color:S.pTripPass?'var(--k-fg-14161a)':'var(--k-fg-d8385a)'},
       pTripSub:S.pTripPass?('Good on '+new Date(S.pTripPass.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
-        +' · one ride on each leg · the pass expires when the trip is done'
+        +' · any departure, once · the ticket ends when the trip does'
         +((S.pTripPass.skipped&&S.pTripPass.skipped.length)
           ?(' · the '+S.pTripPass.skipped.map(x=>x.name).join(' and ')+' seat is bought at the counter')
           :'')):'',

@@ -17,6 +17,7 @@ import * as IN from './intel.mjs';
 import * as SIM from './sim.mjs';
 import * as JY from './journey.mjs';
 import * as M from './metro.mjs';
+import * as BM from './bmtc.mjs';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -1934,23 +1935,41 @@ t('a trip pass costs what its legs cost, not a flat day', () => {
   assert.notStrictEqual(p.fare, JY.newPass({ id: 'd', who: 'h', date: '2026-09-10' }, at).pass.fare,
     'the day pass price is not the trip price');
   assert.deepStrictEqual(p.covers, ['bmtc', 'metro']);
-  assert.strictEqual(JY.publicOf(p).ridesLeft, 2);
+  assert.strictEqual(JY.publicOf(p).legsLeft, 2);
 });
 
-t('a trip pass is spent by the trip: one ride a mode, then it is done', () => {
+t('a trip pass is spent by the trip: each named ride once, then it is done', () => {
   const p = JY.newTripPass({ id: 't3', who: 'h', date: '2026-09-10',
-    legs: [{ mode: 'bus', from: 'a', to: 'b', fare: 35 },
+    legs: [{ mode: 'bus', name: 'BMTC KIA-9', from: 'Kempegowda Bus Station', to: 'CBI', fare: 35 },
       { mode: 'metro', from: 'c', to: 'd', fare: 80 }] }, at).pass;
   const day = new Date('2026-09-10T09:00:00+05:30').getTime();
-  const one = JY.scan(p, { by: 'conductor', mode: 'bmtc', where: '500D' }, day);
+  const one = JY.scan(p, { by: 'conductor', mode: 'bmtc', where: 'KIA-9' }, day);
   assert.ok(one.ok); assert.strictEqual(one.spent, false, 'the metro is still ahead of her');
+  assert.strictEqual(one.leg.to, 'CBI', 'the door crossed off a named ride, not a count');
+  assert.ok(p.legs[0].ridden); assert.strictEqual(p.legs[1].ridden, null);
   assert.strictEqual(p.status, 'valid');
-  const two = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day + 3600000);
+  // a second bus on the same ticket is refused: that ride is behind her
+  assert.strictEqual(JY.scan(p, { mode: 'bmtc', where: 'somewhere else' }, day + 3600000).reason, 'leg-done');
+  const two = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day + 5400000);
   assert.ok(two.ok); assert.strictEqual(two.spent, true);
   assert.strictEqual(p.status, 'used');
   assert.strictEqual(JY.scan(p, { mode: 'bmtc' }, day + 7200000).reason, 'used',
     'the trip has been travelled; the ticket is over');
-  assert.strictEqual(JY.publicOf(p).ridesLeft, 0);
+  assert.strictEqual(JY.publicOf(p).legsLeft, 0);
+});
+
+t('the ticket is the trip, not the departure: a missed bus costs nothing', () => {
+  const p = JY.newTripPass({ id: 't3b', who: 'h', date: '2026-09-10',
+    legs: [{ mode: 'bus', name: 'BMTC KIA-9', from: 'Kempegowda Bus Station', to: 'CBI', fare: 35 }] }, at).pass;
+  const one = new Date('2026-09-10T13:00:00+05:30').getTime();
+  const halfPast = new Date('2026-09-10T13:30:00+05:30').getTime();
+  // she is not on the 13:00. Nothing happens to the ticket: it was never that bus.
+  assert.strictEqual(p.status, 'valid');
+  assert.strictEqual(JY.nextLeg(p, 'bmtc').to, 'CBI');
+  const r = JY.scan(p, { by: 'conductor', mode: 'bmtc' }, halfPast);
+  assert.ok(r.ok, 'the half past is the same ticket as the one she missed');
+  assert.strictEqual(r.spent, true, 'and it gets her there, so it is over');
+  assert.ok(one < halfPast);
 });
 
 t('a double tap at one gate does not burn a leg of the trip', () => {
@@ -1962,6 +1981,7 @@ t('a double tap at one gate does not burn a leg of the trip', () => {
   const again = JY.scan(p, { by: 'gate', mode: 'metro', where: 'KGWA' }, day + 20000);
   assert.strictEqual(again.repeat, true);
   assert.strictEqual(p.rides.length, 1);
+  assert.strictEqual(p.legs.filter(l => l.ridden).length, 1, 'one tap, one leg crossed off');
   assert.strictEqual(p.status, 'valid', 'the bus is still to come');
 });
 
@@ -1990,6 +2010,36 @@ t('a bus khaali does not run is left off the pass, and said so', () => {
   const only = JY.priceTripLegs([{ mode: 'bus', id: 'KSRTC BNG-BLR', from: 'a', to: 'b' }]);
   assert.strictEqual(only.ok, false);
   assert.ok(/counter/.test(only.error));
+});
+
+t('a platform is not a different bus station', () => {
+  JY.useBmtc(BM);                       // the server does this at boot
+  // "Kempegowda Bus Station - Platform 30" is how a BMTC leg names the place a
+  // bus actually leaves from. khaali used to say it had never heard of it.
+  const s = BM.stopNamed('Kempegowda Bus Station - Platform 30');
+  assert.ok(s, 'the station with thirty platforms is still the station');
+  assert.strictEqual(s.name, 'Kempegowda Bus Station');
+  const r = JY.priceTripLegs([{ mode: 'bus', name: 'BMTC KIA-9',
+    from: 'Kempegowda Bus Station - Platform 30', to: 'CBI' }]);
+  assert.ok(r.ok, 'and a ride from it can be priced');
+  assert.ok(r.legs[0].fare > 0);
+});
+
+t('a bus leg is priced off its own route, not off two names', () => {
+  const opts = BM.directBus({ fromLat: 12.97751, fromLng: 77.57141, toLat: 12.99191, toLng: 77.7158, after: 600, limit: 1 });
+  assert.ok(opts.length, 'the city has a bus from Majestic to Hoodi');
+  const l = opts[0].legs.find(x => x.mode === 'bus');
+  const found = BM.legFound({ route: l.id, boardIdx: l.boardIdx, nStops: l.nStops, stops: l.stops });
+  assert.ok(found, 'the route and its two indices find the leg again');
+  assert.strictEqual(found.fare, l.fare, 'and price it exactly as the planner did');
+  const r = JY.priceTripLegs([{ mode: 'bus', id: l.id, name: l.name,
+    from: 'nonsense', to: 'more nonsense', boardIdx: l.boardIdx, nStops: l.nStops, stops: l.stops }]);
+  assert.ok(r.ok);
+  assert.strictEqual(r.legs[0].fare, l.fare);
+  assert.strictEqual(r.legs[0].from, found.from.name, 'the stop names came from BMTC, not from the body');
+  // indices that are not in the pattern find nothing at all
+  assert.strictEqual(BM.legFound({ route: l.id, boardIdx: 9999, nStops: l.nStops, stops: 1 }), null);
+  assert.strictEqual(BM.legFound({ route: 'NO-SUCH-ROUTE', boardIdx: 0, stops: 1 }), null);
 });
 
 t('a leg khaali cannot place is refused, never guessed at', () => {

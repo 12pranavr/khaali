@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>khaali · day pass</title>
+<title>khaali · pass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -54,7 +54,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="brand">khaali<span>.</span><small>day pass &middot; metro + BMTC &middot; simulated</small></div>
+  <div class="brand">khaali<span>.</span><small id="brandsub">metro + BMTC &middot; simulated</small></div>
   <div id="state" class="state"><div class="word">Opening&hellip;</div></div>
   <div id="out"></div>
 </div>
@@ -66,10 +66,11 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&
 const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const day = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-let pass = null, today = null, busy = false;
+let pass = null, today = null, busy = false, saidAt = 0;
 
 /** The big word. A conductor needs GOOD or NO before anything else. */
-function setState(cls, word, sub) {
+function setState(cls, word, sub, quiet) {
+  if (!quiet) saidAt = Date.now();
   const el = document.getElementById('state');
   el.className = 'state ' + cls + ' pop';
   el.innerHTML = '<div class="word">' + esc(word) + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '');
@@ -80,18 +81,49 @@ function render() {
   const out = document.getElementById('out');
   out.innerHTML = '';
   if (!pass) return;
+  const trip = pass.kind === 'trip' && Array.isArray(pass.legs);
+  const summary = () => trip
+    ? (pass.legsLeft === 0 ? 'every ride taken'
+      : pass.legsLeft === pass.legs.length ? (pass.legs.length === 1 ? 'one ride, not yet taken' : pass.legs.length + ' rides, none taken yet')
+      : pass.legsLeft + ' still to take')
+    : (pass.rides + (pass.rides === 1 ? ' ride' : ' rides') + ' so far');
   const valid = pass.status === 'valid';
   const isToday = pass.date === today;
-  if (!valid) setState('bad', 'Not valid', 'This pass was cancelled.');
-  else if (!isToday) setState('off', 'Not today', 'Valid on ' + esc(day(pass.date)) + ' only. Today is ' + esc(day(today)) + '.');
-  else setState('good', 'Good today', esc(pass.holder || 'Pass holder') + ' &middot; ' + pass.rides + (pass.rides === 1 ? ' ride' : ' rides') + ' so far');
+  // The page re-reads the pass every few seconds. It must not wipe an answer a
+  // conductor has just been given: a refusal that turns back into GOOD while
+  // she is still standing there is worse than no page at all.
+  const say = (Date.now() - saidAt > 6000) ? setState : (() => {});
+  if (pass.status === 'used') say('off', 'Already travelled',
+    'Every ride on this ticket has been taken. It got her there, so it is over.');
+  else if (!valid) say('bad', 'Not valid', 'This pass was cancelled.');
+  else if (!isToday) say('off', 'Not today', 'Valid on ' + esc(day(pass.date)) + ' only. Today is ' + esc(day(today)) + '.');
+  else say('good', trip ? 'Good' : 'Good today', esc(pass.holder || 'Pass holder') + ' &middot; ' + summary());
+
+  const sub = document.getElementById('brandsub');
+  if (sub) sub.innerHTML = (trip ? 'one trip' : 'day pass') + ' &middot; metro + BMTC &middot; simulated';
 
   out.appendChild($('<div class="card">' +
+    '<div class="row"><div class="k">Ticket</div><div class="v">' + (trip ? 'One trip' : 'Day pass') + '</div></div>' +
     '<div class="row"><div class="k">Holder</div><div class="v">' + esc(pass.holder || '—') + '</div></div>' +
     '<div class="row"><div class="k">Valid on</div><div class="v">' + esc(day(pass.date)) + '</div></div>' +
     '<div class="row"><div class="k">Covers</div><div class="v">' + pass.covers.map(m => m === 'bmtc' ? 'BMTC bus' : 'Namma Metro').join(' &middot; ') + '</div></div>' +
-    '<div class="row"><div class="k">Paid</div><div class="v">&#8377;' + esc(pass.fare) + ' &middot; one day, any number of rides</div></div>' +
+    '<div class="row"><div class="k">Paid</div><div class="v">&#8377;' + esc(pass.fare) + ' &middot; ' +
+      (trip ? 'this journey, once' : 'one day, any number of rides') + '</div></div>' +
     '<div class="row"><div class="k">Pass</div><div class="v mono">' + esc(pass.id) + '</div></div></div>'));
+
+  // On a trip ticket the rides are NAMED. She is not carrying "two rides"; she
+  // is carrying this bus from this stop to that one, and each is crossed off
+  // when she has taken it - at whatever hour she happens to catch it.
+  if (trip) {
+    out.appendChild($('<div class="card"><div class="lbl">This trip</div>' +
+      pass.legs.map(l => '<div class="ride"><span class="dot" style="background:' +
+        (l.mode === 'metro' ? '#8C2877' : '#1f6fd0') + ';opacity:' + (l.ridden ? '.35' : '1') + '"></span>' +
+        '<span style="' + (l.ridden ? 'opacity:.45;text-decoration:line-through' : '') + '">' +
+        esc(l.name || (l.mode === 'metro' ? 'Metro' : 'BMTC')) + ' &middot; ' +
+        esc(l.from) + ' &rarr; ' + esc(l.to) + ' &middot; &#8377;' + esc(l.fare) + '</span>' +
+        (l.ridden ? '<span style="margin-left:8px;opacity:.55">travelled ' + clock(l.ridden) + '</span>' : '') +
+        '</div>').join('') + '</div>'));
+  }
 
   // The tap. One for the gate, one for the bus door. `where` is optional and
   // costs a second; the tap itself costs nothing.
@@ -111,8 +143,13 @@ function render() {
       (pass.last.where ? ' &middot; ' + esc(pass.last.where) : '') + ' &middot; ' + clock(pass.last.at) + '</div></div>'));
   }
 
-  out.appendChild($('<div class="note">A pass is a right to ride, not a ticket. It is never used up: ' +
-    'each tap is a record of a ride, not a deduction. The same door twice within a minute counts once. ' +
+  out.appendChild($('<div class="note">' + (trip
+    ? 'This is a ticket for one journey, not for a day. It does not name a departure: a bus missed at 1:00 ' +
+      'is the same ticket as the 1:30. Each ride on it is taken once, and when the last one has been taken ' +
+      'the ticket is over. '
+    : 'A day pass is a right to ride, not a ticket. It is never used up: each tap is a record of a ride, ' +
+      'not a deduction. ') +
+    'The same door twice within a minute counts once. ' +
     'This page is a stand-in for the gate and the conductor&rsquo;s machine; no fare has moved.</div>'));
 }
 
@@ -129,12 +166,16 @@ async function tap(mode) {
     if (!j.ok) {
       const why = j.error === 'wrong-day' ? 'Valid on ' + esc(day(j.validOn)) + ', not today.'
         : j.error === 'not-covered' ? 'This pass does not cover ' + (mode === 'metro' ? 'the metro' : 'buses') + '.'
+        : j.error === 'leg-done' ? 'That ride has already been taken on this ticket.'
+        : j.error === 'used' ? 'This trip has been travelled. The ticket is over.'
         : j.error === 'cancelled' ? 'This pass was cancelled.' : 'Refused: ' + esc(j.error);
       render(); setState('bad', 'No', why); return;
     }
     render();
-    setState('good', j.repeat ? 'Already marked' : 'Ride ' + j.ride.n,
-      (mode === 'metro' ? 'Metro' : 'BMTC') + (j.ride.where ? ' &middot; ' + esc(j.ride.where) : '') + ' &middot; ' + clock(j.ride.at));
+    setState('good', j.repeat ? 'Already marked' : (j.spent ? 'Travelled' : 'Ride taken'),
+      (j.leg ? esc(j.leg.from) + ' &rarr; ' + esc(j.leg.to)
+        : (mode === 'metro' ? 'Metro' : 'BMTC')) +
+      (j.ride.where ? ' &middot; ' + esc(j.ride.where) : '') + ' &middot; ' + clock(j.ride.at));
   } catch (e) { busy = false; render(); setState('bad', 'No signal', 'Could not reach khaali. Let them ride; try again at the next stop.'); }
 }
 
