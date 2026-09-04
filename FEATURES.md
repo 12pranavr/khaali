@@ -1229,39 +1229,70 @@ Passes and rides are journalled and replayed at boot.
 
 ### Where you plan the whole journey
 
-**Plan a journey** is its own page at `/plan`, in the menu beside Trains. Three
-features, three screens, none borrowing another's: **Trains** books a train,
-**Plan a journey** books a journey, **the live map** watches trains move.
+**Plan a journey** at `/plan` is its own page. Three features, three screens:
+**Trains** books a train, **Plan a journey** moves a person, **the live map**
+watches trains.
 
-From and To accept the corridor's 14 railway stations and the Purple Line's 23
-metro stops in one list, each labelled which it is. Date, *leave after*, and
-*I need a lift or a ramp*.
+Nobody wants "a train". They want to be at Majestic by nine, sitting down if
+possible. So the page offers **several ways**, and the fastest is not always the
+one a person picks:
 
-The results are the Trains rows, deliberately - the same times, fares, free
-counts, cancelled states and the same **Book** button - with the rest of the way
-underneath:
+| Leave | Arrive | Time | Cost | Way | Seat |
+|---|---|---|---|---|---|
+| 08:00 | 09:45 | 105m | 165 | train + metro | standing |
+| 08:00 | 10:22 | 142m | 110 | train + bus | **you sit** |
+| 08:15 | 11:19 | 184m | 80 | bus + bus | **you sit** |
 
-```
-SHESHADRI EX      10:30 ──0h44m── 11:14    SL ₹85    3A ₹290   [ Book ]
-17210 · runs daily  BWT            WFD     230 free  118 free
-─────────────────────────────────────────────────────────────────────
- ●  Walk 150 m · about 3 min — Entrance A of Kadugodi Tree Park · lift
- ●  Purple Line · every 8 min — 20 stops · about 44 min · off at 12:05 PM
-    Majestic by 12:05 PM   ₹80 day pass on your ticket after you book
-```
+Faster, cheaper, or seated. That is the choice, and nothing new was added to
+the network to create it - it is the same trains, buses and metro that run
+today, combined the way somebody who knew the city would combine them.
 
-**Sorted by when you actually arrive**, not when the train leaves - the only
-sort that means anything for a journey. Book sets the booking state to the
-*train leg* and opens the same class-and-quota modal the Trains page uses, so
-there is no second booking flow to keep in step; the pass is on the ticket
-afterwards.
+### Will you get a seat
 
-Four cases, each answered honestly: rail to rail is just trains; rail to metro
-is the chain above; metro to metro is one card with no train; metro back onto a
-train says plainly that it is not on this demo yet.
+This is the idea the rest hangs off. A bus boarded at stop 3 of 37 has empty
+seats; the same bus at stop 30 has none, and nobody tells you which one you are
+getting on. It is in the timetable already and has never been read out.
 
-Continuations for a whole result list come from one call to
-`/api/journeys?arrivals=a,b,c&to=X` rather than one call per train.
+- **Bus** - how far into the route you board. Within the first tenth is "you
+  board where the bus starts, so the seats are still empty".
+- **Train** - the berth count for your stretch, from the same inventory the
+  booking page sells from.
+- **Metro** - that station's own busiest hour, from the RTI ridership data.
+
+A journey carries the **worst** seat on it, never the best: a seat you lose
+halfway is not a seat.
+
+### Buses
+
+`buses.mjs`. Three BMTC routes between Whitefield and Majestic are real, pulled
+from BMTC's published GTFS: KBS-1K, KBS-1I and V-335E, with their stops, run
+times, median gaps and boarding positions. All three board at Hope Farm, stop 3
+of their route - which is why you sit.
+
+Bangarpet to Bengaluru is a real service with **no published timetable
+anywhere**; Karnataka has never opened KSRTC's data. That leg is modelled,
+marked `simulated`, and every screen that shows it says so. Inventing the
+numbers quietly would be dishonest; leaving out the leg that makes the whole
+journey work would be worse.
+
+### The controls
+
+Mode chips - **All / Train / Metro / Bus** - decide what may be used, and the
+answers change with them. **Leave after** and **Reach by** are chips, not a
+native time picker, because a phone's time picker is a three-column slot
+machine and nobody wants one to say "after nine".
+
+### One journey on the map
+
+Click a journey and it is drawn alone: train in red, bus dashed blue, metro in
+the line's own purple, walks dotted grey, and one numbered pin per place in the
+order you pass it. Every other train, route and line is left off - the question
+on that screen is how *she* gets there, and a map answering twelve other
+questions at the same time answers none of them. Choosing a different journey
+replaces the route; it never adds to it.
+
+The base is Esri's Light Gray Canvas, keyless, chosen because it is quiet.
+Leaflet is loaded only when a journey is actually drawn.
 
 ### The map
 

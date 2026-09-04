@@ -17,8 +17,69 @@ import { ST } from './data.mjs';
 import { GEO } from './geo.mjs';
 import { toMin, hhmm } from './engine.mjs';
 import { LINE, STOPS, HEADWAYS, FARE, ENTRANCES, STREET_TO_PLATFORM_MIN } from './metro.mjs';
+import { BUSES, BUS_FARE_PER_KM, BUS_MIN_FARE } from './buses.mjs';
+import { TRAINS } from './data.mjs';
+import { serves, sMin, fare as railFare } from './engine.mjs';
 
 export const WALK_KMH = 4.5;
+export const MODES = ['train', 'metro', 'bus'];
+
+/**
+ * Will she get a seat, and why.
+ *
+ * This is the whole idea. A bus boarded at stop 3 of 37 has empty seats; the
+ * same bus at stop 30 has none, and nobody tells you which one you are getting
+ * on. It is in the timetable already - it just has never been read out. The
+ * same question, asked of a train, is the berth count khaali was built on; of
+ * a metro, it is that station's own busiest hour.
+ *
+ * `at` is 0..1 - how far into the service you board. `load` is 0..1 for a
+ * metro, where boarding position means nothing and the hour means everything.
+ */
+export function seatOdds({ mode, at = null, load = null, free = null }) {
+  if (mode === 'bus') {
+    if (at == null) return { word: 'unknown', why: 'khaali does not know where on the route you board.' };
+    if (at <= 0.1) return { word: 'yes', rank: 3,
+      why: 'you board where the bus starts, so the seats are still empty' };
+    if (at <= 0.25) return { word: 'likely', rank: 2,
+      why: 'you board near the start of the route' };
+    if (at <= 0.6) return { word: 'maybe', rank: 1,
+      why: 'you board part-way along, so it depends on the day' };
+    return { word: 'standing', rank: 0, why: 'you board late on the route, when it is usually full' };
+  }
+  if (mode === 'train') {
+    if (free == null) return { word: 'unknown', why: 'berths are counted at booking.' };
+    if (free >= 40) return { word: 'yes', rank: 3, why: free + ' berths are free on your stretch' };
+    if (free > 0) return { word: 'likely', rank: 2, why: 'only ' + free + ' berths left on your stretch' };
+    return { word: 'standing', rank: 0, why: 'no berth free for your stretch' };
+  }
+  if (mode === 'metro') {
+    if (load == null) return { word: 'unknown', why: '' };
+    if (load >= 0.75) return { word: 'standing', rank: 0, why: 'the busiest hour at this station' };
+    if (load >= 0.4) return { word: 'maybe', rank: 1, why: 'a busy hour at this station' };
+    return { word: 'likely', rank: 2, why: 'a quiet hour at this station' };
+  }
+  return { word: 'unknown', why: '' };
+}
+
+/** Buses between two points, with where you board and what that means. */
+export function busesBetween(fromLat, fromLng, toLat, toLng, within = 1.2) {
+  return BUSES.filter(b =>
+    km({ lat: fromLat, lng: fromLng }, { lat: b.fromLat, lng: b.fromLng }) <= within &&
+    km({ lat: toLat, lng: toLng }, { lat: b.toLat, lng: b.toLng }) <= within)
+    .map(b => ({ ...b,
+      walkToStopKm: Math.round(km({ lat: fromLat, lng: fromLng }, { lat: b.fromLat, lng: b.fromLng }) * 100) / 100,
+      seat: seatOdds({ mode: 'bus', at: b.nStops ? b.boardIdx / b.nStops : null }) }));
+}
+
+/** The next bus, from its own first/last and how often it runs. */
+export function nextBus(b, minute) {
+  const m = ((minute % 1440) + 1440) % 1440;
+  if (m < b.first) return { ok: true, wait: b.first - m, every: b.every, board: b.first };
+  if (m > b.last) return { ok: false, reason: 'no-service', first: b.first, last: b.last };
+  const wait = Math.ceil(b.every / 2);
+  return { ok: true, wait, every: b.every, board: m + wait };
+}
 export const RAIL_STATION = 'WFD';
 export const PASS_MODES = ['metro', 'bmtc'];
 
@@ -220,4 +281,207 @@ export function publicOf(p) {
   return { id: p.id, date: p.date, holder: p.holder, covers: p.covers, fare: p.fare,
     status: p.status, issuedAt: p.issuedAt, rides: p.rides.length,
     last: p.rides.length ? p.rides[p.rides.length - 1] : null };
+}
+
+
+// ------------------------------------------------------- whole journeys --
+//
+// Nobody wants "a train". They want to be at Majestic by nine, sitting down if
+// possible. On this corridor there is more than one way to do that, and the
+// fastest is not always the one a person would pick: the bus from Bangarpet
+// takes longer than the train and you get a seat, because it starts there.
+//
+// So this returns SEVERAL ways, each with what it costs in time, in money and
+// in standing up, and lets the person choose. Nothing new is added to the
+// network - it is the same trains, the same buses, the same metro that run
+// today, combined the way somebody who knew the city would combine them.
+
+const railIdx = code => ST.findIndex(s => s.c === code);
+const dayMin = m => ((m % 1440) + 1440) % 1440;
+
+/** A corridor station within `within` km of a point, or null. */
+export function railNear(lat, lng, within = 1.0) {
+  let best = null;
+  ST.forEach((st, i) => {
+    const d = km({ lat, lng }, GEO[i]);
+    if (d <= within && (!best || d < best.km)) best = { i, st, km: Math.round(d * 100) / 100 };
+  });
+  return best;
+}
+
+/** Trains from one corridor station to another, leaving after a minute. */
+export function trainsBetween(fromIdx, toIdx, after, limit = 12) {
+  if (fromIdx === toIdx) return [];
+  return TRAINS.filter(t => serves(t, fromIdx, toIdx)).map(t => {
+    const d = sMin(t, fromIdx, 'd'), a = sMin(t, toIdx, 'a');
+    if (d == null || a == null) return null;
+    return { train: t.no, name: t.name, dep: dayMin(d), arr: dayMin(a),
+      min: ((dayMin(a) - dayMin(d)) + 1440) % 1440 };
+  }).filter(Boolean).filter(x => x.dep >= after).sort((a, b) => a.dep - b.dep).slice(0, limit);
+}
+
+const LEG_TRAIN = (t, fromName, toName, freeSL) => ({
+  mode: 'train', id: t.train, name: t.name, from: fromName, to: toName,
+  dep: hhmm(t.dep), arr: hhmm(t.arr), depMin: t.dep, arrMin: t.arr, min: t.min,
+  seat: seatOdds({ mode: 'train', free: freeSL }), source: 'timetable',
+});
+
+/**
+ * Every sensible way from `from` to `to`, after a minute of the day.
+ * `from` and `to` are { kind: 'rail'|'metro', id }.
+ * `modes` limits what may be used: any of train, metro, bus.
+ */
+export function journeys({ from, to, after = 0, by = null, modes = MODES, needs = [], counts = null } = {}) {
+  const use = m => modes.includes(m);
+  const out = [];
+  const fromRail = from.kind === 'rail' ? railIdx(from.id) : -1;
+  const fromMetro = from.kind === 'metro' ? stopIdx(from.id) : -1;
+  const toMetro = to.kind === 'metro' ? stopIdx(to.id) : -1;
+  const toRail = to.kind === 'rail' ? railIdx(to.id) : -1;
+  if (from.kind === 'rail' && fromRail < 0) return { ok: false, reason: 'unknown-from' };
+  if (to.kind === 'metro' && toMetro < 0) return { ok: false, reason: 'unknown-to' };
+
+  const freeOf = (no, f, t) => counts ? counts(no, f, t) : null;
+  const b = boardStop();                                   // the metro nearest Whitefield rail
+  const WFD = railIdx(RAIL_STATION);
+
+  // ---- both ends on the corridor: it is simply a train ----
+  if (from.kind === 'rail' && to.kind === 'rail') {
+    if (!use('train')) return { ok: true, chains: [] };
+    trainsBetween(fromRail, toRail, after).forEach(t => {
+      out.push({ kind: 'train', legs: [LEG_TRAIN(t, ST[fromRail].n, ST[toRail].n, freeOf(t.train, fromRail, toRail))],
+        dep: t.dep, arr: t.arr, fare: railFare('SL', Math.abs(ST[toRail].km - ST[fromRail].km)) });
+    });
+  }
+
+  // ---- already on the line ----
+  if (from.kind === 'metro' && to.kind === 'metro') {
+    if (!use('metro')) return { ok: true, chains: [] };
+    const p = plan({ arriveAt: after, needs, from: from.id, to: to.id });
+    if (p.ok) out.push({ kind: 'metro', legs: p.legs.map(l => metroLegOut(l, from.id)),
+      dep: after, arr: p.arrive, fare: p.fare.qr, plan: p });
+  }
+
+  // ---- a corridor station to somewhere on the line ----
+  if (from.kind === 'rail' && to.kind === 'metro') {
+    const destNear = railNear(STOPS[toMetro].lat, STOPS[toMetro].lng, 1.0);
+
+    // A. train to Whitefield, then the metro
+    if (use('train') && use('metro') && fromRail !== WFD) {
+      trainsBetween(fromRail, WFD, after).forEach(t => {
+        const p = plan({ arriveAt: t.arr, needs, to: to.id });
+        if (!p.ok) return;
+        out.push({ kind: 'train+metro',
+          legs: [LEG_TRAIN(t, ST[fromRail].n, ST[WFD].n, freeOf(t.train, fromRail, WFD))]
+            .concat(p.legs.map(l => metroLegOut(l, b.stop.id))),
+          dep: t.dep, arr: p.arrive,
+          fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + p.fare.qr });
+      });
+    }
+
+    // B. straight through on one train, if the destination has a station beside it
+    if (use('train') && destNear && destNear.i !== fromRail) {
+      trainsBetween(fromRail, destNear.i, after).forEach(t => {
+        const w = Math.max(1, Math.round(destNear.km / WALK_KMH * 60));
+        out.push({ kind: 'train-through',
+          legs: [LEG_TRAIN(t, ST[fromRail].n, ST[destNear.i].n, freeOf(t.train, fromRail, destNear.i)),
+            { mode: 'walk', from: ST[destNear.i].n, to: STOPS[toMetro].n,
+              km: destNear.km, min: w, depMin: t.arr, arrMin: t.arr + w, source: 'measured' }],
+          dep: t.dep, arr: t.arr + w,
+          fare: railFare('SL', Math.abs(ST[destNear.i].km - ST[fromRail].km)) });
+      });
+    }
+
+    // C. the bus from here, then the metro - slower, but it starts where you are
+    if (use('bus')) {
+      const first = busesBetween(GEO[fromRail].lat, GEO[fromRail].lng, GEO[WFD].lat, GEO[WFD].lng, 2.5);
+      first.forEach(bus => {
+        const nb = nextBus(bus, after);
+        if (!nb.ok) return;
+        const arrive = nb.board + bus.runMin;
+        const legs = [busLegOut(bus, nb, arrive)];
+        if (use('metro')) {
+          const p = plan({ arriveAt: arrive, needs, to: to.id });
+          if (p.ok) out.push({ kind: 'bus+metro',
+            legs: legs.concat(p.legs.filter(l => l.mode !== 'walk').map(l => metroLegOut(l, b.stop.id))),
+            dep: nb.board, arr: p.arrive, fare: busFare(bus) + p.fare.qr });
+        }
+        // D. bus all the way, when one runs to the destination
+        const on = busesBetween(bus.toLat, bus.toLng, STOPS[toMetro].lat, STOPS[toMetro].lng, 1.2);
+        on.forEach(b2 => {
+          const nb2 = nextBus(b2, arrive);
+          if (!nb2.ok) return;
+          out.push({ kind: 'bus+bus', legs: legs.concat([busLegOut(b2, nb2, nb2.board + b2.runMin)]),
+            dep: nb.board, arr: nb2.board + b2.runMin, fare: busFare(bus) + busFare(b2) });
+        });
+      });
+    }
+
+    // E. train to Whitefield, then the bus into town - the seat, the long way
+    if (use('train') && use('bus') && fromRail !== WFD) {
+      const cityBus = busesBetween(GEO[WFD].lat, GEO[WFD].lng, STOPS[toMetro].lat, STOPS[toMetro].lng, 1.2);
+      if (cityBus.length) {
+        const bus = cityBus.sort((x, y) => x.runMin - y.runMin)[0];
+        trainsBetween(fromRail, WFD, after).slice(0, 6).forEach(t => {
+          const nb = nextBus(bus, t.arr);
+          if (!nb.ok) return;
+          out.push({ kind: 'train+bus',
+            legs: [LEG_TRAIN(t, ST[fromRail].n, ST[WFD].n, freeOf(t.train, fromRail, WFD)),
+              busLegOut(bus, nb, nb.board + bus.runMin)],
+            dep: t.dep, arr: nb.board + bus.runMin,
+            fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + busFare(bus) });
+        });
+      }
+    }
+  }
+
+  // two trains leaving together by the same route are one choice, not two
+  const seenKey = new Set();
+  let chains = out.filter(c => by == null || c.arr <= by).filter(c => {
+    const k = c.kind + '|' + c.dep + '|' + c.arr;
+    if (seenKey.has(k)) return false;
+    seenKey.add(k); return true;
+  });
+  // one of each shape, then whichever gets there soonest - a list of twelve
+  // near-identical trains is not a choice
+  const bestOf = new Map();
+  chains.sort((a, b2) => a.arr - b2.arr).forEach(c => {
+    const k = c.kind;
+    if (!bestOf.has(k)) bestOf.set(k, []);
+    if (bestOf.get(k).length < 4) bestOf.get(k).push(c);
+  });
+  chains = [...bestOf.values()].flat().sort((a, b2) => a.arr - b2.arr).slice(0, 12);
+  return { ok: true, chains: chains.map(summarise) };
+}
+
+function busFare(b) {
+  const d = km({ lat: b.fromLat, lng: b.fromLng }, { lat: b.toLat, lng: b.toLng });
+  return Math.max(BUS_MIN_FARE, Math.round(d * BUS_FARE_PER_KM / 5) * 5);
+}
+function busLegOut(b, nb, arrive) {
+  return { mode: 'bus', id: b.id, name: b.op + ' ' + b.id, from: b.from, to: b.to,
+    dep: hhmm(nb.board), arr: hhmm(dayMin(arrive)), depMin: nb.board, arrMin: arrive,
+    min: b.runMin, every: b.every, wait: nb.wait,
+    boardIdx: b.boardIdx, nStops: b.nStops, seat: b.seat, source: b.source,
+    fromLat: b.fromLat, fromLng: b.fromLng, toLat: b.toLat, toLng: b.toLng };
+}
+function metroLegOut(l, fromId) {
+  if (l.mode !== 'metro') return { ...l, seat: null };
+  return { ...l, seat: seatOdds({ mode: 'metro', load: l.crowdAlight ? l.crowdAlight.level : null }) };
+}
+
+/** What a row needs: the shape of it, the worst seat on it, and the words. */
+function summarise(c) {
+  const legs = c.legs;
+  const seated = legs.filter(l => l.seat && l.seat.rank != null);
+  const worst = seated.length ? seated.reduce((p, l) => l.seat.rank < p.seat.rank ? l : p) : null;
+  const modes = legs.filter(l => l.mode !== 'walk').map(l => l.mode);
+  const simulated = legs.some(l => l.source === 'simulated');
+  return { ...c, modes,
+    totalMin: ((c.arr - c.dep) + 1440) % 1440,
+    depText: hhmm(dayMin(c.dep)), arrText: hhmm(dayMin(c.arr)),
+    seat: worst ? worst.seat : { word: 'unknown', why: '' },
+    seatLeg: worst ? (worst.name || worst.mode) : null,
+    simulated,
+    changes: Math.max(0, modes.length - 1) };
 }

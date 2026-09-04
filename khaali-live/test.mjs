@@ -1783,6 +1783,102 @@ t('the wrong way and an unknown stop are refused, not guessed', () => {
   assert.strictEqual(JY.plan({ arriveAt: 9 * 60, to: 'NOPE' }).reason, 'unknown-stop');
 });
 
+console.log('\njourney: several ways, and whether you get to sit');
+
+t('boarding position is the whole answer for a bus', () => {
+  const start = JY.seatOdds({ mode: 'bus', at: 2 / 37 });   // stop 3 of 37, zero-based
+  assert.strictEqual(start.word, 'yes');
+  assert.match(start.why, /where the bus starts/);
+  assert.strictEqual(JY.seatOdds({ mode: 'bus', at: 0.2 }).word, 'likely');
+  assert.strictEqual(JY.seatOdds({ mode: 'bus', at: 0.5 }).word, 'maybe');
+  assert.strictEqual(JY.seatOdds({ mode: 'bus', at: 0.9 }).word, 'standing');
+  assert.strictEqual(JY.seatOdds({ mode: 'bus', at: null }).word, 'unknown',
+    'and it refuses to guess when it does not know');
+});
+
+t('a train is asked the question khaali was built to answer', () => {
+  assert.strictEqual(JY.seatOdds({ mode: 'train', free: 86 }).word, 'yes');
+  assert.strictEqual(JY.seatOdds({ mode: 'train', free: 3 }).word, 'likely');
+  assert.strictEqual(JY.seatOdds({ mode: 'train', free: 0 }).word, 'standing');
+  // a metro has no seat to book, so the hour decides
+  assert.strictEqual(JY.seatOdds({ mode: 'metro', load: 0.95 }).word, 'standing');
+  assert.strictEqual(JY.seatOdds({ mode: 'metro', load: 0.2 }).word, 'likely');
+});
+
+t('the real buses between Whitefield and Majestic are found, and start there', () => {
+  const list = JY.busesBetween(12.9846, 77.7460, 12.97567, 77.57281);
+  assert.ok(list.length >= 3, 'BMTC runs several: ' + list.length);
+  const k = list.find(b => b.id === 'KBS-1K');
+  assert.ok(k, 'KBS-1K is one of them');
+  assert.strictEqual(k.source, 'timetable', 'and it is real, not invented');
+  assert.strictEqual(k.boardIdx, 2, 'boarding stop 3 of ' + k.nStops);
+  assert.strictEqual(k.seat.word, 'yes');
+});
+
+t('the leg with no open data is offered, and says it is simulated', () => {
+  const list = JY.busesBetween(12.9908, 78.1770, 12.9846, 77.7460, 2.5);
+  assert.strictEqual(list.length, 1);
+  assert.strictEqual(list[0].source, 'simulated',
+    'Bangarpet has no published bus timetable, and khaali says so rather than implying one');
+  assert.strictEqual(list[0].seat.word, 'yes', 'it starts at Bangarpet, so she sits');
+});
+
+t('Bangarpet to Majestic offers a real choice, not one answer', () => {
+  const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' },
+    after: 8 * 60, counts: () => 86 });
+  assert.ok(r.ok);
+  assert.ok(r.chains.length >= 5, 'several ways: ' + r.chains.length);
+  const kinds = new Set(r.chains.map(c => c.kind));
+  assert.ok(kinds.size >= 3, 'and they are different shapes: ' + [...kinds].join(', '));
+
+  const fastest = r.chains.reduce((p, c) => c.totalMin < p.totalMin ? c : p);
+  const seated = r.chains.filter(c => c.seat.word === 'yes');
+  assert.ok(seated.length, 'at least one gets her a seat');
+  const cheapest = r.chains.reduce((p, c) => c.fare < p.fare ? c : p);
+  assert.ok(cheapest.fare < fastest.fare, 'and the cheapest is not the fastest - that is the choice');
+  assert.strictEqual(cheapest.seat.word, 'yes', 'the slow cheap way is the one you sit on');
+  // every chain is ordered in time and adds up
+  r.chains.forEach(c => {
+    assert.ok(c.totalMin > 0 && c.totalMin < 400, c.kind + ' takes ' + c.totalMin + ' min');
+    assert.ok(c.legs.length >= 1);
+    assert.ok(c.modes.length >= 1);
+  });
+});
+
+t('the mode chips actually decide what is offered', () => {
+  const q = m => JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' },
+    after: 8 * 60, modes: m, counts: () => 86 });
+  const busOnly = q(['bus']);
+  assert.ok(busOnly.chains.length, 'buses alone can do it');
+  assert.ok(busOnly.chains.every(c => c.modes.every(x => x === 'bus')), 'and only buses are used');
+  const noBus = q(['train', 'metro']);
+  assert.ok(noBus.chains.every(c => !c.modes.includes('bus')));
+  assert.strictEqual(q([]).chains.length, 0, 'nothing chosen, nothing offered');
+});
+
+t('reach by cuts off what arrives too late, and never invents a faster one', () => {
+  const all = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' }, after: 8 * 60 });
+  const by10 = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' },
+    after: 8 * 60, by: 10 * 60 });
+  assert.ok(by10.chains.length < all.chains.length);
+  assert.ok(by10.chains.every(c => c.arr <= 10 * 60));
+});
+
+t('two trains leaving together by the same route are one choice, not two', () => {
+  const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' }, after: 8 * 60 });
+  const keys = r.chains.map(c => c.kind + '|' + c.depText + '|' + c.arrText);
+  assert.strictEqual(new Set(keys).size, keys.length, 'no duplicate rows');
+});
+
+t('a chain carries the worst seat on it, not the best', () => {
+  const r = JY.journeys({ from: { kind: 'rail', id: 'BWT' }, to: { kind: 'metro', id: 'KGWA' },
+    after: 8 * 60, counts: () => 86 });
+  const mixed = r.chains.find(c => c.kind === 'train+metro');
+  assert.ok(mixed, 'the train is seated and the metro at Majestic is not');
+  assert.strictEqual(mixed.seat.word, 'standing',
+    'so the journey says standing - a seat you lose halfway is not a seat');
+});
+
 t('a pass is a right to ride, not a seat: scanned, never used up', () => {
   const r = JY.newPass({ id: 'p1', who: 'her@x', date: '2026-09-10', holder: 'Achina' }, at);
   assert.ok(r.ok);

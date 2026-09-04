@@ -642,14 +642,32 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div onClick="{{ pSearch }}" style="height:46px;padding:0 26px;border-radius:9px;background:var(--k-d8385a);color:var(--k-fg-fff);font:800 14.5px/1 Manrope,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center">Search</div>
   </div>
 
-  <div style="margin-top:13px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:9px">
-      <span style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
-      <input type="time" value="{{ pAfterVal }}" onChange="{{ setPAfter }}" style="height:40px;background:var(--k-fafaf8);border:1px solid var(--k-d4d3ce);border-radius:8px;padding:0 10px;font:600 13.5px/1 Manrope,sans-serif;color:var(--k-fg-14161a);outline:none"></input>
+  <div style="margin-top:16px;display:grid;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">How</span>
+      <div onClick="{{ pAllModes }}" style="{{ pAllStyle }}">All</div>
+      <sc-for list="{{ pModeChips }}" as="m" hint-placeholder-count="3">
+        <div onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.l }}</div>
+      </sc-for>
     </div>
-    <div onClick="{{ togglePStep }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
-      <span style="{{ pStepBox }}">{{ pStepTick }}</span>
-      <span style="font:600 13px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Leave after</span>
+      <sc-for list="{{ pAfterChips }}" as="t" hint-placeholder-count="6">
+        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Reach by</span>
+      <sc-for list="{{ pByChips }}" as="t" hint-placeholder-count="5">
+        <div onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.l }}</div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="width:86px;flex:none;font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:var(--k-fg-8a8a84)">Access</span>
+      <div onClick="{{ togglePStep }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+        <span style="{{ pStepBox }}">{{ pStepTick }}</span>
+        <span style="font:600 13px/1 Manrope,sans-serif;color:var(--k-fg-40434a)">I need a lift or a ramp</span>
+      </div>
     </div>
   </div>
 
@@ -673,45 +691,46 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
     <div style="font:600 12.5px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75);margin-top:12px;padding-top:11px;border-top:1px solid var(--k-f0efeb)">{{ pMetroFare }}</div>
   </div>
 
+  <div style="{{ pMapStyle }}"><div id="k-planmap" style="width:100%;height:100%"></div></div>
+  <div style="{{ pMapNoteStyle }}">{{ pMapNote }}</div>
+
   <div style="{{ pRowsStyle }}">
-    <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="4">
-      <div class="k-resrow" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:9px;padding:18px 20px;margin-bottom:12px">
-        <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
-          <div class="k-restrain" onClick="{{ r.onOpen }}" style="flex:none;width:210px;cursor:pointer">
-            <div style="font:700 15.5px/1.3 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ r.name }}</div>
-            <div style="font:400 11.5px/1.5 'IBM Plex Mono',monospace;color:var(--k-fg-8a8a84)">{{ r.no }} &middot; runs daily</div>
-            <div style="{{ r.liveStyle }}">{{ r.live }}</div>
+    <sc-for list="{{ pRows }}" as="r" hint-placeholder-count="5">
+      <div class="k-resrow" style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:11px;padding:18px 20px;margin-bottom:12px">
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div style="flex:none;display:flex;align-items:center;gap:12px">
+            <div style="text-align:right"><div style="font:800 19px/1.15 Manrope,sans-serif">{{ r.dep }}</div></div>
+            <div style="width:52px;text-align:center"><div style="font-size:11px;color:var(--k-fg-8a8a84);margin-bottom:3px">{{ r.dur }}</div><div style="height:2px;background:var(--k-e6e5e0);border-radius:2px"></div></div>
+            <div><div style="font:800 19px/1.15 Manrope,sans-serif">{{ r.arr }}</div></div>
           </div>
-          <div class="k-restimes" style="flex:none;display:flex;align-items:center;gap:12px">
-            <div style="text-align:right"><div style="font:700 16px/1.2 Manrope,sans-serif">{{ r.dep }}</div><div style="font-size:11px;color:var(--k-fg-8a8a84)">{{ r.fromCode }}</div></div>
-            <div style="width:64px;text-align:center"><div style="font-size:11px;color:var(--k-fg-8a8a84);margin-bottom:3px">{{ r.dur }}</div><div style="height:2px;background:var(--k-e6e5e0);border-radius:2px"></div></div>
-            <div><div style="font:700 16px/1.2 Manrope,sans-serif">{{ r.arr }}</div><div style="font-size:11px;color:var(--k-fg-8a8a84)">{{ r.toCode }}</div></div>
+          <div style="flex:none;display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ r.pills }}" as="p" hint-placeholder-count="2"><span style="{{ p.style }}">{{ p.t }}</span></sc-for>
           </div>
-          <div class="k-rescells" style="flex:1;min-width:280px;display:flex;gap:9px;flex-wrap:wrap">
-            <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3">
-              <div onClick="{{ c.onClick }}" style="{{ c.style }}">
-                <div style="font:700 12px/1.2 Manrope,sans-serif">{{ c.k }} &middot; &#8377;{{ c.price }}</div>
-                <div style="{{ c.freeStyle }}">{{ c.freeText }}</div>
-                <div style="font:600 10.5px/1.3 Manrope,sans-serif;color:var(--k-fg-1f3f8f)">{{ c.partText }}</div>
-              </div>
-            </sc-for>
+          <div style="flex:none;font:700 16px/1.2 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ r.fare }}</div>
+          <div style="flex:none;font:600 12px/1.2 Manrope,sans-serif;color:var(--k-fg-8a8a84)">{{ r.changes }}</div>
+          <div style="flex:1;min-width:150px;display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap">
+            <button onClick="{{ r.onChoose }}" style="{{ r.chooseStyle }}">{{ r.chooseLabel }}</button>
           </div>
-          <button class="k-bookbtn" onClick="{{ r.onBook }}" style="{{ r.bookStyle }}">{{ r.bookLabel }}</button>
         </div>
-        <div style="{{ r.stepsStyle }}">
-          <sc-for list="{{ r.steps }}" as="st" hint-placeholder-count="2">
-            <div style="display:flex;gap:12px;padding:7px 0">
-              <div style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:4px;{{ st.dotStyle }}"></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
+          <span style="{{ r.seatStyle }}">{{ r.seatText }}</span>
+          <span style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ r.seatWhy }}</span>
+          <sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2">
+            <span style="font:700 9.5px/1 Manrope,sans-serif;letter-spacing:.07em;text-transform:uppercase;padding:5px 7px;border-radius:4px;{{ g.style }}">{{ g.t }}</span>
+          </sc-for>
+          <div onClick="{{ r.onToggle }}" style="margin-left:auto;cursor:pointer;font:700 12px/1 Manrope,sans-serif;color:var(--k-fg-1f3f8f);text-decoration:underline">{{ r.toggleLabel }}</div>
+        </div>
+        <div style="{{ r.openStyle }}">
+          <sc-for list="{{ r.legs }}" as="l" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;padding:8px 0">
+              <div style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:5px;{{ l.dotStyle }}"></div>
               <div style="flex:1;min-width:0">
-                <div style="font:700 13px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ st.title }}</div>
-                <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ st.sub }}</div>
+                <div style="font:700 13px/1.35 Manrope,sans-serif;color:var(--k-fg-14161a)">{{ l.title }}<span style="{{ l.srcStyle }}">{{ l.srcText }}</span></div>
+                <div style="font:600 12px/1.5 Manrope,sans-serif;color:var(--k-fg-6a6d75)">{{ l.sub }}</div>
+                <div style="{{ l.seatStyle }}">{{ l.seatText }}</div>
               </div>
             </div>
           </sc-for>
-          <div style="{{ r.endStyle }}">
-            <span style="{{ r.endBig }}">{{ r.endText }}</span>
-            <span style="{{ r.passStyle }}">{{ r.passText }}</span>
-          </div>
         </div>
       </div>
     </sc-for>
@@ -4810,9 +4829,52 @@ class Component extends DCLogic {
   planBoot(){
     if(this._pmBusy||this.state.pMetro)return;
     this._pmBusy=true;
-    this.tfetch('/api/metro',null,8000).then(r=>r.json()).then(j=>{
-      this._pp=null;this.setState({pMetro:j.stops||[],pBoard:j.board||null});
-    }).catch(()=>{}).finally(()=>{this._pmBusy=false;});
+    Promise.all([
+      this.tfetch('/api/metro',null,8000).then(r=>r.json()).catch(()=>null),
+      this.tfetch('/api/geo',null,8000).then(r=>r.json()).catch(()=>null),
+    ]).then(([m,g])=>{
+      this._pp=null;
+      const st={};
+      if(m)Object.assign(st,{pMetro:m.stops||[],pBoard:m.board||null});
+      if(g&&g.stations)st.pGeo=g.stations.map(x=>({lat:x.lat,lng:x.lng}));
+      this.setState(st);
+    }).finally(()=>{this._pmBusy=false;});
+  }
+  /** Leaflet, only when a journey is actually drawn. Nobody who never opens a
+      map should pay for one. */
+  planLeaflet(){
+    if(window.L)return Promise.resolve(true);
+    if(this._leafP)return this._leafP;
+    this._leafP=new Promise(res=>{
+      const css=document.createElement('link');
+      css.rel='stylesheet';css.href='/vendor/leaflet/leaflet.css';
+      document.head.appendChild(css);
+      const js=document.createElement('script');
+      js.src='/vendor/leaflet/leaflet.js';
+      js.onload=()=>res(true);js.onerror=()=>res(false);
+      document.head.appendChild(js);
+    });
+    return this._leafP;
+  }
+  planByMin(){
+    const v=this.state.pBy;
+    if(v&&/^\d{2}:\d{2}$/.test(v)){const [h,m]=v.split(':').map(Number);return h*60+m;}
+    return null;
+  }
+  /** A time chosen from words, because a native time picker on a phone is a
+      three-column slot machine and nobody wants one to say "after nine". */
+  planTimeChips(which){
+    const cur=which==='after'?this.state.pAfter:this.state.pBy;
+    const opts=which==='after'
+      ?[['','Now'],['06:00','6 am'],['09:00','9 am'],['12:00','Noon'],['17:00','5 pm'],['20:00','8 pm']]
+      :[['','Any'],['09:00','9 am'],['12:00','Noon'],['18:00','6 pm'],['22:00','10 pm']];
+    return opts.map(([v,l])=>({l,on:(cur||'')===v,
+      onClick:()=>this.setState(which==='after'?{pAfter:v}:{pBy:v}),
+      style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
+        font:'700 12.5px/1 Manrope,sans-serif',
+        border:'1px solid '+((cur||'')===v?'var(--k-d8385a)':'var(--k-dedcd6)'),
+        background:(cur||'')===v?'var(--k-d8385a)':'var(--k-fff)',
+        color:(cur||'')===v?'#fff':'var(--k-fg-40434a)'}}));
   }
   planAfterMin(){
     const v=this.state.pAfter;
@@ -4827,14 +4889,50 @@ class Component extends DCLogic {
    * Book button, the fares and the free counts are the same machinery the
    * Trains page uses - there is no second booking flow to keep in step.
    */
+  planModes(){
+    const m=this.state.pModes;
+    return (!m||!m.length)?['train','metro','bus']:m;
+  }
   async planSearch(){
     const S=this.state;
     const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
     const T=this.planPlace(S.pToK||'metro',S.pToId||'KGWA');
     if(!F||!T)return;
     if(F.k===T.k&&F.id===T.id)return this.setState({pRes:{err:'Pick two different places.'}});
-    if(F.k==='metro'&&T.k==='rail')
-      return this.setState({pRes:{err:'khaali can plan a train into the city, and a ride along the Purple Line. Metro back onto a train is not on this demo yet \u2014 that is the same code with more data, and it is better to say so than to guess.'}});
+    const after=this.planAfterMin();
+    const by=this.planByMin();
+    this.setState({pBusy:true,pRes:null,pOpenIdx:null});
+    // the whole journey, from the one route that knows about all three modes
+    try{
+      const qs='fromKind='+F.k+'&fromId='+encodeURIComponent(F.id)
+        +'&toKind='+T.k+'&toId='+encodeURIComponent(T.id)
+        +'&after='+after+(by!=null?'&by='+by:'')
+        +'&date='+this.dateIsoFor(S.dayIdx||0)
+        +'&modes='+this.planModes().join(',')
+        +(S.pStep?'&needs=step-free':'');
+      const r=await this.tfetch('/api/plan?'+qs,null,12000);
+      const j=await r.json();
+      if(j&&j.ok){
+        // the booking state follows the first train leg, so Book opens the
+        // same class modal the Trains page uses, on the right journey
+        const anyTrain=j.chains.find(c=>c.legs.some(l=>l.mode==='train'));
+        if(anyTrain){
+          const tl=anyTrain.legs.find(l=>l.mode==='train');
+          const fi=this.ST.findIndex(x=>x.n===tl.from),ti=this.ST.findIndex(x=>x.n===tl.to);
+          if(fi>=0&&ti>=0){this._c={};this.setState({from:fi,to:ti,allCls:true,picks:[]});}
+        }
+        return this.setState({pBusy:false,pRes:{kind:'chains',from:F,to:T,chains:j.chains,
+          err:j.chains.length?null:'Nothing runs between those two after that time with the modes you picked. Try more modes, or an earlier time.'}});
+      }
+      this.setState({pBusy:false,pRes:{err:(j&&j.error)||'khaali could not work that one out.'}});
+    }catch(e){this.setState({pBusy:false,pRes:{err:'khaali could not reach the planner. Try again.'}});}
+    return;
+  }
+  async planSearchOld(){
+    const S=this.state;
+    const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
+    const T=this.planPlace(S.pToK||'metro',S.pToId||'KGWA');
+    if(!F||!T)return;
     const after=this.planAfterMin();
     this.setState({pBusy:true,pRes:null});
 
@@ -4888,6 +4986,87 @@ class Component extends DCLogic {
     this.setState({pBusy:false,pRes:{kind:'chain',from:F,to:T,rows}});
   }
 
+  /** One journey, drawn alone. Every other train, route and line is left off:
+      the question on this screen is how SHE gets there, and a map answering
+      twelve other questions at the same time answers none of them. */
+  planShowOnMap(c){
+    this.setState({pMapChain:c});
+    this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),80);});
+  }
+  planPaintMap(){
+    const c=this.state.pMapChain,el=document.getElementById('k-planmap');
+    if(!c||!el||!window.L)return;
+    const L=window.L;
+    if(this._pmap&&this._pmapEl!==el){try{this._pmap.remove();}catch(e){}this._pmap=null;}
+    if(!this._pmap){
+      this._pmap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
+      // a quiet base, so the route is the only thing on it
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        {maxZoom:16,attribution:'\u00a9 Esri'}).addTo(this._pmap);
+      this._pmapEl=el;
+    }
+    const map=this._pmap;
+    if(this._plane)this._plane.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    this._plane=[];
+    const add=l=>{this._plane.push(l);return l.addTo(map);};
+    const COL={train:'#d8385a',metro:'#8C2877',bus:'#1f6fd0',walk:'#8a8a84'};
+    const G=this.state.pGeo||[];
+    if(!G.length)return;
+    const pts=[],marks=[];
+    const railPt=nm=>{const i=this.ST.findIndex(x=>x.n===nm);return i<0?null:[G[i].lat,G[i].lng];};
+    const metroPt=nm=>{const m=(this.state.pMetro||[]).find(x=>x.n===nm||x.n.replace(/^.*, /,'')===nm);return m?[m.lat,m.lng]:null;};
+    const anyPt=nm=>railPt(nm)||metroPt(nm)||null;
+    c.legs.forEach(l=>{
+      let a=null,b=null;
+      if(l.mode==='train'){
+        const i=this.ST.findIndex(x=>x.n===l.from),j=this.ST.findIndex(x=>x.n===l.to);
+        if(i>=0&&j>=0){
+          const lo=Math.min(i,j),hi=Math.max(i,j);
+          const seg=[];for(let k=lo;k<=hi;k++)seg.push([G[k].lat,G[k].lng]);
+          add(L.polyline(seg,{color:COL.train,weight:7,opacity:.95}))
+            .bindTooltip(l.name+' \u00b7 '+l.from+' \u2192 '+l.to);
+          pts.push(...seg);a=seg[0];b=seg[seg.length-1];
+        }
+      }else if(l.mode==='metro'){
+        const ms=this.state.pMetro||[];
+        const i=ms.findIndex(x=>x.id===l.fromId||x.n===l.from),j=ms.findIndex(x=>x.id===l.toId||x.n===l.to);
+        if(i>=0&&j>=0){
+          const seg=ms.slice(Math.min(i,j),Math.max(i,j)+1).map(x=>[x.lat,x.lng]);
+          add(L.polyline(seg,{color:COL.metro,weight:7,opacity:.95}))
+            .bindTooltip(l.line+' \u00b7 '+l.from+' \u2192 '+l.to);
+          pts.push(...seg);a=seg[0];b=seg[seg.length-1];
+        }
+      }else if(l.mode==='bus'){
+        if(l.fromLat&&l.toLat){
+          const seg=[[l.fromLat,l.fromLng],[l.toLat,l.toLng]];
+          add(L.polyline(seg,{color:COL.bus,weight:6,opacity:.9,dashArray:'10 8'}))
+            .bindTooltip(l.name+' \u00b7 '+l.from+' \u2192 '+l.to+(l.source==='simulated'?' \u00b7 simulated':''));
+          pts.push(...seg);a=seg[0];b=seg[1];
+        }
+      }else if(l.mode==='walk'){
+        const p=anyPt(l.from),q=anyPt(l.to);
+        if(p&&q){add(L.polyline([p,q],{color:COL.walk,weight:4,dashArray:'2 8'}))
+          .bindTooltip('Walk '+Math.round((l.km||0)*1000)+' m');pts.push(p,q);a=p;b=q;}
+      }
+      if(a)marks.push({p:a,n:l.from});
+      if(b)marks.push({p:b,n:l.to});
+    });
+    // one numbered pin per place, in the order she passes it
+    const seen=new Set();const uniq=[];
+    marks.forEach(m=>{const k=m.n;if(seen.has(k))return;seen.add(k);uniq.push(m);});
+    uniq.forEach((m,i)=>{
+      const last=i===uniq.length-1;
+      add(L.marker(m.p,{icon:L.divIcon({className:'',iconSize:[0,0],
+        html:'<div style="transform:translate(-13px,-13px);width:26px;height:26px;border-radius:50%;'
+          +'background:'+(i===0?'#2fa866':last?'#d8385a':'#14161a')+';color:#fff;'
+          +'font:700 12px/26px Manrope,sans-serif;text-align:center;'
+          +'box-shadow:0 2px 8px rgba(0,0,0,.35)">'+(i+1)+'</div>'})}))
+        .bindTooltip((i+1)+'. '+m.n,{permanent:false});
+    });
+    if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(0.18));
+    setTimeout(()=>{try{map.invalidateSize();}catch(e){}},80);
+  }
+
   planBindings(){
     const S=this.state,gone={display:'none'};
     // the line is fetched the moment the page is open, not when a field is
@@ -4921,56 +5100,78 @@ class Component extends DCLogic {
       border:'1px solid var(--k-e6e5e0)',borderRadius:9,overflow:'hidden',
       boxShadow:'0 14px 34px rgba(40,45,90,.18)'});
 
-    // ---- the rows: a train, then the rest of the way ----
-    const rows=(R&&R.rows||[]).map(o=>{
-      const x=o.x, cx=this.cxOf(x.no,S.dayIdx), pl=o.plan;
-      const steps=[];
-      if(pl&&pl.ok){
-        pl.legs.forEach(l=>{
-          if(l.mode==='walk')steps.push({dotStyle:{background:'var(--k-8a8a84)'},
-            title:'Walk '+Math.round(l.km*1000)+' m \u00b7 about '+l.min+' min',
-            sub:(l.entrance?l.entrance.n+' of ':'')+l.to+(l.entrance&&l.entrance.lift?' \u00b7 lift':'')});
-          else steps.push({dotStyle:{background:l.color},
-            title:l.line+' \u00b7 every '+l.every+' min',
-            sub:l.stops+' stops \u00b7 about '+Math.round(l.runMin)+' min \u00b7 off at '+l.alight});
-        });
-      }
-      const endText=pl?(pl.ok?(R.to.n.replace(/^.*, /,'')+' by '+pl.arriveText)
-        :(pl.line||'No metro at that hour')):null;
+    // ---- the rows: ways to go, not trains ----
+    // A journey is not a train, so a row does not lead with SL/3A/2A. It leads
+    // with when you leave, when you arrive, what it costs, and whether you will
+    // be sitting down - which is the question nobody else answers.
+    const MODE={train:{c:'var(--k-d8385a)',g:'\u25ac',n:'Train'},
+      metro:{c:'#8C2877',g:'\u25cf',n:'Metro'},
+      bus:{c:'#1f6fd0',g:'\u25b0',n:'Bus'},
+      walk:{c:'var(--k-8a8a84)',g:'\u00b7',n:'Walk'}};
+    const SEAT={yes:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'You get a seat'},
+      likely:{c:'var(--k-fg-14663a)',bg:'var(--k-e6f4ec)',t:'Seat likely'},
+      maybe:{c:'var(--k-fg-8a4a12)',bg:'var(--k-fdf0e3)',t:'Seat if you are lucky'},
+      standing:{c:'var(--k-fg-a71f3d)',bg:'var(--k-fdf3f5)',t:'Standing, most likely'},
+      unknown:{c:'var(--k-fg-8a8a84)',bg:'var(--k-f1f1ee)',t:'Seat not known'}};
+    const chains=(R&&R.chains)||[];
+    const best=chains.length?Math.min.apply(null,chains.map(c=>c.totalMin)):0;
+    const cheap=chains.length?Math.min.apply(null,chains.map(c=>c.fare)):0;
+    const rows=chains.map((c,ci)=>{
+      const sk=SEAT[c.seat.word]||SEAT.unknown;
+      const open=S.pOpenIdx===ci;
+      const tl=c.legs.find(l=>l.mode==='train');
+      const tags=[];
+      if(c.totalMin===best)tags.push({t:'Fastest',style:{background:'var(--k-eaf0fd)',color:'var(--k-fg-1f3f8f)'}});
+      if(c.fare===cheap)tags.push({t:'Cheapest',style:{background:'var(--k-e6f4ec)',color:'var(--k-fg-14663a)'}});
+      if(c.seat.word==='yes')tags.push({t:'You sit',style:{background:'var(--k-e6f4ec)',color:'var(--k-fg-14663a)'}});
+      if(c.simulated)tags.push({t:'Has a simulated leg',style:{background:'var(--k-f1f1ee)',color:'var(--k-fg-8a8a84)'}});
       return {
-        name:x.name,no:x.no,dep:this.toHHMM(o.dM),arr:this.toHHMM(o.aM),
-        dur:this.planDur(o.dM,o.aM),
-        fromCode:this.ST[S.from]?this.ST[S.from].c:'',toCode:this.ST[S.to]?this.ST[S.to].c:'',
-        live:cx?('CANCELLED \u00b7 '+cx.reason):'Scheduled \u00b7 departs '+this.toHHMM(o.dM),
-        liveStyle:{font:'700 10.5px/1.3 Manrope,sans-serif',letterSpacing:'.05em',marginTop:5,
-          color:cx?'var(--k-fg-d8385a)':'var(--k-fg-6a6d75)'},
-        cells:this.CLS.map(c=>{const nn=this.counts(c.k,x.no);const none=nn.free+nn.part===0;
-          return {k:c.k,price:money(this.fare(c.k,Math.abs(this.ST[S.to].km-this.ST[S.from].km))),
-            freeText:none?'Sold out':nn.free+' free',partText:none?'':'+'+nn.part+' en route',
-            freeStyle:{font:'600 11px/1.3 Manrope,sans-serif',color:none?'var(--k-fg-a8a8a2)':nn.free?'var(--k-fg-14663a)':'var(--k-fg-a8a8a2)',margin:'3px 0 1px'},
-            style:{border:'1px solid '+(none?'var(--k-eeede9)':'var(--k-dce9e2)'),
-              background:none?'var(--k-fafaf8)':'var(--k-f7fbf9)',
-              borderRadius:6,padding:'9px 12px',minWidth:104,cursor:none?'default':'pointer'},
-            onClick:none?()=>{}:()=>{this._c={};this.setState({train:x.no,cls:c.k,allCls:false,pax:1,picks:[],
-              classModal:true,onlyThis:true,hov:null});}};}),
-        bookLabel:cx?'Cancelled':'Book',
-        bookStyle:cx?{flex:'none',border:'1px solid var(--k-eeede9)',background:'var(--k-fafaf8)',
-            color:'var(--k-fg-a8a8a2)',font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',
-            borderRadius:6,cursor:'default',minHeight:44}
-          :{flex:'none',border:'none',background:'var(--k-d8385a)',color:'var(--k-fg-fff)',
-            font:'700 13.5px/1 Manrope,sans-serif',padding:'14px 22px',borderRadius:6,
-            cursor:'pointer',minHeight:44},
-        onBook:cx?()=>{}:()=>{this._c={};
-          this.setState({train:x.no,classModal:true,onlyThis:true,hov:null,picks:[],pax:1});},
-        onOpen:()=>{this.setState({train:x.no,page:'train',routeOpen:true});window.scrollTo(0,0);},
-        steps,
-        stepsStyle:{display:steps.length?'block':'none',marginTop:12,paddingTop:12,
+        dep:c.depText,arr:c.arrText,
+        dur:Math.floor(c.totalMin/60)+'h '+String(c.totalMin%60).padStart(2,'0')+'m',
+        fare:'\u20b9'+c.fare,
+        changes:c.changes===0?'direct':(c.changes+(c.changes===1?' change':' changes')),
+        pills:c.legs.filter(l=>l.mode!=='walk').map(l=>({
+          t:(MODE[l.mode]||MODE.walk).n,
+          style:{font:'700 10.5px/1 Manrope,sans-serif',letterSpacing:'.04em',padding:'6px 9px',
+            borderRadius:5,color:'#fff',background:(MODE[l.mode]||MODE.walk).c}})),
+        seatText:sk.t,seatWhy:c.seat.why,
+        seatStyle:{display:'inline-flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:999,
+          font:'700 12px/1 Manrope,sans-serif',color:sk.c,background:sk.bg},
+        tags,
+        legs:c.legs.map(l=>({
+          dotStyle:{background:(MODE[l.mode]||MODE.walk).c},
+          title:l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m '+'\u00b7'+' about '+l.min+' min')
+            :l.mode==='train'?(l.name+' '+'\u00b7'+' '+l.id)
+            :l.mode==='bus'?(l.name+' '+'\u00b7'+' every '+l.every+' min')
+            :(l.line+' '+'\u00b7'+' every '+l.every+' min'),
+          sub:l.mode==='walk'?((l.entrance?l.entrance.n+' of ':'')+l.to)
+            :(l.from+' '+'\u2192'+' '+l.to+(l.dep?('  '+l.dep+' '+'\u2192'+' '+l.arr):'')),
+          seatText:l.seat?((SEAT[l.seat.word]||SEAT.unknown).t+' '+'\u00b7'+' '+l.seat.why):'',
+          seatStyle:{display:l.seat?'block':'none',
+            font:'600 11.5px/1.5 Manrope,sans-serif',marginTop:2,
+            color:(SEAT[(l.seat||{}).word]||SEAT.unknown).c},
+          srcText:l.source==='simulated'?'simulated':(l.source||''),
+          srcStyle:{display:l.source?'inline-block':'none',marginLeft:7,
+            font:'700 9px/1 Manrope,sans-serif',letterSpacing:'.08em',textTransform:'uppercase',
+            padding:'3px 5px',borderRadius:3,
+            background:l.source==='simulated'?'var(--k-fdf0e3)':'var(--k-f1f1ee)',
+            color:l.source==='simulated'?'var(--k-fg-8a4a12)':'var(--k-fg-8a8a84)'}})),
+        openStyle:{display:open?'block':'none',marginTop:12,paddingTop:12,
           borderTop:'1px dashed var(--k-dedcd6)'},
-        endText:endText||'',
-        endStyle:{display:endText?'flex':'none',alignItems:'baseline',gap:10,flexWrap:'wrap',marginTop:10},
-        endBig:{font:'800 15px/1.2 Manrope,sans-serif',color:(pl&&pl.ok)?'var(--k-fg-14663a)':'var(--k-fg-8a4a12)'},
-        passText:(pl&&pl.ok)?('\u20b9'+pl.fare.qr+' day pass \u2014 metro and any BMTC bus, on your ticket after you book'):'',
-        passStyle:{font:'600 12px/1.5 Manrope,sans-serif',color:'var(--k-fg-6a6d75)'},
+        toggleLabel:open?'Hide the legs':'See every leg',
+        onToggle:()=>this.setState({pOpenIdx:open?null:ci}),
+        onChoose:()=>{
+          this.setState({pOpenIdx:ci});
+          this.planShowOnMap(c);
+          if(tl){const fi=this.ST.findIndex(x=>x.n===tl.from),ti=this.ST.findIndex(x=>x.n===tl.to);
+            if(fi>=0&&ti>=0){this._c={};
+              this.setState({from:fi,to:ti,train:tl.id,allCls:true,picks:[],pax:1,
+                classModal:true,onlyThis:true,hov:null});}}},
+        chooseLabel:tl?'Book the train':'Show me on the map',
+        chooseStyle:{flex:'none',border:'none',
+          background:tl?'var(--k-d8385a)':'var(--k-1f3f8f)',color:'#fff',
+          font:'700 13px/1 Manrope,sans-serif',padding:'13px 18px',borderRadius:7,
+          cursor:'pointer',minHeight:44},
       };
     });
 
@@ -4988,6 +5189,33 @@ class Component extends DCLogic {
       pSwap:()=>{if(!F||!T)return;this.setState({pFromK:T.k,pFromId:T.id,pToK:F.k,pToId:F.id,pTxtF:null,pTxtT:null});},
       pAfterVal:S.pAfter||'',
       setPAfter:e=>this.setState({pAfter:e.target.value}),
+      // the modes she is willing to use. Nothing chosen means everything.
+      pModeChips:[['train','Train'],['metro','Metro'],['bus','Bus']].map(([k,l])=>{
+        const cur=S.pModes||['train','metro','bus'];
+        const on=cur.includes(k);
+        return {l,on,onClick:()=>{
+          const set=new Set(S.pModes||['train','metro','bus']);
+          if(set.has(k))set.delete(k);else set.add(k);
+          this.setState({pModes:[...set]});},
+          style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
+            font:'700 13px/1 Manrope,sans-serif',
+            border:'1px solid '+(on?'var(--k-d8385a)':'var(--k-dedcd6)'),
+            background:on?'var(--k-d8385a)':'var(--k-fff)',
+            color:on?'#fff':'var(--k-fg-40434a)'}};}),
+      pAllModes:()=>this.setState({pModes:['train','metro','bus']}),
+      pAllStyle:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
+        font:'700 13px/1 Manrope,sans-serif',
+        border:'1px solid '+(((S.pModes||[]).length===3||!S.pModes)?'var(--k-14161a)':'var(--k-dedcd6)'),
+        background:((S.pModes||[]).length===3||!S.pModes)?'var(--k-14161a)':'var(--k-fff)',
+        color:((S.pModes||[]).length===3||!S.pModes)?'#fff':'var(--k-fg-40434a)'},
+      pAfterChips:this.planTimeChips('after'),
+      pByChips:this.planTimeChips('by'),
+      pMapStyle:{display:S.pMapChain?'block':'none',height:340,borderRadius:11,
+        overflow:'hidden',border:'1px solid var(--k-e6e5e0)',marginTop:14},
+      pMapNote:S.pMapChain?('Only this journey is drawn. '
+        +(S.pMapChain.simulated?'The dashed bus leg has no published timetable and is simulated.':'')):'',
+      pMapNoteStyle:{display:S.pMapChain?'block':'none',marginTop:7,
+        font:'500 11.5px/1.6 Manrope,sans-serif',color:'var(--k-fg-8a8a84)'},
       pStepOn:!!S.pStep,
       togglePStep:()=>this.setState({pStep:!S.pStep}),
       pStepBox:{width:17,height:17,borderRadius:4,flex:'none',

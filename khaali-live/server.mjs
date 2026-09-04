@@ -1114,6 +1114,32 @@ async function api(req, res, url) {
     const from = q.get('from') || null, to = q.get('to') || null;
     return send(res, 200, journey.plan({ arriveAt: arrive, needs, from, to }));
   }
+  // Every sensible way from A to B, with what each costs in time, in money and
+  // in standing up. The berth counts come from the real inventory, so the seat
+  // a train promises is the same seat the booking page will sell.
+  if (p === '/api/plan') {
+    const fk = q.get('fromKind') === 'metro' ? 'metro' : 'rail';
+    const tk = q.get('toKind') === 'metro' ? 'metro' : 'rail';
+    const fid = String(q.get('fromId') || ''), tid = String(q.get('toId') || '');
+    if (!fid || !tid) return send(res, 400, { ok: false, error: 'fromId and toId are required' });
+    const after = parseInt(q.get('after'), 10);
+    const by = q.get('by') ? parseInt(q.get('by'), 10) : null;
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get('date') || '')) ? q.get('date') : TODAY();
+    const modes = String(q.get('modes') || 'train,metro,bus').split(',')
+      .map(x => x.trim()).filter(x => journey.MODES.includes(x));
+    const needs = String(q.get('needs') || '').split(',').map(x => x.trim()).filter(Boolean);
+    const r = journey.journeys({
+      from: { kind: fk, id: fid }, to: { kind: tk, id: tid },
+      after: (after >= 0 && after < 1440) ? after : 0,
+      by: (by >= 0 && by < 2880) ? by : null,
+      modes, needs,
+      // the same inventory the seat map and the booking page read
+      counts: (no, f, t) => { try { return store.countsFor(String(no), date, 'SL', f, t).free; } catch (e) { return null; } },
+    });
+    if (!r.ok) return send(res, 400, r);
+    return send(res, 200, { ok: true, chains: r.chains, date, modes });
+  }
+
   // Many plans in one call. A journey search offers a dozen trains, each
   // arriving at its own minute, and each needing its own continuation; asking
   // for them one at a time would be a dozen round trips on a phone signal.
