@@ -5985,6 +5985,67 @@ t('a metro figure names the station, not the inside of a carriage', () => {
     'onboard language on a station-entries number');
 });
 
+console.log('\nthe card contract: identity, standing, and per-mode evidence');
+
+t('a comparison carries both sides whole, not just the differences', () => {
+  const sel = trainChain('A EXP', 425, 565, 0.5, 90);
+  const alt = trainChain('B PASS', 450, 580, 0.5, 120);
+  const oc = CARD.optionComparisonOf(sel, alt, {
+    selectedChainId: 'c-sel', alternativeChainId: 'c-alt' });
+  assert.strictEqual(oc.selectedChainId, 'c-sel');
+  assert.strictEqual(oc.alternativeChainId, 'c-alt');
+  assert.strictEqual(oc.arrivalDifferenceMinutes, oc.timeDifferenceMinutes);
+  assert.strictEqual(oc.selectedFare, 90);
+  assert.strictEqual(oc.alternativeFare, 120);
+  assert.strictEqual(oc.selectedTransfers, 0);
+  assert.strictEqual(oc.alternativeTransfers, 0);
+  assert.strictEqual(oc.fareBasis, 'per person');
+  assert.strictEqual(oc.alternativeFeasible, true,
+    'infeasible candidates never enter the chains list - the field states the invariant');
+});
+
+t('reason codes exist only where their numbers do', () => {
+  const oc = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.93, 90),
+    trainChain('B', 450, 580, 0.82, 120), {});
+  assert.deepStrictEqual(oc.reasonCodes.slice().sort(),
+    ['ARRIVES_EARLIER', 'CHEAPER', 'MORE_CROWDED'].sort());
+  const noCrowd = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.85, 90),
+    metroChain(450, 580, 0.40, 120), {});
+  assert.ok(!noCrowd.reasonCodes.some(k => /CROWDED/.test(k)),
+    'a crowding code without a comparable crowding number');
+});
+
+t('the card states its identity and standing at the top', () => {
+  const rec = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725, role: 'RECOMMENDED', selectedChainId: 'chain-1' });
+  assert.strictEqual(rec.recommendationStatus, 'RECOMMENDED');
+  assert.strictEqual(rec.evaluationStatus, rec.recommendation.status);
+  assert.strictEqual(rec.chainId, 'chain-1');
+  const alt = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725, role: 'ALTERNATIVE' });
+  assert.strictEqual(alt.recommendationStatus, 'ALTERNATIVE');
+  const unsaid = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725 });
+  assert.strictEqual(unsaid.recommendationStatus, null,
+    'a role the caller never assigned was invented');
+});
+
+t('evidence names a source per mode ridden, and none for a mode not ridden', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  assert.ok(/demo reservation inventory/.test(c.evidence.trainInventorySource),
+    'the train source does not admit it is demo inventory');
+  assert.ok(/simulated demand model/.test(c.evidence.busDemandSource),
+    'this journey rides a bus, and its demand source went unnamed');
+  assert.strictEqual(c.evidence.metroDemandSource, null, 'a metro source with no metro leg');
+  const b = CARD.build({ chain: busOnlyChain('506-A', 600, 660, 0.38) });
+  assert.ok(/simulated demand model/.test(b.evidence.busDemandSource), b.evidence.busDemandSource);
+  assert.strictEqual(b.evidence.trainInventorySource, null);
+  const m = CARD.build({ chain: metroChain(450, 560, 0.62) });
+  assert.ok(/station entries/.test(m.evidence.metroDemandSource), m.evidence.metroDemandSource);
+  assert.ok(/onboard crowding is not measured/i.test(m.evidence.metroDemandSource),
+    'the station-entries source implies onboard knowledge');
+});
+
 t('the same name twice gets its departure time, both ways home included', () => {
   const oc = CARD.optionComparisonOf(trainChain('MEMU', 600, 660, 0.5),
     trainChain('MEMU', 630, 690, 0.5), {});

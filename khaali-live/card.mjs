@@ -200,7 +200,8 @@ function availabilityOf(l, railCheck) {
  */
 export function build({ chain, mp = null, railDecision = null, searchAt = null,
                         scenario = null, bookingStatus = 'NONE',
-                        alternative = null, selectedChainId = null } = {}) {
+                        alternative = null, selectedChainId = null,
+                        role = null } = {}) {
   if (!chain || !chain.legs || !chain.legs.length) return null;
   const legs = chain.legs;
   const t = timing(legs, searchAt);
@@ -211,6 +212,15 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
 
   const cmp = evaluated ? comparisonOf(mp) : null;
   return {
+    /* The card's identity and standing, at the top where a consumer looks
+       first: which chain this is, how much was actually established about it,
+       and whether it is the winner or an alternative. The role is the
+       caller's to assign - only the caller knows the ranking - and absent
+       when the caller did not say. */
+    chainId: chain.chainId || selectedChainId || null,
+    evaluationStatus: status,
+    recommendationStatus: role === 'RECOMMENDED' ? 'RECOMMENDED'
+      : role === 'ALTERNATIVE' ? 'ALTERNATIVE' : null,
     recommendation: {
       status,
       /* "Recommended" is a comparative word and it is only earned by a
@@ -260,6 +270,20 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
     evidence: {
       demandSource: evaluated ? 'simulated conductor and demand model'
         : (legs.some(l => l.mode === 'bus') ? 'not evaluated for this departure' : null),
+      /* One source line per mode actually ridden, so a mixed journey never
+         wears one mode's evidence as if it covered the rest. Null when the
+         journey has no leg of that mode - no leg, no source claim. */
+      trainInventorySource: legs.some(l => l.mode === 'train')
+        ? 'khaali’s own demo reservation inventory, counted per stretch' : null,
+      busDemandSource: legs.some(l => l.mode === 'bus')
+        ? (evaluated ? 'simulated conductor and demand model'
+          : legs.some(l => l.mode === 'bus' && l.cap && l.cap.quality === 'counted')
+            ? 'khaali ticket scans - a floor, not an occupancy'
+            : 'khaali’s simulated demand model - no operator is connected') : null,
+      metroDemandSource: legs.some(l => l.mode === 'metro')
+        ? (legs.some(l => l.mode === 'metro' && l.cap && l.cap.quality === 'simulated')
+          ? 'simulated demand model on the demo network'
+          : 'BMRCL weekday hourly station entries; onboard crowding is not measured') : null,
       trafficSource: evaluated ? 'simulated road delay, per stretch and per minute'
         : 'not evaluated for this journey',
       timetableSource: legs.some(l => l.scheduleKind === 'frequency' || l.departureDerived)
@@ -526,9 +550,34 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
 
   const single = chain.changes === 0 && selNames.length === 1;
   const altSingle = alt.changes === 0 && altNames.length === 1;
+  /* Machine-readable mirror of the established differences - each code exists
+     only because its number does, so a consumer can never cite a claim the
+     ledger did not make. */
+  const reasonCodes = [];
+  if (timeDifferenceMinutes > 0) reasonCodes.push('ARRIVES_EARLIER');
+  else if (timeDifferenceMinutes < 0) reasonCodes.push('ARRIVES_LATER');
+  if (fareDifference < 0) reasonCodes.push('CHEAPER');
+  else if (fareDifference > 0) reasonCodes.push('COSTS_MORE');
+  if (transferDifference < 0) reasonCodes.push('FEWER_TRANSFERS');
+  else if (transferDifference > 0) reasonCodes.push('MORE_TRANSFERS');
+  if (crowdingDifference != null) reasonCodes.push(crowdingDifference > 0
+    ? 'LESS_CROWDED' : 'MORE_CROWDED');
   return {
     selectedChainId, alternativeChainId,
     selectedLabel, alternativeLabel,
+    /* Infeasible candidates are removed before ranking and never enter the
+       chains list, so an alternative drawn from it was plannable for this
+       exact search - the invariant this field states rather than assumes. */
+    alternativeFeasible: true,
+    selectedArrival: chain.arr != null ? hhmm(chain.arr) : (chain.arrText || null),
+    alternativeArrival: alt.arr != null ? hhmm(alt.arr) : (alt.arrText || null),
+    arrivalDifferenceMinutes: timeDifferenceMinutes,
+    selectedFare: chain.fare != null ? chain.fare : null,
+    alternativeFare: alt.fare != null ? alt.fare : null,
+    selectedTransfers: chain.changes != null ? chain.changes : null,
+    alternativeTransfers: alt.changes != null ? alt.changes : null,
+    fareBasis: 'per person',
+    reasonCodes,
     // "Stay on" is for keeping one vehicle rather than breaking the journey
     // up; between two single vehicles - this train or that train - it is a
     // plain choice, and the verb is Take

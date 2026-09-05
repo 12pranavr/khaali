@@ -2450,16 +2450,20 @@ async function api(req, res, url) {
        she would have taken without khaali when that is a different journey,
        otherwise the next journey in the ranking. Same search, same party, same
        constraints - the comparison is computed inside card.mjs from the two
-       itineraries, never copied off a page-level panel. Only the recommended
-       row gets it for now; the rollout to every card waits for approval. */
+       itineraries, never copied off a page-level panel. */
     const pickedForCards = a.chains[a.recommended] || a.chains[0];
     const altForPicked = (obvious && obvious.chain && obvious.chain !== pickedForCards)
       ? obvious.chain : a.chains.find(x => x !== pickedForCards) || null;
     a.chains.forEach(ch => {
       try {
+        /* Booking must never identify a journey by its position in an array;
+           every chain in the response carries its stable id. The multiplan
+           chain minted its own - it is not overwritten. */
+        if (ch.chainId == null) ch.chainId = decision.chainId(ch);
+        const role = ch === pickedForCards ? 'RECOMMENDED' : 'ALTERNATIVE';
         if (ch.kind === 'planned' && mp && mp.answer) {
           ch.card = card.build({ chain: ch, mp, railDecision: null,
-            searchAt: mp.demoTime,
+            searchAt: mp.demoTime, role,
             scenario: { scenarioId: mp.scenarioId, revision: mp.revision } });
         } else {
           const d2 = decision.decide({ chain: ch, pax, date,
@@ -2475,6 +2479,7 @@ async function api(req, res, url) {
             : (pickedForCards && pickedForCards !== ch ? pickedForCards : null);
           ch.card = card.build({ chain: ch, mp: null, railDecision: d2,
             searchAt: (after >= 0 && after < 1440) ? after : null,
+            role,
             selectedChainId: decision.chainId(ch),
             alternative: yardstick
               ? { chain: yardstick, chainId: decision.chainId(yardstick) } : null });
@@ -3857,7 +3862,7 @@ function serveStatic(res, urlPath) {
   if (rel.startsWith('/scan/')) rel = '/scan.html';       // /scan/<pass>, the conductor's tap
   if (rel === '/drive' || rel.startsWith('/drive/')) rel = '/drive.html';  // the demand map
   if (rel === '/live-map') rel = '/map.html';
-  if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
+  if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
   if (rel === '/conduct' || rel.startsWith('/conduct/')) rel = '/conduct.html';  // the demo conductor
   if (rel === '/scenario' || rel.startsWith('/scenario/')) rel = '/scenario.html';  // the presenter's controls
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
