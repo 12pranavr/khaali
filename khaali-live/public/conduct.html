@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · conduct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* A conductor works standing up, on a moving bus, with one hand. Big targets,
+     one number at a time, and never a form. */
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0f13;color:#e8e9ee;font-family:Manrope,system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 18px 40px}
+  .brand{font:800 18px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .brand span{color:#d8385a}
+  .brand small{display:block;font:600 9.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c828f;margin-top:4px}
+  .state{margin-top:18px;border-radius:16px;padding:22px;text-align:center;
+    border:1px solid #222836;background:#151922}
+  .state.good{background:#0f2b1b;border-color:#1f5a38}
+  .state.bad{background:#2c1219;border-color:#5a1f2e}
+  .state.off{background:#2a2413;border-color:#5a4a1f}
+  .word{font:800 30px/1.05 Manrope,sans-serif;letter-spacing:-.02em}
+  .good .word{color:#5bd48b}.bad .word{color:#f2a6b6}.off .word{color:#e0a419}
+  .sub{font:600 13.5px/1.5 Manrope,sans-serif;color:#b9bfcc;margin-top:8px}
+  .card{background:#151922;border:1px solid #222836;border-radius:12px;padding:16px;margin-top:12px}
+  .lbl{font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;
+    color:#7c828f;margin-bottom:10px;display:flex;justify-content:space-between;gap:10px}
+  .row{display:flex;gap:12px;align-items:baseline;padding:8px 0;border-top:1px solid #1c202a}
+  .row:first-of-type{border-top:none}
+  .k{flex:none;width:104px;font:600 12px/1.5 Manrope,sans-serif;color:#7c828f}
+  .v{flex:1;font:600 13.5px/1.5 Manrope,sans-serif}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .says{font:500 11.5px/1.6 Manrope,sans-serif;color:#8d94a3;padding:6px 0 2px}
+  .chip{display:inline-block;font:700 8.5px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;
+    text-transform:uppercase;padding:4px 6px;border-radius:5px;background:#232838;color:#8d94a3;margin-left:6px}
+  .chip.sim{background:#2a2413;color:#e0a419}
+  button{border:none;border-radius:12px;padding:16px 12px;cursor:pointer;width:100%;
+    font:800 15px/1.2 Manrope,sans-serif;color:#fff;min-height:54px;margin-top:10px;background:#d8385a}
+  button.ok{background:#1f6f45}
+  button.ghost{background:#232838;color:#b9bfcc;min-height:44px;padding:12px;font-size:13px}
+  button:disabled{opacity:.45;cursor:default}
+  select,input{width:100%;background:#0d0f13;color:#e8e9ee;border:1px solid #2b3242;border-radius:10px;
+    padding:13px 12px;font:600 14px/1.2 Manrope,sans-serif;min-height:48px}
+  .two{display:flex;gap:10px}.two>*{flex:1}
+  .bars{display:flex;gap:2px;align-items:flex-end;height:64px;margin-top:6px}
+  .bar{flex:1;background:#232838;border-radius:2px 2px 0 0;min-height:2px;position:relative}
+  .bar.hot{background:#d8385a}.bar.warm{background:#e0a419}.bar.cool{background:#3f8f63}
+  .axis{display:flex;justify-content:space-between;font:600 9.5px/1.6 'IBM Plex Mono',monospace;
+    color:#5c6270;letter-spacing:.08em;margin-top:4px}
+  .foot{font:500 11px/1.7 Manrope,sans-serif;color:#6b7280;margin-top:22px;
+    border-top:1px solid #1c202a;padding-top:14px}
+  .foot b{color:#8d94a3;font-weight:700}
+  a{color:#8d94a3}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">khaali<span>.</span><small>conductor · demo</small></div>
+
+  <div id="state" class="state off">
+    <div class="word">Loading</div>
+    <div class="sub">Reading the departures.</div>
+  </div>
+
+  <div class="card">
+    <div class="lbl"><span>The bus you are on</span></div>
+    <select id="route"></select>
+    <div style="height:10px"></div>
+    <select id="dep"></select>
+    <div class="says" id="who"></div>
+  </div>
+
+  <div class="card">
+    <div class="lbl"><span>Aboard, stop by stop</span><span id="basis"></span></div>
+    <div class="bars" id="bars"></div>
+    <div class="axis"><span id="ax0">first stop</span><span id="ax1">last stop</span></div>
+    <div class="says" id="curve"></div>
+  </div>
+
+  <div class="card">
+    <div class="lbl"><span>Sell a ticket</span></div>
+    <div class="two">
+      <select id="from"></select>
+      <select id="to"></select>
+    </div>
+    <div style="height:10px"></div>
+    <div class="two">
+      <select id="pax"></select>
+      <button class="ok" id="sell" style="margin-top:0">Sell</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="lbl"><span>Leaving a stop</span></div>
+    <div class="two">
+      <select id="cpstop"></select>
+      <input id="cpcount" type="number" min="0" step="1" placeholder="how many aboard">
+    </div>
+    <button class="ghost" id="confirm">Confirm the count leaving this stop</button>
+    <div class="says">This is the final word for that stop. A ticket entered afterwards will not
+      be quietly added to it &mdash; khaali marks the departure as needing reconciliation and stops
+      recommending from it.</div>
+  </div>
+
+  <button class="ghost" id="clear">Clear this departure and go back to the model</button>
+
+  <div class="foot">
+    <b>Nothing here is measured.</b> No operator is connected to khaali. Everything on this page is
+    a demo conductor, and every number it produces is labelled simulated wherever it appears &mdash;
+    on the planner, on the map, in the reason khaali gives for a journey.<br><br>
+    <b>khaali does not reserve a seat on a bus.</b> A bus is boarded, not booked. What this ledger
+    protects is planning room: having pointed people at the 07:00, khaali stops telling everybody
+    else the 07:00 is empty.<br><br>
+    <b>Nobody is named.</b> Occupancy needs a count and a destination, not a person, so no passenger
+    identity is entered, stored or scanned here.
+  </div>
+</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var saidAt = 0;
+  function setState(kind, word, sub){
+    var el = $('state');
+    el.className = 'state ' + kind;
+    el.innerHTML = '<div class="word">' + esc(word) + '</div><div class="sub">' + sub + '</div>';
+    saidAt = Date.now();
+  }
+
+  var routes = [], deps = [], cur = null, prof = null, names = [];
+
+  function opt(el, list, sel){
+    el.innerHTML = list.map(function(o){
+      return '<option value="' + esc(o.v) + '"' + (String(o.v) === String(sel) ? ' selected' : '')
+        + '>' + esc(o.l) + '</option>';
+    }).join('');
+  }
+  function hhmm(m){
+    if (m == null) return '--:--';
+    var d = ((m % 1440) + 1440) % 1440;
+    return ('0' + Math.floor(d / 60)).slice(-2) + ':' + ('0' + (d % 60)).slice(-2);
+  }
+
+  function drawCurve(){
+    if (!prof || !prof.stretch){ $('bars').innerHTML = ''; return; }
+    var cap = prof.capacity && prof.capacity.boardingCapacity;
+    var peak = Math.max(1, cap || Math.max.apply(null, prof.stretch.concat([1])));
+    $('bars').innerHTML = prof.stretch.map(function(v){
+      var f = v / peak;
+      var cls = f >= 0.85 ? 'hot' : f >= 0.6 ? 'warm' : 'cool';
+      return '<div class="bar ' + cls + '" style="height:' + Math.max(2, Math.round(f * 100))
+        + '%" title="' + v + ' aboard"></div>';
+    }).join('');
+    var worst = Math.max.apply(null, prof.stretch.concat([0]));
+    $('curve').innerHTML = 'Busiest stretch carries <b>' + worst + '</b>'
+      + (cap ? ' of ' + cap : '') + '. ' + esc(prof.says || '');
+    $('basis').innerHTML = prof.basis === 'this-trip'
+      ? '<span class="chip">this departure</span>'
+      : '<span class="chip sim">khaali&rsquo;s model</span>';
+  }
+
+  function paint(){
+    if (!cur) return;
+    $('who').innerHTML = 'The <b>' + esc(cur.name) + '</b> of ' + hhmm(cur.depMin)
+      + ', arriving ' + hhmm(cur.arrMin) + '. <span class="mono" style="color:#5c6270">'
+      + esc(cur.tripInstanceId) + '</span>';
+    var stops = names.map(function(n, i){ return { v: i, l: i + ' &middot; ' + n }; });
+    opt($('from'), stops.slice(0, -1), $('from').value || 0);
+    opt($('to'), stops.slice(1), $('to').value || stops.length - 1);
+    opt($('cpstop'), stops.slice(0, -1), $('cpstop').value || 0);
+    drawCurve();
+    // The page re-reads every few seconds. It must not wipe an answer the
+    // conductor was just given while they are still looking at it.
+    var say = (Date.now() - saidAt > 6000) ? setState : function(){};
+    if (!prof) return;
+    if (prof.status === 'DATA_INCONSISTENT') say('bad', 'Does not add up', esc(prof.says));
+    else if (prof.status === 'NEEDS_RECONCILIATION') say('off', 'Needs reconciling', esc(prof.says));
+    else if (prof.basis === 'this-trip') say('good', 'Ticketing this bus',
+      'khaali is planning from what you entered, not from its model.');
+    else say('off', 'Model only', 'Nobody has ticketed this departure. Sell one and khaali switches to it.');
+  }
+
+  function pull(){
+    var q = '/api/conduct?route=' + encodeURIComponent($('route').value || '')
+      + '&dep=' + encodeURIComponent($('dep').value || '');
+    fetch(q).then(function(r){ return r.json(); }).then(function(j){
+      if (!j || !j.ok) return;
+      routes = j.routes || routes;
+      deps = j.departures || deps;
+      names = j.names || names;
+      cur = j.current || null;
+      prof = j.profile || null;
+      // select what the server actually loaded. Showing one route in the box
+      // while reading another underneath is how a conductor ends up ticketing
+      // a bus they are not on.
+      opt($('route'), routes.map(function(r2){ return { v: r2.id, l: r2.op + ' ' + r2.id + ' · ' + r2.from + ' → ' + r2.to }; }), $('route').value || (cur && cur.route));
+      opt($('dep'), deps.map(function(d){ return { v: d.depMin, l: hhmm(d.depMin) + ' → ' + hhmm(d.arrMin) + (d.ticketed ? ' · ticketed' : '') }; }), $('dep').value || (cur && cur.depMin));
+      if (!$('pax').options.length) opt($('pax'), [1,2,3,4,5,6,8,10].map(function(n){ return { v: n, l: n + (n === 1 ? ' person' : ' people') }; }), 1);
+      paint();
+    }).catch(function(){});
+  }
+
+  function post(body, good){
+    fetch('/api/conduct', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (!j || !j.ok) return setState('bad', 'Not recorded', esc((j && j.error) || 'khaali could not record that.'));
+        prof = j.profile || prof;
+        setState('good', good, esc((j.profile && j.profile.says) || ''));
+        drawCurve();
+      })
+      .catch(function(){ setState('bad', 'Not recorded', 'khaali could not reach the server.'); });
+  }
+
+  $('route').onchange = function(){ $('dep').value = ''; pull(); };
+  $('dep').onchange = pull;
+  $('sell').onclick = function(){
+    var f = +$('from').value, t = +$('to').value;
+    if (!(t > f)) return setState('bad', 'Not a journey', 'A ticket has to go forward along the route.');
+    post({ act: 'ticket', route: $('route').value, dep: +$('dep').value,
+      from: f, to: t, pax: +$('pax').value }, 'Ticket sold');
+  };
+  $('confirm').onclick = function(){
+    var n = $('cpcount').value;
+    if (n === '') return setState('bad', 'No number', 'Say how many are aboard as it leaves.');
+    post({ act: 'onboard', route: $('route').value, dep: +$('dep').value,
+      stop: +$('cpstop').value, count: Math.max(0, Math.floor(+n)) }, 'Count confirmed');
+  };
+  $('clear').onclick = function(){
+    post({ act: 'clear', route: $('route').value, dep: +$('dep').value }, 'Back to the model');
+  };
+
+  pull();
+  setInterval(pull, 8000);
+})();
+</script>
+</body>
+</html>

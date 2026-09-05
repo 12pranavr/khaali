@@ -49,6 +49,7 @@ import * as capacity from './capacity.mjs';
 import * as transfer from './transfer.mjs';
 import * as splitplan from './splitplan.mjs';
 import * as busledger from './busledger.mjs';
+import { BUSES } from './buses.mjs';
 import * as conductor from './conductor.mjs';
 import * as claims from './claims.mjs';
 import * as allocate from './allocate.mjs';
@@ -359,6 +360,12 @@ try {
     if (r.t === 'ride' && r.ride && r.ride.id) RIDES.set(r.ride.id, { ...r.ride });
     if (r.t === 'ridegone') { const x = RIDES.get(r.id); if (x) hire.cancelRide(x, r.at); }
     if (r.t === 'lastmile' && r.rec) DEMAND.push({ ...r.rec });
+    // What a conductor entered outlives a restart. The ids are the conductor's
+    // own, so a replay of the same line is a no-op rather than a second
+    // boarding - which is why every event carries one.
+    if ((r.t === 'bustrip' || r.t === 'busticket' || r.t === 'busonboard') && r.ev) {
+      try { busledger.record(conductor.event(r.ev)); } catch (e) { /* a line khaali can no longer parse */ }
+    }
     // The `fix: null` is not tidiness. It is the line that makes "the position
     // is discarded when the window ends" true across a restart: a commitment
     // comes back, and where the driver was does not.
@@ -1414,6 +1421,94 @@ async function api(req, res, url) {
     }
     return send(res, 200, { shiftMin: simShiftMin(), speed: simSpeed, now: simNow().getTime(),
       clock: hhmm(simNow().getHours() * 60 + simNow().getMinutes()) });
+  }
+
+  /* The demo conductor.
+     Nobody publishes bus occupancy, so this is a person with a ticketing machine
+     -  simulated, and labelled simulated everywhere it surfaces. It writes
+     conductor events for ONE departure, which is what makes the split demo true
+     rather than a slideshow: the planner reads that departure's own ledger, not
+     an average of the route.
+
+     No passenger identity is accepted or stored. Occupancy needs a count and a
+     destination; a name would be data khaali has no use for and no right to. */
+  if (p === '/api/conduct') {
+    const routeId = String(q.get('route') || '');
+    const bus = BUSES.find(b => b.id === routeId) || BUSES[BUSES.length - 1];
+    const date = TODAY();
+    const dayStart = 0;
+    const all = busledger.departuresOf(bus, date, dayStart, 1440);
+    const wanted = parseInt(q.get('dep'), 10);
+    // the one about to leave, not the first of the day - a conductor opening
+    // this at nine in the morning is not on the five o'clock bus
+    const clock = simNow().getHours() * 60 + simNow().getMinutes();
+    const cur = all.find(d => d.depMin === wanted)
+      || all.find(d => d.depMin >= clock) || all[all.length - 1] || null;
+
+    const shape = (d) => {
+      if (!d) return null;
+      const prof = busledger.profileFor(d, { now: Date.now() });
+      return { profile: prof, current: {
+        tripInstanceId: d.departure.id, name: bus.op + ' ' + bus.id,
+        depMin: d.depMin, arrMin: d.arrMin, route: bus.id,
+        claims: claims.outstanding(BUSCLAIMS, d.departure.id) } };
+    };
+
+    if (req.method === 'POST') {
+      const b = await readBody(req);
+      const rt = BUSES.find(x => x.id === String(b.route || '')) || bus;
+      const list = busledger.departuresOf(rt, date, dayStart, 1440);
+      const d = list.find(x => x.depMin === Math.floor(+b.dep)) || list[0];
+      if (!d) return send(res, 400, { ok: false, error: 'khaali does not run that departure today.' });
+      const id = d.departure.id;
+      try {
+        if (b.act === 'clear') {
+          busledger.forget(id);
+        } else if (b.act === 'ticket') {
+          const from = Math.floor(+b.from), to = Math.floor(+b.to);
+          const pax = Math.max(1, Math.min(40, Math.floor(+b.pax) || 1));
+          // the trip has to be declared before anything can be sold on it
+          if (!busledger.eventsOf(id).length) {
+            const head = conductor.event({ kind: 'bustrip', id: id + ':head',
+              tripInstanceId: id, stopCount: rt.nStops, capacity: busledger.FLEET[rt.op] });
+            busledger.record(head);
+            journal.append({ t: 'bustrip', ev: head });
+          }
+          const ev = conductor.event({ kind: 'ticket', id: id + ':t' + Date.now() + ':' + from + '-' + to,
+            tripInstanceId: id, stopSequence: from, toStopSequence: to, pax });
+          busledger.record(ev);
+          journal.append({ t: 'busticket', ev });
+        } else if (b.act === 'onboard') {
+          if (!busledger.eventsOf(id).length) {
+            const head = conductor.event({ kind: 'bustrip', id: id + ':head',
+              tripInstanceId: id, stopCount: rt.nStops, capacity: busledger.FLEET[rt.op] });
+            busledger.record(head);
+            journal.append({ t: 'bustrip', ev: head });
+          }
+          const ev = conductor.event({ kind: 'onboard', id: id + ':c' + Date.now(),
+            tripInstanceId: id, stopSequence: Math.floor(+b.stop),
+            count: Math.max(0, Math.floor(+b.count) || 0),
+            coversEventsThroughSeq: conductor.seqAt() });
+          busledger.record(ev);
+          journal.append({ t: 'busonboard', ev });
+        } else {
+          return send(res, 400, { ok: false, error: 'khaali does not know that action.' });
+        }
+      } catch (e) {
+        return send(res, 400, { ok: false, error: e.message });
+      }
+      return send(res, 200, { ok: true, ...shape(d) });
+    }
+
+    return send(res, 200, { ok: true, date,
+      routes: BUSES.map(x => ({ id: x.id, op: x.op, from: x.from, to: x.to,
+        nStops: x.nStops, source: x.source })),
+      departures: all.map(d => ({ depMin: d.depMin, arrMin: d.arrMin,
+        ticketed: busledger.basisOf(d.departure.id) === 'this-trip' })),
+      names: Array.from({ length: bus.nStops }, (_, i) =>
+        i === 0 ? bus.from : i === bus.nStops - 1 ? bus.to : ('stop ' + i)),
+      ...shape(cur),
+      note: 'Simulated. No operator is connected to khaali, and no number here was measured.' });
   }
 
   if (p === '/api/geo') {
@@ -3569,7 +3664,8 @@ function serveStatic(res, urlPath) {
   if (rel.startsWith('/scan/')) rel = '/scan.html';       // /scan/<pass>, the conductor's tap
   if (rel === '/drive' || rel.startsWith('/drive/')) rel = '/drive.html';  // the demand map
   if (rel === '/live-map') rel = '/map.html';
-  if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
+  if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
+  if (rel === '/conduct' || rel.startsWith('/conduct/')) rel = '/conduct.html';  // the demo conductor
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
   const inParent = path.join(PARENT, clean);
