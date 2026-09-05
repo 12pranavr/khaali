@@ -32,6 +32,19 @@
 //   the bus side is simulated conductor events. Neither is a person looking at
 //   a platform, and no sentence in this file says otherwise.
 //
+// WHY IT IS NOT "THE SAME TRAIN". The first draft pinned the onward half to the
+// exact train she would otherwise have caught, and on this corridor that can
+// never happen: the bus takes ninety-five minutes to cover a stretch the train
+// does in fifty, so by the time she reaches Whitefield her train left long ago.
+// Every candidate was refused TRANSFER_TOO_TIGHT with "the onward service leaves
+// before this one arrives", which is true and makes the feature impossible.
+//
+// So the onward half is anchored to a SPECIFIC NAMED DEPARTURE from the
+// boundary - counted, bookable, and the earliest she can actually make - rather
+// than to the train she started out wanting. That is the journey people already
+// do. The guarantee is unchanged in the part that matters: it is one identified
+// service with berth availability khaali counted, never "some train later".
+//
 // RE-ENTRANCY. find() must never call a journey enumerator that would generate
 // splits, or it recurses. Everything it needs arrives as injected functions,
 // and the module imports no planner.
@@ -61,23 +74,27 @@ export const SILENT = new Set(['DIRECT_IS_BOOKABLE']);
 const nope = (code, extra = {}) => ({ ok: false, code, split: null, ...extra });
 
 /**
- * The shortest feasible prefix replacement that preserves the onward train.
+ * The shortest feasible prefix replacement that reaches a named onward train.
  *
  * Everything that could re-enter the planner is injected:
  *
- *   sell(f, t)        places khaali could actually sell on the pinned train
- *                     between two stops. Null means it does not know, which is
- *                     not zero and never a reason to move anybody.
- *   busesFor(f, k, a) candidate bus DEPARTURES from f to boundary k after a.
- *                     Each is judged on its own room and its own connection.
- *   onwardAt(k)       the pinned train's departure from boundary k, or null.
+ *   sellWhole(f, t)     the most places khaali could sell anybody the whole way,
+ *                       across every train that runs it. Null means it does not
+ *                       know, which is not zero and never a reason to move
+ *                       anybody.
+ *   onwardFrom(k, t, a) named departures from boundary k that khaali could
+ *                       actually sell for this party, in time order. Already
+ *                       filtered on availability - this module does not
+ *                       recompute what the inventory said.
+ *   busesFor(f, k, a)   candidate bus DEPARTURES from f to boundary k after a.
+ *                       Each is judged on its own room and its own connection.
  *
  * `alternativeArr` is the arrival of some other journey she could actually
  * book. If the split cannot beat it, the split has not earned its place.
  */
 export function find({
   fromIdx, toIdx, pax = 1, after = 0, now = Date.now(),
-  sell, busesFor, onwardAt, train = null,
+  sellWhole, busesFor, onwardFrom,
   ledger = null, alternativeArr = null,
   maxBoundaries = 6, keepTrace = false,
 } = {}) {
@@ -88,14 +105,14 @@ export function find({
   // anySeats, not free: `free` means berths clear the whole way, which is seat
   // hop's question. Selling by packing partials is still selling, and if khaali
   // can do it there is nothing here to solve.
-  const whole = sell(fromIdx, toIdx);
+  const whole = sellWhole(fromIdx, toIdx);
   if (whole == null) {
     return nope('NO_TRIGGER', { tried,
-      says: 'khaali cannot count what is left on this train, so it will not move anybody.' });
+      says: 'khaali cannot count what is left on this stretch, so it will not move anybody.' });
   }
   if (whole >= pax) {
     return nope('DIRECT_IS_BOOKABLE', { tried, silent: true,
-      says: 'This train can carry you the whole way.' });
+      says: 'A train can carry you the whole way.' });
   }
 
   const dir = toIdx > fromIdx ? 1 : -1;
@@ -103,17 +120,17 @@ export function find({
     basis: 'this-trip', at: { fromIdx, toIdx } });
 
   // ---- candidate boundaries ----------------------------------------------
-  // Every stop strictly between, in her direction, where the REST of the train
-  // is sellable. `k === t` is not a boundary; it is the destination.
+  // Every stop strictly between, in her direction, where SOME named departure
+  // onward is sellable. `k === t` is not a boundary; it is the destination.
   const boundaries = [];
   for (let k = fromIdx + dir; k !== toIdx; k += dir) {
-    const rest = sell(k, toIdx);
-    if (rest != null && rest >= pax) boundaries.push({ k, rest });
+    const onward = onwardFrom(k, toIdx, after) || [];
+    if (onward.length) boundaries.push({ k, onward });
     if (boundaries.length >= maxBoundaries) break;
   }
   if (!boundaries.length) {
     return nope('NO_PINNED_ONWARD', { tried, trigger,
-      says: 'There is no stretch of this train khaali could sell you either.' });
+      says: 'There is no onward stretch khaali could sell you either.' });
   }
 
   // ---- each boundary, then each departure, judged on its own --------------
@@ -121,9 +138,6 @@ export function find({
   // that meet her constraints, prefer the first one she can rejoin at.
   let lastWhy = 'BOUNDARY_NOT_REACHABLE';
   for (const b of boundaries) {
-    const dep = onwardAt(b.k);
-    if (!dep || dep.depMin == null) { note({ boundary: b.k, code: 'NO_PINNED_ONWARD' }); continue; }
-
     const cands = busesFor(fromIdx, b.k, after) || [];
     if (!cands.length) { note({ boundary: b.k, code: 'BOUNDARY_NOT_REACHABLE' }); continue; }
 
@@ -142,15 +156,17 @@ export function find({
         continue;
       }
 
-      // then the change itself
-      const v = transfer.feasible(bus, { depMin: dep.depMin, mode: 'train' },
-        transfer.edge({ fromStopId: bus.toStopId || null, toStopId: dep.stopId || null,
-          walkMinutes: bus.walkMinutes || 0 }));
-      if (!v.ok) {
-        note({ boundary: b.k, bus: bus.tripInstanceId, code: v.code, says: v.says });
-        lastWhy = v.code;
+      // then the change itself: the earliest named departure she could make
+      const edge = transfer.edge({ fromStopId: bus.toStopId || null,
+        toStopId: b.onward[0] && b.onward[0].stopId, walkMinutes: bus.walkMinutes || 0 });
+      const pick = transfer.firstFeasible(bus, b.onward.map(o =>
+        ({ ...o, mode: 'train' })), edge);
+      if (!pick.ok) {
+        note({ boundary: b.k, bus: bus.tripInstanceId, code: pick.verdict.code });
+        lastWhy = pick.verdict.code;
         continue;
       }
+      const dep = pick.out, v = pick.verdict;
 
       const arr = dep.arrMin;
       if (arr == null) { note({ boundary: b.k, bus: bus.tripInstanceId, code: 'ONWARD_NOT_BOOKABLE' });
@@ -166,12 +182,13 @@ export function find({
       const split = {
         boundaryIdx: b.k,
         replacement: bus,
-        onward: { train: train && train.id, from: b.k, to: toIdx, ...dep },
+        onward: { train: dep.trainNo, name: dep.name, from: b.k, to: toIdx,
+          depMin: dep.depMin, arrMin: dep.arrMin, stopId: dep.stopId },
         pax,
         transfer: v,
         room,
         trigger,
-        onwardConstraint: constraint.constraint({ mode: 'train', n: b.rest, need: pax,
+        onwardConstraint: constraint.constraint({ mode: 'train', n: dep.sell, need: pax,
           basis: 'this-trip', at: { fromIdx: b.k, toIdx } }),
         busConstraint: constraint.constraint({ mode: 'bus', n: room.headroom == null ? null : room.headroom,
           need: pax, basis: 'this-trip', quality: room.quality || 'simulated',
@@ -208,9 +225,11 @@ export function gate(result, { allowUndetermined = false } = {}) {
 export function whyLines(split, { stationName = (i => 'stop ' + i) } = {}) {
   if (!split) return [];
   const at = stationName(split.boundaryIdx);
+  const on = split.onward || {};
   const lines = [];
-  lines.push('No sellable itinerary on this train for your party the whole way.');
-  lines.push('It has room again from ' + at + ' onward, which is where you would join it.');
+  lines.push('No train khaali can sell you runs the whole way for your party.');
+  lines.push('There is room from ' + at + ' onward, on the '
+    + (on.name || on.train) + ' at ' + fmt(on.depMin) + ', which is where you would join it.');
   const bus = split.replacement || {};
   lines.push('The ' + (bus.name || 'bus') + ' leaving at ' + fmt(bus.depMin)
     + ' covers the stretch to ' + at + '.');

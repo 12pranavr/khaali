@@ -30,6 +30,9 @@ import * as CD from './conductor.mjs';
 import * as CL from './claims.mjs';
 import * as CN from './constraint.mjs';
 import * as SP from './split.mjs';
+import * as BLG from './busledger.mjs';
+import * as SPP from './splitplan.mjs';
+import { BUSES } from './buses.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4812,18 +4815,20 @@ const busAt = (id, depMin, runMin, over = {}) => ({
   tripInstanceId: id, name: 'KSRTC ' + id, depMin, arrMin: depMin + runMin,
   source: 'simulated', fromStopSequence: 0, toStopSequence: 6, walkMinutes: 4,
   profile: busProfile(), ...over });
-// Bangarpet is 0, Whitefield is 4, Majestic is 9. Full to Whitefield, free after.
+// Bangarpet is 0, Whitefield is 4, Majestic is 9. Nothing sellable the whole
+// way; a named departure from Whitefield that khaali can sell.
+const MEMU = { trainNo: '56232', name: 'MKM-SBC MEMU', depMin: 560, arrMin: 620,
+  stopId: 'WFD', sell: 120 };
 const world = (over = {}) => ({
   fromIdx: 0, toIdx: 9, pax: 2, after: 400,
-  train: { id: '56232' },
-  sell: (f, t2) => (f < 4 ? 0 : 120),
-  onwardAt: k => (k === 4 ? { depMin: 560, arrMin: 620, stopId: 'WFD' } : null),
+  sellWhole: () => 0,
+  onwardFrom: k => (k === 4 ? [MEMU] : []),
   busesFor: () => [busAt('T1', 420, 95)],
   ledger: CL.ledger(),
   ...over });
 
 t('a train that can carry her the whole way is not a problem to solve', () => {
-  const r = SP.find(world({ sell: () => 120 }));
+  const r = SP.find(world({ sellWhole: () => 120 }));
   assert.strictEqual(r.code, 'DIRECT_IS_BOOKABLE');
   assert.strictEqual(r.silent, true);
   assert.strictEqual(SP.gate(r).offer, false);
@@ -4831,17 +4836,18 @@ t('a train that can carry her the whole way is not a problem to solve', () => {
 });
 
 t('a train khaali cannot count is not a train it moves people off', () => {
-  const r = SP.find(world({ sell: () => null }));
+  const r = SP.find(world({ sellWhole: () => null }));
   assert.strictEqual(r.code, 'NO_TRIGGER');
   assert.ok(/cannot count/.test(r.says), r.says);
   assert.strictEqual(SP.gate(r).offer, false);
 });
 
-t('the split khaali is for: bus to the boundary, and the same train onward', () => {
+t('the split khaali is for: bus to the boundary, a named train onward', () => {
   const r = SP.find(world());
   assert.ok(r.ok, r.code + ' ' + (r.says || ''));
   assert.strictEqual(r.split.boundaryIdx, 4);
-  assert.strictEqual(r.split.onward.train, '56232', 'the onward half is pinned to the same train');
+  assert.strictEqual(r.split.onward.train, '56232', 'one identified service, not "a train later"');
+  assert.strictEqual(r.split.onward.depMin, 560);
   assert.strictEqual(r.split.onward.to, 9);
   assert.strictEqual(r.split.replacement.tripInstanceId, 'T1');
   assert.strictEqual(r.split.transfer.ok, true);
@@ -4852,10 +4858,30 @@ t('the split khaali is for: bus to the boundary, and the same train onward', () 
 });
 
 t('the destination is never a boundary', () => {
-  // free only from the destination onward, which is not a place to rejoin
-  const r = SP.find(world({ sell: (f, t2) => (f < 9 ? 0 : 120) }));
+  const asked = [];
+  const r = SP.find(world({ onwardFrom: k => { asked.push(k); return []; } }));
   assert.ok(!r.ok);
   assert.strictEqual(r.code, 'NO_PINNED_ONWARD');
+  assert.ok(!asked.includes(9), 'the place she is going to is not a place to rejoin');
+  assert.ok(!asked.includes(0), 'nor the place she is leaving from');
+  assert.deepStrictEqual(asked, [1, 2, 3, 4, 5, 6, 7, 8], 'strictly between, in her direction');
+});
+
+// The first draft pinned the onward half to the train she would otherwise have
+// caught, and on this corridor that can never happen: the bus takes ninety-five
+// minutes over a stretch the train does in fifty, so it always arrives after
+// its own train has gone. Every candidate came back TRANSFER_TOO_TIGHT with
+// "the onward service leaves before this one arrives" - true, and fatal to the
+// feature. The onward half is a named departure she can actually make.
+t('the bus cannot catch the train it is replacing, and khaali does not pretend', () => {
+  const hers = { trainNo: '16021', name: 'Kaveri Express', depMin: 470, arrMin: 540,
+    stopId: 'WFD', sell: 120 };
+  const onlyHers = SP.find(world({ onwardFrom: k => (k === 4 ? [hers] : []) }));
+  assert.strictEqual(onlyHers.code, 'TRANSFER_TOO_TIGHT');
+  // ...and with a later named service in the list, she has a journey
+  const both = SP.find(world({ onwardFrom: k => (k === 4 ? [hers, MEMU] : []) }));
+  assert.ok(both.ok, both.code);
+  assert.strictEqual(both.split.onward.train, '56232', 'the earliest one she could make');
 });
 
 t('two departures of one route are two answers, and the full one is refused', () => {
@@ -4912,9 +4938,8 @@ t('a split that arrives after something she could already book has not earned it
 t('the earliest rejoining station she can reach, not the first one that exists', () => {
   // stop 2 is sellable onward but no bus reaches it; stop 4 is reachable
   const r = SP.find(world({ keepTrace: true,
-    sell: (f) => (f < 2 ? 0 : 120),
-    onwardAt: k => (k === 2 ? { depMin: 470, arrMin: 620, stopId: 'A' }
-      : k === 4 ? { depMin: 560, arrMin: 630, stopId: 'WFD' } : null),
+    onwardFrom: k => (k === 2 ? [{ trainNo: 'A1', name: 'A', depMin: 600, arrMin: 660, stopId: 'A', sell: 120 }]
+      : k === 4 ? [MEMU] : []),
     busesFor: (f, k) => (k === 4 ? [busAt('T1', 420, 95)] : []) }));
   assert.ok(r.ok, r.code);
   assert.strictEqual(r.split.boundaryIdx, 4, 'an unreachable earlier boundary must not hide a later one');
@@ -4922,9 +4947,9 @@ t('the earliest rejoining station she can reach, not the first one that exists',
 });
 
 t('the party size asked for is the party size checked', () => {
-  const four = SP.find(world({ pax: 4, sell: (f) => (f < 4 ? 3 : 120) }));
-  assert.ok(four.ok, 'three places is not enough for four, so the split stands');
-  const two = SP.find(world({ pax: 2, sell: (f) => (f < 4 ? 3 : 120) }));
+  const four = SP.find(world({ pax: 4, sellWhole: () => 3 }));
+  assert.ok(four.ok, 'three places is not enough for four, so the split stands: ' + four.code);
+  const two = SP.find(world({ pax: 2, sellWhole: () => 3 }));
   assert.strictEqual(two.code, 'DIRECT_IS_BOOKABLE', 'three places is enough for two');
 });
 
@@ -4938,7 +4963,9 @@ t('khaali never says it watched a crowd, or that a booking freed a berth', () =>
   assert.ok(all.includes('No bus seat is reserved.'), all);
   assert.ok(all.includes('does not free the early stretch'), all);
   assert.ok(all.includes('khaali’s demo conductor'), all);
-  assert.ok(/It has room again from Whitefield onward/.test(all), all);
+  assert.ok(/There is room from Whitefield onward, on the MKM-SBC MEMU at 09:20/.test(all)
+    || /There is room from Whitefield onward, on the MKM-SBC MEMU at /.test(all), all);
+  assert.ok(all.includes('No train khaali can sell you runs the whole way'), all);
 });
 
 t('the reason for the switch is carried only by a journey that actually split', () => {
@@ -4963,6 +4990,110 @@ t('the reason for the switch is carried only by a journey that actually split', 
     assert.ok(/more berth capacity becomes available/.test(said2), said2);
     assert.ok(!/crowd does/.test(said2), 'khaali has never watched a crowd');
   }
+});
+
+console.log('\nthe split, on the corridor khaali actually runs');
+
+const DATE = '2026-09-05';
+const stIdx = c => ST.findIndex(x => x.c === c);
+const CORRIDOR_BWT = stIdx('BWT'), WFD = stIdx('WFD'), SBC = stIdx('SBC');
+
+t('a headway becomes departures, each with its own identity', () => {
+  const bus = BUSES.find(b => b.id === 'KSRTC BNG-BLR');
+  const ds = BLG.departuresOf(bus, DATE, 400, 560);
+  assert.ok(ds.length >= 4, 'the 07:00, the 07:30, the 08:00 - not "every thirty minutes"');
+  const ids = new Set(ds.map(d => d.departure.id));
+  assert.strictEqual(ids.size, ds.length, 'no two departures share an identity');
+  assert.ok(ds.every(d => d.arrMin - d.depMin === bus.runMin));
+  assert.strictEqual(BLG.departuresOf(bus, '2026-09-06', 400, 560)[0].departure.id
+    === ds[0].departure.id, false, 'nor two days');
+});
+
+t('khaali\u2019s model is ticket spans, read by the same arithmetic as a real one', () => {
+  const bus = BUSES.find(b => b.id === 'KSRTC BNG-BLR');
+  const d = BLG.departuresOf(bus, DATE, 420, 420)[0];
+  const p = BLG.profileFor(d, { now: 1 });
+  assert.strictEqual(p.status, 'OK');
+  assert.strictEqual(p.basis, 'model', 'nobody has ticketed this one');
+  assert.strictEqual(p.quality, 'simulated');
+  assert.strictEqual(p.stopCount, bus.nStops);
+  assert.strictEqual(p.onboard[p.stopCount - 1], 0, 'everybody is off by the last stop');
+  assert.ok(Math.max(...p.stretch) > 0);
+  assert.ok(Math.max(...p.stretch) <= p.capacity.boardingCapacity * 1.2);
+  // and the invention is labelled as such, cohort by cohort
+  const evs = BLG.modelEvents(d);
+  assert.ok(evs.every(e => e.id.startsWith('model:')), 'khaali\u2019s own cohorts are named');
+  assert.ok(evs.every(e => e.sourceKind === 'simulation'));
+});
+
+t('a conductor ticketing this departure outranks the model, and says so', () => {
+  BLG.reset();
+  const bus = BUSES.find(b => b.id === 'KSRTC BNG-BLR');
+  const d = BLG.departuresOf(bus, DATE, 450, 450)[0];
+  const id = d.departure.id;
+  assert.strictEqual(BLG.basisOf(id), 'model');
+  BLG.record(CD.event({ kind: 'bustrip', id: 'r1', tripInstanceId: id,
+    stopCount: bus.nStops, capacity: BLG.FLEET.KSRTC }));
+  BLG.record(CD.event({ kind: 'ticket', id: 'r2', tripInstanceId: id,
+    stopSequence: 0, toStopSequence: 5, pax: 3 }));
+  assert.strictEqual(BLG.basisOf(id), 'this-trip');
+  const p = BLG.profileFor(d, { now: 1 });
+  assert.strictEqual(p.basis, 'this-trip', 'what a person entered about THIS bus wins');
+  assert.strictEqual(p.stretch[0], 3, 'and it is that bus, not an average of the route');
+  assert.strictEqual(p.quality, 'simulated', 'still simulated: no operator is connected');
+  BLG.reset();
+});
+
+// The acceptance test the whole plan is for.
+t('Bangarpet to Majestic: no train the whole way, so a bus, then a named train', () => {
+  BLG.reset();
+  // one snapshot of inventory: nothing sellable before Whitefield, room after
+  const inventory = { calls: 0, mutations: 0 };
+  const snapshot = JSON.stringify({ before: 0, after: 120 });
+  const countsFor = (no, date, cls, f, tt) => {
+    inventory.calls++;
+    return { anySeats: f < WFD ? 0 : 120, free: 0, part: 0, taken: 0, locked: 0 };
+  };
+  const r = SPP.findFor({ fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE, pax: 2, after: 400,
+    countsFor, ledger: CL.ledger(), now: Date.now(), keepTrace: true });
+  assert.ok(r.ok, r.code + ' ' + (r.says || ''));
+
+  const c = SPP.chainOf(r, { fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE });
+  assert.strictEqual(c.kind, 'split');
+  const modes = c.legs.map(l => l.mode);
+  assert.strictEqual(modes[0], 'bus', 'the bus covers the stretch the train cannot sell');
+  assert.strictEqual(modes[modes.length - 1], 'train');
+  assert.strictEqual(c.split.boundaryCode, 'WFD');
+  assert.ok(c.split.transferMinutes >= 25, 'a change she could actually make: ' + c.split.transferMinutes);
+
+  // one assembled journey, and everything disclosed
+  const why = c.split.why.join(' ');
+  assert.ok(why.includes('No bus seat is reserved.'), why);
+  assert.ok(why.includes('demo conductor'), why);
+  assert.ok(why.includes('does not free the early stretch'), why);
+  assert.strictEqual(c.split.releasesInventory, false);
+  assert.strictEqual(c.split.quality, 'simulated');
+
+  // and no early-stretch inventory was consumed by planning it
+  assert.strictEqual(JSON.stringify({ before: 0, after: 120 }), snapshot,
+    'planning a split must not touch what the train has left');
+  assert.ok(inventory.calls > 0, 'it did read the inventory');
+  assert.strictEqual(inventory.mutations, 0);
+  BLG.reset();
+});
+
+t('when a train can sell her the whole way, khaali says nothing at all', () => {
+  const countsFor = () => ({ anySeats: 120, free: 120 });
+  const r = SPP.findFor({ fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE, pax: 2, after: 400, countsFor });
+  assert.strictEqual(r.code, 'DIRECT_IS_BOOKABLE');
+  assert.strictEqual(SPP.chainOf(r, { fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE }), null);
+});
+
+t('inventory khaali cannot read is never a reason to put anybody on a bus', () => {
+  const countsFor = () => { throw new Error('inventory unavailable'); };
+  const r = SPP.findFor({ fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE, pax: 2, after: 400, countsFor });
+  assert.strictEqual(r.code, 'NO_TRIGGER');
+  assert.ok(/cannot count/.test(r.says), r.says);
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
