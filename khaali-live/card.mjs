@@ -371,22 +371,50 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     if (b) alternativeLabel += ' (' + b + ')';
   }
 
-  const timeDifferenceMinutes = (chain.totalMin != null && alt.totalMin != null)
-    ? alt.totalMin - chain.totalMin : null;          // positive: this one is faster
+  /* ARRIVAL, not duration. A train that leaves 25 minutes earlier and takes
+     ten minutes longer gets her there first, and the duration arithmetic was
+     calling that "arrives 10 minutes later" - wrong in exactly the way a
+     passenger would catch. Both chains share one search clock, so their
+     arrival minutes compare directly. */
+  const timeDifferenceMinutes = (chain.arr != null && alt.arr != null)
+    ? alt.arr - chain.arr
+    : ((chain.totalMin != null && alt.totalMin != null)
+      ? alt.totalMin - chain.totalMin : null);       // positive: this one arrives earlier
   const fareDifference = (chain.fare != null && alt.fare != null)
     ? chain.fare - alt.fare : null;                  // negative: this one is cheaper
   const transferDifference = (chain.changes != null && alt.changes != null)
     ? chain.changes - alt.changes : null;            // negative: fewer changes
 
   const differences = [];
-  if (timeDifferenceMinutes > 0) differences.push(fmtDur(timeDifferenceMinutes) + ' faster');
-  else if (timeDifferenceMinutes < 0) differences.push(fmtDur(timeDifferenceMinutes) + ' slower');
+  if (timeDifferenceMinutes > 0) differences.push('arrives ' + fmtDur(timeDifferenceMinutes) + ' earlier');
+  else if (timeDifferenceMinutes < 0) differences.push('arrives ' + fmtDur(timeDifferenceMinutes) + ' later');
   if (fareDifference < 0) differences.push('₹' + (-fareDifference) + ' cheaper');
   else if (fareDifference > 0) differences.push('₹' + fareDifference + ' more');
   if (transferDifference < 0) differences.push(-transferDifference === 1
     ? 'one fewer transfer' : (-transferDifference) + ' fewer transfers');
   else if (transferDifference > 0) differences.push(transferDifference === 1
     ? 'one more transfer' : transferDifference + ' more transfers');
+
+  /* Crowding, when both sides carry a measured or modelled load. Without this
+     the recommended train could only say "arrives 10 minutes later" - true,
+     and missing the entire reason it was recommended, which was the quieter
+     ride. Compared only when both numbers exist, and stated as the two
+     percentages so the reader sees the claim's size, not just its direction. */
+  const worstOcc = c => {
+    const L = (c.legs || []).filter(l => l.mode !== 'walk' && l.cap && l.cap.occupancy != null);
+    return L.length ? L.reduce((p, l) => l.cap.occupancy > p.cap.occupancy ? l : p) : null;
+  };
+  const selW = worstOcc(chain), altW = worstOcc(alt);
+  let crowdingDifference = null;
+  if (selW && altW) {
+    const d = altW.cap.occupancy - selW.cap.occupancy;   // positive: this one is calmer
+    if (Math.abs(d) >= 0.08) {
+      crowdingDifference = Math.round(d * 100);
+      const a = Math.round(selW.cap.occupancy * 100), b = Math.round(altW.cap.occupancy * 100);
+      if (d > 0) differences.push('less crowded: ' + a + '% at its busiest against ' + b + '%');
+      else differences.push('more crowded: ' + a + '% at its busiest against ' + b + '%');
+    }
+  }
   if (!differences.length) return null;              // nothing established, nothing said
 
   // ONE sentence on the card: the comparison named once, what was won, and
@@ -403,6 +431,12 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     ? 'avoids a transfer' : ('avoids ' + (-transferDifference) + ' transfers'));
   else if (transferDifference > 0) costs.push('adds ' + (transferDifference === 1
     ? 'a transfer' : transferDifference + ' transfers'));
+  if (crowdingDifference != null && selW && altW) {
+    const a = Math.round(selW.cap.occupancy * 100), b = Math.round(altW.cap.occupancy * 100);
+    if (crowdingDifference > 0) gains.push('is less crowded (' + a
+      + '% at its busiest against ' + b + '%)');
+    else costs.push('is more crowded (' + a + '% at its busiest against ' + b + '%)');
+  }
   const list = a => a.length === 1 ? a[0]
     : a.slice(0, -1).join(', ') + (a.length > 2 ? ',' : '') + ' and ' + a[a.length - 1];
   // a journey with nothing to brag about states its costs plainly - "holds
@@ -413,37 +447,76 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
       : (costs.length ? list(costs) : 'holds its own'))
     + '.';
 
-  // what the simulated model says about the ride she would actually be on
+  /* The load on the ride she would actually be on - said in the vocabulary of
+     the vehicle that carries it. This used to say "Predicted bus load" about a
+     TRAIN, whose berth occupancy khaali counts exactly from its own inventory,
+     and told an all-train journey that no bus seat was reserved. Any origin to
+     any destination means any mix of vehicles, and each number must say what
+     it is and where it came from, or the card is only right on one corridor. */
   const capped = (chain.legs || []).filter(l => l.mode !== 'walk'
     && l.cap && l.cap.occupancy != null);
   const worst = capped.length
     ? capped.reduce((p, l) => l.cap.occupancy > p.cap.occupancy ? l : p) : null;
+  const SRC = {
+    exact: 'counted from khaali’s own berth inventory',
+    mixed: 'counted from khaali’s own berth inventory',
+    counted: 'counted from ticketing',
+    estimated: 'worked out from the timetable',
+    predicted: 'from BMRCL’s hourly station entries',
+    simulated: 'khaali’s simulated demand model',
+  };
+  const LOAD_WORD = { train: 'Train occupancy', metro: 'Metro load', bus: 'Predicted bus load' };
   const demandEvidence = worst ? {
+    mode: worst.mode,
     occupancy: worst.cap.occupancy, quality: worst.cap.quality || 'simulated',
-    says: 'Predicted bus load: ' + Math.round(worst.cap.occupancy * 100)
-      + '% at the busiest point of your ride.',
+    says: (LOAD_WORD[worst.mode] || 'Load') + ': '
+      + Math.round(worst.cap.occupancy * 100)
+      + '% at the busiest point of your ride — '
+      + (SRC[worst.cap.quality] || 'khaali’s model') + '.',
   } : null;
 
+  // the disclosure owns exactly what this journey leaves unknown, no more
+  const rideModes = new Set((chain.legs || []).filter(l => l.mode !== 'walk').map(l => l.mode));
+  const unreserved = ['bus', 'metro'].filter(m => rideModes.has(m));
+  const onRoad = rideModes.has('bus') || rideModes.has('car')
+    || rideModes.has('auto') || rideModes.has('bike');
+  const anySimulated = capped.some(l => l.cap.quality === 'simulated');
+  const caveats = [];
+  if (anySimulated) caveats.push('some loads here are simulated');
+  if (onRoad) caveats.push('road traffic is not evaluated');
+  const disclosure = [
+    caveats.length ? (caveats.join('; ').charAt(0).toUpperCase() + caveats.join('; ').slice(1) + '.') : '',
+    unreserved.length
+      ? ('No seat is reserved on ' + (unreserved.length === 2 ? 'the bus or the metro'
+        : 'the ' + unreserved[0]) + '.')
+      : (rideModes.has('train') ? 'Berth counts are khaali’s own inventory.' : ''),
+  ].filter(Boolean).join(' ');
+
   const single = chain.changes === 0 && selNames.length === 1;
+  const altSingle = alt.changes === 0 && altNames.length === 1;
   return {
     selectedChainId, alternativeChainId,
     selectedLabel, alternativeLabel,
-    headline: (single ? ('Stay on ' + selectedLabel + ' instead of taking ')
+    // "Stay on" is for keeping one vehicle rather than breaking the journey
+    // up; between two single vehicles - this train or that train - it is a
+    // plain choice, and the verb is Take
+    headline: ((single && !altSingle) ? ('Stay on ' + selectedLabel + ' instead of taking ')
       : ('Take ' + selectedLabel + ' instead of '))
       + alternativeLabel + '.',
     summaryReason,
     differences,
     timeDifferenceMinutes, fareDifference, transferDifference,
+    crowdingDifference,
     demandEvidence,
-    trafficEvidence: 'not evaluated',
-    disclosure: (demandEvidence ? 'Bus demand is simulated; ' : '')
-      + 'road traffic is not evaluated. No bus seat is reserved.',
+    trafficEvidence: onRoad ? 'not evaluated' : 'no road legs',
+    disclosure,
     thisArrive: chain.arrText || null, thisTotalMinutes: chain.totalMin,
     alternativeArrive: alt.arrText || null, alternativeTotalMinutes: alt.totalMin,
     howEstimated: 'Times, fares and transfers computed from the two journeys as planned '
       + 'for this exact search - same origin, destination, party size and constraints. '
-      + 'The bus load is khaali’s simulated demand model, not a measurement; '
-      + 'road traffic was not evaluated on this route.',
+      + (demandEvidence ? ('The load figure is ' + (SRC[demandEvidence.quality] || 'khaali’s model') + '. ') : '')
+      + (onRoad ? 'Road traffic was not evaluated on this route.'
+        : 'No stretch of this journey runs on a road.'),
   };
 }
 

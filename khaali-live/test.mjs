@@ -1817,9 +1817,17 @@ t('rail to any stop down the line keeps the walk and stops where asked', () => {
   assert.strictEqual(p.legs[1].stops, 16);
 });
 
-t('the wrong way and an unknown stop are refused, not guessed', () => {
-  assert.strictEqual(JY.plan({ arriveAt: 9 * 60, from: 'KGWA', to: 'IDN' }).reason, 'wrong-way');
+t('the line runs both ways now, and nonsense is still refused', () => {
+  // the "wrong way" used to be refused outright, which made every homeward
+  // journey vanish; the same rails carry both directions and so does khaali
+  const back = JY.plan({ arriveAt: 9 * 60, from: 'KGWA', to: 'IDN' });
+  assert.strictEqual(back.ok, true, back.reason);
+  assert.ok(back.arrive > 9 * 60);
+  const fwd = JY.plan({ arriveAt: 9 * 60, from: 'IDN', to: 'KGWA' });
+  assert.strictEqual(fwd.legs[fwd.legs.length - 1].min, back.legs[back.legs.length - 1].min,
+    'the same stretch takes the same time in both directions');
   assert.strictEqual(JY.plan({ arriveAt: 9 * 60, to: 'NOPE' }).reason, 'unknown-stop');
+  assert.strictEqual(JY.plan({ arriveAt: 9 * 60, from: 'KGWA', to: 'KGWA' }).reason, 'same-stop');
 });
 
 console.log('\njourney: several ways, and whether you get to sit');
@@ -5867,6 +5875,80 @@ t('the completion test: the selection is explainable without the timetable', () 
   assert.ok(!/Ride for|Walk for|Arrive at 10:20/.test(front),
     'navigation crept back onto the front of the card');
   SCN.reset();
+});
+
+console.log('\nanywhere to anywhere: the comparison speaks the vehicle\u2019s own language');
+
+const trainChain = (name, dep, arr, occ, fare = 90) => ({
+  kind: 'train', dep, arr, fare, changes: 0,
+  totalMin: arr - dep, arrText: 'x',
+  legs: [{ mode: 'train', id: name, name, from: 'Bangarpet', to: 'Bengaluru Cantt',
+    depMin: dep, arrMin: arr, min: arr - dep, source: 'timetable',
+    seat: { word: 'yes', rank: 3 }, cap: { occupancy: occ, quality: 'exact' } }],
+});
+
+t('take this train instead of this train, judged on arrival, not duration', () => {
+  // leaves 25 minutes earlier, takes 10 minutes longer, gets there first -
+  // the duration arithmetic used to call this one "arrives 10 minutes later"
+  const slowButEarly = trainChain('MKM-SBC SWAR', 425, 565, 0.93);
+  const fastButLate = trainChain('KPN-SBC PASS', 450, 580, 0.82);
+  const oc = CARD.optionComparisonOf(slowButEarly, fastButLate, {});
+  assert.strictEqual(oc.timeDifferenceMinutes, 15, 'arrival minutes, not journey length');
+  assert.ok(/arrives 15 minutes earlier/.test(oc.summaryReason), oc.summaryReason);
+  assert.ok(/^Take MKM-SBC SWAR instead of KPN-SBC PASS\.$/.test(oc.headline),
+    'two single vehicles is a plain choice, not a "stay on": ' + oc.headline);
+});
+
+t('a train speaks berth language, never bus language', () => {
+  const oc = CARD.optionComparisonOf(trainChain('A EXP', 425, 565, 0.93),
+    trainChain('B PASS', 450, 580, 0.82), {});
+  assert.ok(/^Train occupancy: 93%/.test(oc.demandEvidence.says), oc.demandEvidence.says);
+  assert.ok(/counted from khaali\u2019s own berth inventory/.test(oc.demandEvidence.says)
+    || oc.demandEvidence.says.includes('counted from khaali’s own berth inventory'),
+    oc.demandEvidence.says);
+  assert.strictEqual(oc.disclosure, 'Berth counts are khaali’s own inventory.');
+  assert.strictEqual(oc.trafficEvidence, 'no road legs', 'no road, no traffic caveat');
+  // banned as PHRASES, not as a word: this comparison legitimately says
+  // 'at its busiest', and a bare /bus/ check failed it for speaking English
+  const all = JSON.stringify(oc).toLowerCase();
+  // the word with its boundary, because every phrase list so far has lost to
+  // 'busiest': bus matches the vehicle and nothing it is a prefix of
+  assert.ok(!/bus/.test(all), 'an all-train comparison mentioned a bus');
+});
+
+t('crowding is compared when both sides carry a load, as two percentages', () => {
+  const oc = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.93),
+    trainChain('B', 450, 580, 0.82), {});
+  assert.strictEqual(oc.crowdingDifference, -11);
+  assert.ok(/though it is more crowded \(93% at its busiest against 82%\)/.test(oc.summaryReason),
+    oc.summaryReason);
+  // ...and stays silent when the gap is noise
+  const near = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.85),
+    trainChain('B', 450, 580, 0.82), {});
+  assert.strictEqual(near.crowdingDifference, null, 'three points is not a claim');
+});
+
+t('the same name twice gets its departure time, both ways home included', () => {
+  const oc = CARD.optionComparisonOf(trainChain('MEMU', 600, 660, 0.5),
+    trainChain('MEMU', 630, 690, 0.5), {});
+  assert.ok(/MEMU \(10:00 am\) instead of MEMU \(10:30 am\)/.test(oc.headline), oc.headline);
+});
+
+t('the way home exists: metro to rail plans in both directions', () => {
+  const back = JY.journeys({ from: { kind: 'metro', id: 'KGWA' },
+    to: { kind: 'rail', id: 'BWT' }, after: 540 });
+  assert.strictEqual(back.ok, true);
+  assert.ok(back.chains.length >= 2, 'the return journey was an empty page');
+  const kinds = new Set(back.chains.map(c => c.kind));
+  assert.ok(kinds.has('walk+train'),
+    'Majestic metro is a short walk from the City station, and the plan must know it');
+  assert.ok(kinds.has('metro+train'), 'the line out to Whitefield is also a way');
+  // and the change out of the metro carries real slack, not zero
+  const mt = back.chains.find(c => c.kind === 'metro+train');
+  const metro = mt.legs.find(l => l.mode === 'metro');
+  const train = mt.legs.find(l => l.mode === 'train');
+  assert.ok(train.depMin - metro.arrMin >= 8,
+    'she cannot board a train the minute she steps off the metro');
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');

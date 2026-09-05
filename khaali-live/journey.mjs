@@ -134,9 +134,14 @@ export function headwayAt(minute) {
 /** How long the next train is, at most, from a given minute at a given stop.
     Frequency service has no timetable to promise, so the answer is the
     headway - "every 8 minutes" - and the wait it implies, not a false 09:07. */
-export function nextMetro(minute, stopIdx = 0) {
-  const offset = STOPS[stopIdx] ? STOPS[stopIdx].min : 0;
-  const depart = minute - offset;                     // when it left Whitefield
+export function nextMetro(minute, stopIdx = 0, dir = 1) {
+  // toward Majestic the clock counts from Whitefield; toward Whitefield it
+  // counts from the other terminus. The headway bands are BMRCL's line-wide
+  // figures and apply to both directions alike.
+  const last = STOPS[STOPS.length - 1];
+  const offset = STOPS[stopIdx]
+    ? (dir >= 0 ? STOPS[stopIdx].min : (last.min - STOPS[stopIdx].min)) : 0;
+  const depart = minute - offset;                     // when it left its terminus
   const h = headwayAt(depart);
   if (h == null) return { ok: false, reason: 'no-service', first: HEADWAYS[0].s, last: HEADWAYS[HEADWAYS.length - 1].e };
   return { ok: true, every: h, waitMax: h, waitTypical: Math.ceil(h / 2) };
@@ -145,9 +150,11 @@ export function nextMetro(minute, stopIdx = 0) {
 /** The ride itself, between two stop indexes, boarding at a minute. */
 export function metroLeg(fromIdx, toIdx, boardMin) {
   const a = STOPS[fromIdx], b = STOPS[toIdx];
-  if (!a || !b || toIdx <= fromIdx) return null;
-  const run = Math.round((b.min - a.min) * 10) / 10;
-  return { from: a, to: b, stops: toIdx - fromIdx, runMin: run,
+  if (!a || !b || toIdx === fromIdx) return null;
+  // one track carries both directions; BMRCL's published inter-station times
+  // are used mirrored for the return run, which is the same rails
+  const run = Math.round(Math.abs(b.min - a.min) * 10) / 10;
+  return { from: a, to: b, stops: Math.abs(toIdx - fromIdx), runMin: run,
     board: boardMin, alight: Math.round(boardMin + run) };
 }
 
@@ -192,15 +199,19 @@ export function plan({ arriveAt, needs = [], from = null, to = null, toIdx = nul
   const fromIdx = from != null ? stopIdx(from) : b.idx;
   const endIdx = toIdx != null ? toIdx : (to != null ? stopIdx(to) : STOPS.length - 1);
   if (fromIdx < 0 || endIdx < 0) return { ok: false, reason: 'unknown-stop' };
-  if (endIdx <= fromIdx) return { ok: false, reason: 'wrong-way',
-    line: 'This line only runs ' + STOPS[0].n + ' toward ' + STOPS[STOPS.length - 1].n + ' in khaali for now.' };
+  if (endIdx === fromIdx) return { ok: false, reason: 'same-stop' };
+  /* The refusal that used to live here - "this line only runs Whitefield
+     toward Majestic in khaali for now" - made the way home not exist: asking
+     for Majestic back to Whitefield returned an empty page pretending to be an
+     answer. The line runs both ways on the same rails; so does khaali now. */
+  const dir = endIdx > fromIdx ? 1 : -1;
   const walking = from == null;
   const startStop = STOPS[fromIdx];
   const hour = Math.floor((((arriveAt % 1440) + 1440) % 1440) / 60);
   const ent = entranceFor(startStop.id, needs);
   const walkMin = walking ? b.walkMin + (ent ? ent.minToPlatform : 2) : (ent ? ent.minToPlatform : 2);
   const atPlatform = arriveAt + walkMin;
-  const nm = nextMetro(atPlatform, fromIdx);
+  const nm = nextMetro(atPlatform, fromIdx, dir);
   if (!nm.ok) return { ok: false, reason: 'no-service', first: nm.first, last: nm.last,
     line: 'No metro from ' + startStop.n + ' at this hour. First train ' + nm.first + ', last ' + nm.last + '.' };
   const boardMin = atPlatform + nm.waitTypical;
@@ -210,13 +221,18 @@ export function plan({ arriveAt, needs = [], from = null, to = null, toIdx = nul
   const peak = (hour >= 8 && hour < 12) || (hour >= 16 && hour < 21);
   const legs = [];
   if (walking) legs.push({ mode: 'walk', from: ST[ST.findIndex(s => s.c === RAIL_STATION)].n, to: b.stop.n,
-    km: b.km, min: walkMin, entrance: ent, source: 'measured' });
+    km: b.km, min: walkMin, entrance: ent, source: 'measured',
+    depMin: arriveAt, arrMin: arriveAt + walkMin });
   legs.push({ mode: 'metro', line: LINE.name, color: LINE.color, from: ride.from.n, fromKn: ride.from.kn,
     fromId: ride.from.id, toId: ride.to.id,
     to: ride.to.n, toKn: ride.to.kn, stops: ride.stops, runMin: ride.runMin,
     // every other leg says how long it takes in `min`; the metro said it only
     // in `runMin`, so anything drawing legs to scale drew this one as nothing
     min: Math.round(ride.runMin),
+    // the minutes themselves, not just their spelling - the card's timing
+    // pass reconciles riding, walking and waiting from depMin/arrMin, and a
+    // metro leg without them made every metro journey add up to nothing
+    depMin: boardMin, arrMin: ride.alight,
     every: nm.every, waitMax: nm.waitMax, board: hhmm(boardMin % 1440), alight: hhmm(ride.alight % 1440),
     crowdBoard: boardCrowd, crowdAlight: alightCrowd, source: 'timetable' });
   return {
@@ -735,6 +751,103 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
             fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + busFare(bus) });
         });
       }
+    }
+  }
+
+  // ---- somewhere on the line to a corridor station ----
+  //
+  // The mirror was simply missing. Asking for Whitefield to Bangarpet - the
+  // return leg of the journey this module was WRITTEN about - came back
+  // "ok: true, chains: []", an empty page pretending to be an answer. Anywhere
+  // to anywhere means the way home too.
+  if (from.kind === 'metro' && to.kind === 'rail' && toRail >= 0 && fromMetro >= 0) {
+    // Z0. the destination IS Whitefield: ride the line, walk to the platform
+    if (use('metro') && toRail === WFD) {
+      const p = plan({ arriveAt: after, needs, from: from.id, to: b.stop.id });
+      if (p.ok) {
+        const legs = p.legs.map(l => metroLegOut(l, from.id));
+        const arr = p.arrive + b.walkMin;
+        legs.push({ mode: 'walk', name: 'Walk', from: b.stop.n, to: ST[WFD].n,
+          km: b.km, min: b.walkMin,
+          depMin: p.arrive, arrMin: arr, dep: hhmm(dayMin(p.arrive)), arr: hhmm(dayMin(arr)),
+          fare: 0, source: 'measured', fromLat: b.stop.lat, fromLng: b.stop.lng,
+          toLat: GEO[WFD].lat, toLng: GEO[WFD].lng, seat: null });
+        out.push({ kind: 'rail-from-metro', legs, dep: after, arr, fare: p.fare.qr, plan: p });
+      }
+    }
+
+    // Z1. metro to the stop by Whitefield, the walk nobody mentions, the train
+    if (use('metro') && use('train') && toRail !== WFD) {
+      const p = plan({ arriveAt: after, needs, from: from.id, to: b.stop.id });
+      if (p.ok) {
+        const mlegs = p.legs.map(l => metroLegOut(l, from.id));
+        // she steps off a frequency service; the change onto a timetabled train
+        // gets the same arithmetic as every other change in this file
+        const win = transfer.windowFor(
+          { arrMin: p.arrive, mode: 'metro', scheduleKind: 'frequency',
+            every: headwayAt(dayMin(p.arrive)) || 6 },
+          transfer.edge({ fromStopId: b.stop.id, toStopId: ST[WFD].c,
+            walkMinutes: b.walkMin, source: 'measured', quality: 'measured' }),
+          'train');
+        if (win.ok) {
+          const legsW = mlegs.concat([{ mode: 'walk', name: 'Walk',
+            from: b.stop.n, to: ST[WFD].n, km: b.km, min: b.walkMin,
+            depMin: p.arrive, arrMin: p.arrive + b.walkMin,
+            dep: hhmm(dayMin(p.arrive)), arr: hhmm(dayMin(p.arrive + b.walkMin)),
+            fare: 0, source: 'measured', fromLat: b.stop.lat, fromLng: b.stop.lng,
+            toLat: GEO[WFD].lat, toLng: GEO[WFD].lng, seat: null }]);
+          trainsBetween(WFD, toRail, win.earliest).filter(t => t.dep <= win.latest)
+            .slice(0, 4).forEach(t => {
+              out.push({ kind: 'metro+train',
+                legs: legsW.concat([LEG_TRAIN(t, WFD, toRail, freeOf(t.train, WFD, toRail))]),
+                dep: after, arr: t.arr,
+                fare: p.fare.qr + railFare('SL', Math.abs(ST[toRail].km - ST[WFD].km)) });
+            });
+        }
+      }
+    }
+
+    // Z2. the corridor station that is already beside her.
+    //
+    // Majestic metro is a short walk from Bengaluru City station, and without
+    // this branch khaali's answer was to ride the metro fifty minutes OUT to
+    // Kadugodi and catch a train that also calls next door to where she was
+    // standing. The nearest way onto the corridor is sometimes her own feet.
+    if (use('train')) {
+      const near = railNear(STOPS[fromMetro].lat, STOPS[fromMetro].lng, 1.2);
+      if (near && near.i !== toRail) {
+        const w = Math.max(1, Math.round(near.km / WALK_KMH * 60));
+        const win = transfer.windowFor(
+          { arrMin: after + w, mode: 'walk', source: 'measured' },
+          transfer.edge({ fromStopId: from.id, toStopId: ST[near.i].c, source: 'measured' }),
+          'train');
+        if (win.ok) {
+          trainsBetween(near.i, toRail, win.earliest).slice(0, 4).forEach(t => {
+            out.push({ kind: 'walk+train',
+              legs: [{ mode: 'walk', name: 'Walk', from: STOPS[fromMetro].n, to: ST[near.i].n,
+                km: near.km, min: w, depMin: after, arrMin: after + w,
+                dep: hhmm(dayMin(after)), arr: hhmm(dayMin(after + w)),
+                fare: 0, source: 'measured',
+                fromLat: STOPS[fromMetro].lat, fromLng: STOPS[fromMetro].lng,
+                toLat: GEO[near.i].lat, toLng: GEO[near.i].lng, seat: null },
+                LEG_TRAIN(t, near.i, toRail, freeOf(t.train, near.i, toRail))],
+              dep: after, arr: t.arr,
+              fare: railFare('SL', Math.abs(ST[toRail].km - ST[near.i].km)) });
+          });
+        }
+      }
+    }
+
+    // Z3. one bus, when one runs from beside her stop to the station
+    if (use('bus')) {
+      const fs2 = STOPS[fromMetro];
+      busesBetween(fs2.lat, fs2.lng, GEO[toRail].lat, GEO[toRail].lng, 1.2).forEach(bus => {
+        const nb = nextBus(bus, after);
+        if (!nb.ok) return;
+        out.push({ kind: 'bus-to-rail',
+          legs: [busLegOut(bus, nb, nb.board + bus.runMin)],
+          dep: nb.board, arr: nb.board + bus.runMin, fare: busFare(bus) });
+      });
     }
   }
 
