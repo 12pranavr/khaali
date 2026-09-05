@@ -3449,6 +3449,43 @@ t('leave after eight means the clock starts at eight', () => {
   assert.strictEqual(b.chains[b.recommended].kind, 'late-train', 'reach by noon: leave as late as you can');
 });
 
+t('an hour she named is an hour she has to arrive by', () => {
+  // span() measures what a deadline costs her - how early she must set out -
+  // and nothing was measuring whether she gets there. Two journeys leaving at
+  // the same minute scored alike though one arrived eleven hours late.
+  const g = golden();
+  const intime = { ...g[0], kind: 'in-time', dep: 1160, arr: 1183, totalMin: 23 };   // 19:20 -> 19:43
+  const overnight = { ...g[0], kind: 'overnight', dep: 1160, arr: 429, totalMin: 709 }; // -> 07:09 next day
+  const a = AL.allocate([overnight, intime], { by: 1200 });                          // by 20:00
+  assert.strictEqual(a.chains[a.recommended].kind, 'in-time',
+    'khaali offered a journey arriving the next morning for a 20:00 deadline');
+  const bad = a.chains.find(c => c.kind === 'overnight');
+  assert.ok(bad.alloc.overLimit.includes('ARRIVES_AFTER_DEADLINE'), bad.alloc.overLimit.join(','));
+  assert.strictEqual(bad.alloc.candidate, false);
+});
+
+t('the deadline reads both clocks in one frame, so midnight is not a shortcut', () => {
+  const g = golden();
+  const c = { ...g[0], dep: 1380, arr: 90, totalMin: 150 };        // 23:00 -> 01:30
+  assert.strictEqual(AL.missesDeadline(c, 120), false, 'in by 02:00 and it arrives 01:30');
+  assert.strictEqual(AL.missesDeadline(c, 60), true, 'it cannot make 01:00');
+  const same = { ...g[0], dep: 600, arr: 660, totalMin: 60 };
+  assert.strictEqual(AL.missesDeadline(same, 700), false);
+  assert.strictEqual(AL.missesDeadline(same, 650), true);
+  assert.strictEqual(AL.missesDeadline(same, null), false, 'no deadline, nothing to miss');
+});
+
+t('when nothing meets the hour, the best of them is still offered', () => {
+  // a deadline nobody can meet must not empty the page - it is a reason, and
+  // the reason is reported, but she is still shown the closest thing
+  const g = golden();
+  const a = { ...g[0], kind: 'a', dep: 600, arr: 800, totalMin: 200 };
+  const b = { ...g[0], kind: 'b', dep: 600, arr: 900, totalMin: 300 };
+  const r = AL.allocate([a, b], { by: 700 });
+  assert.ok(r.recommended != null, 'an impossible deadline emptied the answer');
+  assert.strictEqual(r.chains[r.recommended].kind, 'a', 'the closest to her hour');
+});
+
 t('the profile moves the line, but there is always a line', () => {
   const g = golden({ directOcc: 0.95, directSeat: 'standing', busOcc: 0.2, feederOcc: 0.2, viaMin: 100 });
   assert.strictEqual(recOf(g), 'train');
@@ -6778,6 +6815,89 @@ t('ordinary numbers are not inventions - khaali still talks like a person', () =
   assert.ok(!IN.invents('Ask me to plan it and I will look it up properly.'));
   assert.ok(!IN.invents(''));
   assert.ok(!IN.invents(null));
+});
+
+t('the origin may arrive last, in its own sentence', () => {
+  // this exact message came back "I do not have that one to hand" - a request
+  // naming where she is, where she is going and when she must be there
+  const act = IN.planFromText('I want to reach Majestic before 8 pm. I am from Hebbal. What should I do?');
+  assert.ok(act, 'a complete journey was read as no journey at all');
+  assert.strictEqual(act.type, 'plan');
+  assert.strictEqual(act.from, 'hebbal', 'the origin was lost or swallowed');
+  assert.strictEqual(act.to, 'majestic');
+  assert.strictEqual(act.by, '20:00');
+});
+
+t('a full stop ends a clause, so an origin does not swallow the next question', () => {
+  const o = IN.parseLocally('I am from Hebbal. What should I do?');
+  assert.strictEqual(o.origin.text, 'hebbal',
+    'the sentence boundary was flattened into the place name');
+});
+
+t('a journey in hops is three places, not one long destination', () => {
+  const hops = IN.hopsOf('from Majestic to Nagasandra and from Nagasandra to Kodigehalli');
+  assert.deepStrictEqual(hops, ['majestic', 'nagasandra', 'kodigehalli'],
+    'the join between two hops is one place, named twice');
+  const act = IN.planFromText('I wanted to go from Majestic to Nagasandra and from Nagasandra to Kodigehalli');
+  assert.strictEqual(act.from, 'majestic');
+  assert.deepStrictEqual(act.via, ['nagasandra']);
+  assert.strictEqual(act.to, 'kodigehalli');
+});
+
+t('an ordinary one-hop sentence stays one hop', () => {
+  assert.strictEqual(IN.hopsOf('from bangarpet to majestic'), null);
+  assert.strictEqual(IN.hopsOf('I want to go to Indiranagar from Whitefield tomorrow'), null);
+  const act = IN.planFromText('I want to go to Indiranagar from Whitefield tomorrow');
+  assert.strictEqual(act.from, 'whitefield');
+  assert.strictEqual(act.to, 'indiranagar');
+  assert.strictEqual(act.day, 'tomorrow');
+  assert.ok(!act.via, 'a single hop grew a waypoint');
+});
+
+t('a chain stuffed into one field is split, not searched for whole', () => {
+  assert.deepStrictEqual(IN.splitEnds('Nagasandra, then to Kollegi Helicat'),
+    ['Nagasandra', 'Kollegi Helicat']);
+  assert.deepStrictEqual(IN.splitEnds('Hebbal'), ['Hebbal'],
+    'an ordinary place must survive the splitter intact');
+});
+
+t('where she stays is where she is starting from', () => {
+  // "I stay near X" named no origin at all, so a complete request came back
+  // as "sorry, I did not follow that"
+  const a = IN.planFromText('Yo, the thing is, I stay near Devanahalli, and I want to go to '
+    + 'Nagasandra. Let me know how I can go there. So I should be there around 12 p.m. tomorrow.');
+  assert.ok(a, 'khaali did not follow a sentence that named both ends');
+  assert.strictEqual(a.from, 'devanahalli');
+  assert.strictEqual(a.to, 'nagasandra');
+  assert.strictEqual(a.by, '12:00', '"be there around 12" is an arrival, not a departure');
+  assert.ok(!a.after, 'the same clock became her deadline and her departure');
+  assert.strictEqual(a.day, 'tomorrow');
+  ['I live in Indiranagar, how do I get to Majestic?',
+    'I am at Whitefield and need to get to Majestic',
+    'staying near Hebbal, want to reach Indiranagar'].forEach(s => {
+    const p = IN.planFromText(s);
+    assert.ok(p && p.from && p.to, 'unread: ' + s);
+  });
+});
+
+t('tomorrow morning is an hour, even with no number in it', () => {
+  // this planned a "morning" journey leaving at 01:55 am, which is nobody's
+  // morning - the hour was named in a word and khaali read no hour at all
+  const act = IN.planFromText('I want to go from Bangarpet to Majestic tomorrow morning');
+  assert.strictEqual(act.after, '09:00', 'the morning went unread');
+  assert.strictEqual(act.day, 'tomorrow');
+  const ev = IN.planFromText('from Majestic to Indiranagar this evening');
+  assert.strictEqual(ev.after, '18:00');
+  // ...and a stated deadline is never overwritten by a vague part of the day
+  const by = IN.planFromText('I need to reach Majestic by 9 tomorrow morning from Hebbal');
+  assert.strictEqual(by.by, '09:00', 'the deadline she named was replaced');
+});
+
+t('a sentence with no journey in it is not planned at one', () => {
+  assert.strictEqual(IN.planFromText('what is my PNR status'), null);
+  assert.strictEqual(IN.planFromText('hello'), null);
+  assert.strictEqual(IN.planFromText('I am from Hebbal'), null, 'an origin alone is not a journey');
+  assert.strictEqual(IN.planFromText('from majestic to majestic'), null, 'a journey to where she is');
 });
 
 t('khaali says it does not know in the language it was asked in', () => {

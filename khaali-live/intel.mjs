@@ -132,9 +132,19 @@ const WORD_TIMES = { noon: '12:00', midday: '12:00', morning: '09:00', evening: 
  * A sentence read without a model. It will not understand everything, and it
  * says what it did not understand; that is better than guessing.
  */
+/* A full stop is a boundary, and losing it cost khaali a journey it could
+   read. norm() flattens every punctuation mark to a space, so "I am from
+   Hebbal. What should I do?" became one long clause and the origin came out
+   as "hebbal what should" - which resolves to nothing, so a request with a
+   destination, an origin and a deadline was answered "I do not have that one
+   to hand". Sentence enders become the comma the grammar already stops at. */
+const clauses = t => String(t || '').toLowerCase()
+  .replace(/[.?!;\n]+/g, ' , ').replace(/[^a-z0-9, ]+/g, ' ')
+  .replace(/\s+/g, ' ').trim();
+
 export function parseLocally(text) {
   // "I need to go from X to Y": the wanting and the going are not places
-  const t = (' ' + norm(text) + ' ')
+  const t = (' ' + clauses(text) + ' ')
     .replace(/ (?:need|want|have|would like|like|going|trying|planning|got) to (?:go|get|travel|head|come)(?= )/g, ' ')
     .replace(/ (?:i|we) (?:need|want|have|would like|like|must|should) to (?=[a-z])/g, ' ')
     .replace(/ to (?:go|get|travel|head|come)(?= )/g, ' ')
@@ -142,7 +152,14 @@ export function parseLocally(text) {
   const o = { origin: null, destination: null, timeConstraint: null, modes: null, preferences: {}, maxTransfers: null, accessibility: {} };
   // places
   const STOPW = '(?= to | by | before | after | at | and | i | with | without | today | tomorrow | around | leaving | leave | reach | only | no | not |,|$)';
-  const from = t.match(new RegExp(' (?:from|starting at|starting from|leaving) ([a-z0-9 ]+?)' + STOPW));
+  /* How people actually say where they are. khaali listened for "from" and
+     "leaving" only, so "I stay near Devanahalli" named no origin at all and a
+     complete request came back as "sorry, I did not follow that". */
+  const HERE = 'from|starting at|starting from|leaving|stay near|stay at|stay in'
+    + '|staying near|staying at|staying in|live near|live at|live in|living near'
+    + '|living at|living in|i am near|i am at|i am in|i m at|i m near|i m in'
+    + '|currently at|currently near|based in|based at';
+  const from = t.match(new RegExp(' (?:' + HERE + ') (?:the )?([a-z0-9 ]+?)' + STOPW));
   // "to go to X", "to reach X", "get to X" - the verb is not the place
   const to = t.match(new RegExp(' (?:to|reach|reaching|get to|going to|be at|be in|arrive at|arrive in|towards) (?:go to |get to |reach |be at |be in |the )?([a-z0-9 ]+?)' + STOPW.replace('$', ' from |$')));
   const verbs = /^(go|get|reach|be|travel|come|arrive|head)$/;
@@ -150,11 +167,29 @@ export function parseLocally(text) {
   if (to && !verbs.test(to[1].trim()) && !/^\d/.test(to[1].trim())) o.destination = { text: to[1].trim() };
   if (o.origin && o.destination && o.origin.text === o.destination.text) o.origin = null;
   // time
-  const by = t.match(/(?:by|before|latest|reach by|be there by|there by)\s+(?:about\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|noon|midday|evening|morning|night|tonight|afternoon)/);
+  /* "I should be there around 12" is an arrival, not a departure - and the
+     word "around" belongs to both, so the deadline is read first and the
+     departure is not allowed to re-read the same words. */
+  const by = t.match(/(?:by|before|latest|reach by|reach around|be there by|be there around|be there at|there by|there around|should be there at)\s+(?:about\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|noon|midday|evening|morning|night|tonight|afternoon)/);
   const after = t.match(/(?:after|from|leave after|leaving after|leaving at|leave at|start at|starting at|around)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)\b/);
   const clock = w => WORD_TIMES[w] || clockOf(w.match(HOUR));
   if (by) { const v = clock(by[1].trim()); if (v) o.timeConstraint = { type: 'ARRIVE_BY', value: v }; }
-  if (after) { const v = clock(after[1].trim()); if (v) { if (o.timeConstraint) o.leaveAfter = v; else o.timeConstraint = { type: 'LEAVE_AFTER', value: v }; } }
+  // the same clock may not be both her deadline and her departure
+  const overlaps = by && after && after.index >= by.index
+    && after.index < by.index + by[0].length;
+  if (after && !overlaps) { const v = clock(after[1].trim()); if (v) { if (o.timeConstraint) o.leaveAfter = v; else o.timeConstraint = { type: 'LEAVE_AFTER', value: v }; } }
+  /* "tomorrow morning" names an hour without naming a number, and khaali read
+     no hour at all - so a morning journey was planned from one minute past
+     midnight, which is nobody's morning. */
+  if (!after) {
+    const part = t.match(/ (?:tomorrow|today|this|in the|by) (morning|afternoon|evening|night|tonight)\b/)
+      || t.match(/ (morning|afternoon|evening|night|tonight) (?:tomorrow|today)\b/);
+    const v = part && WORD_TIMES[part[1]];
+    if (v && !(o.timeConstraint && o.timeConstraint.type === 'ARRIVE_BY')) {
+      if (o.timeConstraint) o.leaveAfter = v;
+      else o.timeConstraint = { type: 'LEAVE_AFTER', value: v };
+    }
+  }
   // modes
   const has = w => t.includes(' ' + w + ' ') || t.includes(' ' + w + 's ');
   const only = t.match(/ (?:only|just) (?:the |a )?(train|bus|metro)/) || t.match(/ (train|bus|metro)(?:es|s)? only /);
@@ -186,6 +221,66 @@ export function parseLocally(text) {
   if (t.match(/ (?:direct|no changes|without changing|without a change) /)) o.maxTransfers = 0;
   if (t.match(/ (?:wheelchair|lift|elevator|ramp|step free|step-free|stepfree|grandmother|grandfather|grandma|grandpa|elderly|crutch|stroller|pram) /)) o.accessibility.stepFree = true;
   return o;
+}
+
+/**
+ * "Majestic to Nagasandra, and Nagasandra to Kodigehalli" is three places, not
+ * two - and khaali used to read the whole tail as ONE destination, then report
+ * that it could not find a place with a comma in the middle of it. The stops in
+ * order, or null when the sentence names no chain.
+ */
+export function hopsOf(text) {
+  const t = ' ' + clauses(text) + ' ';
+  const stops = [];
+  const push = s => {
+    s = String(s || '').trim().replace(/^(?:the|a) /, '');
+    if (!s || /^\d+$/.test(s)) return;
+    // the join between two hops is named twice - once as an end, once as a
+    // start - and it is one place
+    if (!stops.length || squash(stops[stops.length - 1]) !== squash(s)) stops.push(s);
+  };
+  const END = '(?=$|,| and | then | so | after | before | by | at | around | today | tomorrow )';
+  const PAIR = new RegExp('(?:^|[ ,])from ([a-z0-9 ]+?) to ([a-z0-9 ]+?)' + END, 'g');
+  let m, last = 0;
+  while ((m = PAIR.exec(t))) { push(m[1]); push(m[2]); last = PAIR.lastIndex; }
+  // "...to X, then to Y" - one origin, a chain of destinations
+  const THEN = new RegExp('(?:,| and|) *then to ([a-z0-9 ]+?)' + END, 'g');
+  THEN.lastIndex = last;
+  while ((m = THEN.exec(t))) push(m[1]);
+  return stops.length >= 3 ? stops : null;
+}
+
+/** The model stuffed a chain into one field: "Nagasandra, then to Kodigehalli". */
+export function splitEnds(text) {
+  return String(text || '').split(/\s*,?\s*(?:and\s+)?then\s+to\s+|\s*,\s*then\s+/i)
+    .map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * A journey read from the sentence alone, with no model in the room.
+ *
+ * The chat path had no such floor: when the model answered with no action -
+ * which it does when the origin arrives in a later sentence than the
+ * destination, a shape none of its examples show - khaali replied that it did
+ * not have that one to hand, about a request naming a origin, a destination
+ * and a deadline. A sentence khaali can read is planned, not deflected.
+ */
+export function planFromText(text) {
+  const local = parseLocally(text);
+  const hops = hopsOf(text);
+  const from = hops ? hops[0] : (local.origin && local.origin.text);
+  const to = hops ? hops[hops.length - 1] : (local.destination && local.destination.text);
+  if (!from || !to || squash(from) === squash(to)) return null;
+  const act = { type: 'plan', from, to, source: 'read-from-the-sentence' };
+  const via = hops ? hops.slice(1, -1) : [];
+  if (via.length) act.via = via;
+  const tc = local.timeConstraint;
+  if (tc && tc.type === 'ARRIVE_BY') act.by = tc.value;
+  if (tc && tc.type === 'LEAVE_AFTER') act.after = tc.value;
+  if (local.leaveAfter) act.after = local.leaveAfter;
+  if (local.modes) act.modes = local.modes;
+  if (/\btomorrow\b/i.test(String(text || ''))) act.day = 'tomorrow';
+  return act;
 }
 
 // --------------------------------------------------------------- the model --

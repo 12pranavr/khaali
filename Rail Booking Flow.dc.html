@@ -11693,8 +11693,16 @@ class Component extends DCLogic {
           linkStyle:{display:m.link?'inline-block':'none',font:'700 12px/1 Archivo,Manrope,sans-serif',
             color:'var(--k-fg-d8385a)',cursor:'pointer',padding:'3px 2px'},
           onSpk:mine?()=>{}:()=>this.speakText(m.content,this.langOf(m.content)),
+          /* Filling the form is not answering the question. applyUrl arms
+             pAutoSearch for a COLD load, where the first render notices it;
+             arriving here the page is already mounted and that flag was not
+             reliably picked up, so the planner sat there fully filled in with
+             "press Search" underneath. Take the flag off the table and run it
+             directly - exactly once, since the flag path is disarmed first. */
           onLink:m.link?()=>{try{window.history.pushState({},'',m.link);}catch(e){}
-            this.applyUrl();window.scrollTo(0,0);}:()=>{}};
+            this.applyUrl();window.scrollTo(0,0);
+            this._autoRan=true;this.setState({pAutoSearch:false});
+            setTimeout(()=>{if(this.state.page==='plan')this.planSearch();},160);}:()=>{}};
       }),
       ...(()=>{
         const favNos=this.favs();

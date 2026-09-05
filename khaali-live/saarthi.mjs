@@ -50,6 +50,8 @@ export function systemPrompt(today) {
     'TRAIN SEARCH: {"say":"","action":{"type":"search","from":<index>,"to":<index>,"cls":"SL","date":"YYYY-MM-DD"}} (cls one of SL, 3A, 2A, default SL; include "date" ONLY when the traveller names a day; include "around":"HH:MM" in 24-hour time ONLY when they name a time of day — morning/subah/belagge/kaalai means AM, evening/shaam/sanje/maalai/raat means PM, so "around 7:30 in the evening" becomes "around":"19:30"). NEVER ask which date before searching: with no date named, omit the date field and search anyway.',
     'JOURNEY: {"say":"","action":{"type":"plan","from":"<their words for the origin>","to":"<their words for the destination>","after":"HH:MM","by":"HH:MM","day":"today"|"tomorrow"|"+N","modes":["train","metro","bus"]}} — "after" ONLY if they named a time to leave after; "by" ONLY if they named a time to arrive by ("before four", "I have to be there by 3:30"); "day" ONLY if they named a day; "modes" ONLY if they restricted themselves, and include "car" or "bike" ONLY if they actually asked to hire one.',
     'A person often says both: "tomorrow at 12, I have to be there before 3:30" is after 12:00, by 15:30, day tomorrow. Put all three in. Dropping one of them plans a different journey from the one they asked for.',
+    'A JOURNEY IN HOPS: "Majestic to Nagasandra, and Nagasandra to Kodigehalli" names THREE places, not two. Put the first in "from", the last in "to", and every place in between into "via":["<their words>", ...]. Never put two place names into one field — "to":"Nagasandra, then to Kodigehalli" is one place khaali cannot find, and the traveller gets nothing.',
+    'THE ORIGIN IS OFTEN SAID LAST, AND IN ITS OWN SENTENCE. "I want to reach Majestic before 8 pm. I am from Hebbal. What should I do?" is from Hebbal, to Majestic, by 20:00 — a complete journey. Read the WHOLE message before deciding an origin is missing; "I am from X", "I stay in X", "I am at X" and "starting from X" all name the origin wherever they appear.',
 
     // ---- the failure this file exists to prevent ----
     'A PLACE YOU DO NOT RECOGNISE IS A PLAN, NEVER A REFUSAL. khaali knows 9,875 BMTC bus stops, every Purple Line metro station, and can find any address, landmark, office, hospital, temple, mall or neighbourhood in Bengaluru on the map. Kodigehalli Gate, Hebbal, Indiranagar, Koramangala, Electronic City, Manyata Tech Park, a friend’s house in Jayanagar — all of these are places khaali plans journeys to every day. You do NOT know which places are in the data and you must never guess that one is missing.',
@@ -98,6 +100,14 @@ export function shots(now = Date.now()) {
 
     { role: 'user', content: 'I want to go from Bangarpet to Hebbal tomorrow at 12 pm. I have to be there before 3:30.' },
     { role: 'assistant', content: J({ say: '', action: { type: 'plan', from: 'Bangarpet', to: 'Hebbal', after: '12:00', by: '15:30', day: 'tomorrow' } }) },
+
+    // --- the origin arrives last, in its own sentence ---
+    { role: 'user', content: 'I want to reach Majestic before 8 pm. I am from Hebbal. What should I do?' },
+    { role: 'assistant', content: J({ say: '', action: { type: 'plan', from: 'Hebbal', to: 'Majestic', by: '20:00' } }) },
+
+    // --- a journey in hops: three places, never two fields ---
+    { role: 'user', content: 'I wanted to go from Majestic to Nagasandra and from Nagasandra to Kodigehalli, so plan my journey according to that.' },
+    { role: 'assistant', content: J({ say: '', action: { type: 'plan', from: 'Majestic', via: ['Nagasandra'], to: 'Kodigehalli' } }) },
 
     { role: 'user', content: 'kal Whitefield se Mandya 3AC me kitna hoga?' },
     { role: 'assistant', content: J({ say: '', action: { type: 'search', from: 1, to: 11, cls: '3A', date: tom } }) },

@@ -792,7 +792,11 @@ const RETRY_SAY = {
 };
 async function retrySayFor(sl) {
   const en = RETRY_SAY['en-IN'];
-  if (!sl || sl[1] === 'hi-IN') return RETRY_SAY['hi-IN'];
+  // An undetected language is not Hindi. This answered an English question in
+  // Hindi, while every other fallback in the app - CANNOT_SAY included -
+  // defaults to the language the page is written in.
+  if (!sl) return en;
+  if (sl[1] === 'hi-IN') return RETRY_SAY['hi-IN'];
   if (sl[1] === 'en-IN') return en;
   try { return (await translateTo(en, sl[1])) || RETRY_SAY['hi-IN']; }
   catch { return RETRY_SAY['hi-IN']; }
@@ -3505,9 +3509,13 @@ async function api(req, res, url) {
   }
 
   if (p === '/api/chat' && req.method === 'POST') {
-    if (!SARVAM_KEY) {
+    /* This used to turn Saarthi off whenever SARVAM_KEY was absent - even with
+       an OpenAI key sitting right there, and even for a journey khaali can
+       read without any model at all. Only a server with no provider AND no
+       reader is asleep, and that check now happens where both are known. */
+    if (!SARVAM_KEY && !OPENAI_KEY) {
       return send(res, 200, { offline: true,
-        say: 'Saarthi is asleep \u2014 the server has no SARVAM_KEY yet. Add the key and restart, then I can chat in 22 Indian languages.' });
+        say: 'Saarthi is asleep \u2014 the server has no SARVAM_KEY or OPENAI_API_KEY yet. Add one and restart, then I can chat in 22 Indian languages.' });
     }
     let b;
     try { b = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
@@ -3544,22 +3552,43 @@ async function api(req, res, url) {
       // failure, RETRY THE SAME DEAD PROVIDER - so a spent Sarvam quota took
       // Saarthi down completely even with an OpenAI key sitting right there.
       // llmFor already tries them in turn; the chat path simply never used it.
+      /* What the sentence says on its own, before any model is asked.
+         A provider runs out of credit, or a long prompt comes back empty, and
+         Saarthi used to have nothing left to offer - it would apologise for
+         not understanding a message it had never needed a model to read. This
+         is the floor: a journey khaali can read is planned whether or not
+         anything answered. */
+      const readable = intel.planFromText(lastUser ? lastUser.content : '');
       const chatLlm = llmFor('chat');
-      if (!chatLlm) return send(res, 200, { say: 'Saarthi has no voice configured right now.', lang: sl ? sl[1] : null });
-      let first;
-      try { first = await chatLlm(msgs1, { maxTokens: 700 }); }
-      catch (e1) { try { first = await chatLlm(msgs1, { maxTokens: 700 }); } catch (e1b) { first = ''; } }
-      // Long multi-turn prompts occasionally come back EMPTY. Retry once
-      // without the few-shots (shorter prompt, same history) before giving up.
-      if (!String(first || '').trim()) {
-        try { first = await chatLlm([{ role: 'system', content: SAARTHI_SYS() + langNote }, ...hist], { maxTokens: 700 }); } catch (e2) {}
+      let first = '';
+      if (chatLlm) {
+        try { first = await chatLlm(msgs1, { maxTokens: 700 }); }
+        catch (e1) { try { first = await chatLlm(msgs1, { maxTokens: 700 }); } catch (e1b) { first = ''; } }
+        // Long multi-turn prompts occasionally come back EMPTY. Retry once
+        // without the few-shots (shorter prompt, same history) before giving up.
+        if (!String(first || '').trim()) {
+          try { first = await chatLlm([{ role: 'system', content: SAARTHI_SYS() + langNote }, ...hist], { maxTokens: 700 }); } catch (e2) {}
+        }
       }
-      if (!String(first || '').trim()) {
-        return send(res, 200, { say: await retrySayFor(sl), lang: sl ? sl[1] : null });
+      if (!String(first || '').trim() && !readable) {
+        return send(res, 200, { say: chatLlm ? await retrySayFor(sl)
+          : 'Saarthi has no voice configured right now.', lang: sl ? sl[1] : null });
       }
       let plan = null;
       try { plan = JSON.parse((first.match(/\{[\s\S]*\}/) || ['{}'])[0]); } catch { plan = null; }
-      const act = plan && plan.action;
+      let act = plan && plan.action;
+      /* The floor under the model.
+         Saarthi is asked to emit an action, and when it does not - which it
+         does when the origin arrives in a later sentence than the destination,
+         a shape none of its examples show - khaali used to fall through to "I
+         do not have that one to hand" about a request that named where she is,
+         where she is going and when she must be there. A sentence khaali can
+         read on its own is planned, not deflected. This only fires where the
+         model produced nothing to run; an action it did produce is never
+         overruled. */
+      if (!act || (act.type === 'plan' && !(act.from && act.to))) {
+        if (readable) act = readable;
+      }
       if (act && act.type === 'cancellations') {
         const t0c = new Date(); t0c.setHours(0, 0, 0, 0);
         let dmsC = t0c.getTime() + 864e5;
@@ -3646,10 +3675,29 @@ async function api(req, res, url) {
           const g = await findPlace(txt);                       // a bus stop, then the map
           return g ? { end: { kind: 'place', lat: g.lat, lng: g.lng, name: g.name }, name: g.name } : null;
         };
-        const A = await endOf(words(act.from)), B = await endOf(words(act.to));
-        if (!A || !B) {
-          const miss = !A ? words(act.from) : words(act.to);
-          const en = 'I could not find ' + (miss || 'that place') + ' on khaali’s map. Try a station, a bus stop, or a landmark in Bengaluru.';
+        /* A journey may be asked for in hops - "Majestic to Nagasandra, and
+           Nagasandra to Kodigehalli". khaali had one origin slot and one
+           destination slot, so the whole tail went into the destination and it
+           reported that it could not find a place nobody had named. The stops
+           are a list; two of them is the ordinary case. */
+        const viaTxt = (Array.isArray(act.via) ? act.via : (act.via ? [act.via] : []))
+          .flatMap(v => intel.splitEnds(words(v)));
+        const stopTxt = [...intel.splitEnds(words(act.from)), ...viaTxt,
+          ...intel.splitEnds(words(act.to))].map(s => s.trim()).filter(Boolean);
+        const stops = [];
+        for (const s of stopTxt) stops.push({ txt: s, got: await endOf(s) });
+        const missing = stops.filter(s => !s.got);
+        if (stops.length < 2 || missing.length) {
+          /* Name the one it could not place, not the whole sentence back - and
+             say what it DID understand, so she corrects one word instead of
+             starting again. */
+          const named = missing.map(s => '“' + s.txt + '”').join(' or ');
+          const known = stops.filter(s => s.got).map(s => s.got.name);
+          const en = stops.length < 2
+            ? 'Tell me where you are starting from and where you want to get to, and I will plan it.'
+            : 'I could not find ' + (named || 'that place') + ' on khaali’s map.'
+              + (known.length ? ' I did find ' + known.join(' and ') + '.' : '')
+              + ' Try a station, a bus stop, or a landmark in Bengaluru.';
           let sayP = en; if (sl) { try { sayP = (await translateTo(en, sl[1])) || en; } catch (e) {} }
           return send(res, 200, { say: sayP, lang: sl ? sl[1] : null });
         }
@@ -3672,49 +3720,92 @@ async function api(req, res, url) {
         // it happens to be now
         const after = asked != null ? asked
           : dayIdx > 0 ? 0 : (simNow().getHours() * 60 + simNow().getMinutes());
-        const planFor = (d, at) => journey.journeysAnywhere({ from: A.end, to: B.end, after: at, by, modes: use,
-          counts: (no, f, t) => { try { return store.countsFor(String(no), DATE_FOR(d), 'SL', f, t).free; } catch (e) { return null; } } });
-        let day = dayIdx, from = after, r = planFor(day, from), rolled = false;
-        // Asked at eleven at night with no day named, "nothing runs between now
-        // and midnight" is true and useless. Nothing is missing from khaali's
-        // map; the day is simply over. Answer with tomorrow and say so.
-        if ((!r.ok || !r.chains.length) && !dayIdx && asked == null) {
-          const t = planFor(1, 0);
-          if (t.ok && t.chains.length) { r = t; day = 1; from = 0; rolled = true; }
-        }
-        const date = DATE_FOR(day);
-        let en, pick = '';
-        if (!r.ok || !r.chains.length) {
-          en = 'I could not find a way from ' + A.name + ' to ' + B.name + ' with what khaali knows'
-            + (modes.length ? ' using only ' + use.join(' and ') : '') + '.';
-        } else {
+        /* One hop at a time, the clock carried forward: she cannot start the
+           second leg before the first one puts her down. Only the LAST hop
+           owns the arrive-by, because that is the deadline she named. */
+        const hopFor = (fromEnd, toEnd, d, at, deadline) =>
+          journey.journeysAnywhere({ from: fromEnd, to: toEnd, after: at, by: deadline, modes: use,
+            counts: (no, f, t) => { try { return store.countsFor(String(no), DATE_FOR(d), 'SL', f, t).free; } catch (e) { return null; } } });
+        let day = dayIdx, rolled = false;
+        const lines = [], links = [];
+        let clock = after, failed = null;
+        for (let i = 0; i < stops.length - 1 && !failed; i++) {
+          const F = stops[i].got, T = stops[i + 1].got;
+          const lastHop = i === stops.length - 2;
+          const deadline = lastHop ? by : null;
+          let r = hopFor(F.end, T.end, day, clock, deadline);
+          // Asked at eleven at night with no day named, "nothing runs between
+          // now and midnight" is true and useless. Nothing is missing from
+          // khaali's map; the day is simply over. Answer with tomorrow, once,
+          // and say so.
+          if ((!r.ok || !r.chains.length) && !i && !dayIdx && asked == null) {
+            const t2 = hopFor(F.end, T.end, 1, 0, deadline);
+            if (t2.ok && t2.chains.length) { r = t2; day = 1; clock = 0; rolled = true; }
+          }
+          if (!r.ok || !r.chains.length) {
+            failed = 'I could not find a way from ' + F.name + ' to ' + T.name + ' with what khaali knows'
+              + (modes.length ? ' using only ' + use.join(' and ') : '') + '.';
+            break;
+          }
+          const date = DATE_FOR(day);
           capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
             if (!(fi >= 0 && ti >= 0)) return null;
             const k = store.countsFor(String(no), date, 'SL', fi, ti);
             return { free: k.free, total: k.free + k.part + k.taken + k.locked };
           } });
-          const a = allocate.allocate(r.chains, { after: from, by });
+          const a = allocate.allocate(r.chains, { after: clock, by: deadline });
           const c = a.chains[a.recommended != null ? a.recommended : 0];
-          pick = chainKey(c);
           const legs = c.legs.filter(l => l.mode !== 'walk')
             .map(l => l.mode === 'metro' ? (l.line || 'the metro') : (l.name || l.mode));
-          const when = rolled ? 'Nothing more leaves tonight. Tomorrow, from ' : 'From ';
-          en = when + A.name + ' to ' + B.name + ', leave at ' + c.depText + ' and you are there by '
+          const lead = (i === 0)
+            ? ((rolled ? 'Nothing more leaves tonight. Tomorrow, from ' : 'From ') + F.name)
+            : ('Then from ' + F.name);
+          let line = lead + ' to ' + T.name + ', leave at ' + c.depText + ' and you are there by '
             + c.arrText + '. That is ' + legs.join(', then ') + ', about ₹' + c.fare + '. '
             + allocate.sentence(a.reason);
+          /* Which one to take, and what taking it costs - the same ledger the
+             card shows, said out loud. Saarthi used to name a journey and
+             never the one it beat, so "why this?" had no answer in the chat. */
+          /* The runner-up by the allocator's own ranking, not merely another
+             row. Comparing against whatever happened to sit next in the array
+             produced "12h 34m slower" against a train she was never going to
+             take - true arithmetic, useless as a reason. */
+          const rival = a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
+            .sort((p, q) => p.alloc.total - q.alloc.total)[0] || null;
+          // no rival khaali would actually offer means no comparison: measuring
+          // her journey against one it has already ruled out is a sentence
+          // about a choice she never had
+          if (rival) {
+            try {
+              const oc = card.optionComparisonOf(c, rival, {});
+              if (oc) line += ' ' + oc.headline
+                + (oc.pills.length ? (' ' + oc.pills.map(x => x.text).join(', ') + '.') : '');
+            } catch (e) { /* the plan stands without the comparison */ }
+          }
+          lines.push(line);
+          const qh = new URLSearchParams({ fromKind: F.end.kind, fromId: F.end.kind === 'place'
+            ? (F.end.lat.toFixed(5) + ',' + F.end.lng.toFixed(5)) : F.end.id,
+            toKind: T.end.kind, toId: T.end.kind === 'place'
+              ? (T.end.lat.toFixed(5) + ',' + T.end.lng.toFixed(5)) : T.end.id,
+            fromName: F.name, toName: T.name, after: String(clock) });
+          if (deadline != null) qh.set('by', String(deadline));
+          if (day) qh.set('day', String(day));
+          if (modes.length) qh.set('modes', use.join(','));
+          qh.set('pick', chainKey(c));
+          links.push('/plan?' + qh.toString());
+          // the next hop cannot begin before this one ends
+          if (c.arr != null) clock = ((c.arr % 1440) + 1440) % 1440;
         }
+        /* A hop khaali cannot serve does not erase the hops it planned. She
+           asked for three places; being told only about the gap, and not about
+           the half that works, is the whole answer thrown away for a part. */
+        const en = [...lines, failed].filter(Boolean).join(' ');
         let sayP = en;
         if (sl) { try { sayP = (await translateTo(en, sl[1])) || en; } catch (e) {} }
-        const q2 = new URLSearchParams({ fromKind: A.end.kind, fromId: A.end.kind === 'place'
-          ? (A.end.lat.toFixed(5) + ',' + A.end.lng.toFixed(5)) : A.end.id,
-          toKind: B.end.kind, toId: B.end.kind === 'place'
-            ? (B.end.lat.toFixed(5) + ',' + B.end.lng.toFixed(5)) : B.end.id,
-          fromName: A.name, toName: B.name, after: String(from) });
-        if (by != null) q2.set('by', String(by));
-        if (day) q2.set('day', String(day));
-        if (modes.length) q2.set('modes', use.join(','));   // only what she asked to be held to
-        if (pick) q2.set('pick', pick);
-        return send(res, 200, { say: sayP, lang: sl ? sl[1] : null, link: '/plan?' + q2.toString() });
+        /* The link opens the hop she takes FIRST; the rest travel beside it so
+           a chain of hops is one answer with a way into each of them. */
+        return send(res, 200, { say: sayP, lang: sl ? sl[1] : null,
+          link: links[0] || null, links, hops: stops.map(s => s.got.name) });
       }
 
       if (act && act.type === 'mybookings') {

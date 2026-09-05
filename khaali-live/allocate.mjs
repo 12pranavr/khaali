@@ -91,6 +91,27 @@ export function span(c, { after = null, by = null } = {}) {
 }
 
 /**
+ * Does this journey miss the hour she named?
+ *
+ * span() measures what a deadline COSTS her - how early she must set out - and
+ * that is the right notion of cost, but nothing was measuring whether she
+ * actually arrives in time. So "reach Majestic before 8 pm" scored a bus that
+ * gets in at 19:43 and an overnight that gets in at 07:09 the next morning
+ * exactly alike, because they leave at the same minute, and the overnight won
+ * on other terms. A journey that arrives after the deadline is not a slower
+ * way of meeting it; it does not meet it.
+ *
+ * Both clocks are read in the same frame, because a journey that lands after
+ * midnight wears a smaller number than the one it left on.
+ */
+export function missesDeadline(c, by) {
+  if (by == null || c == null || c.arr == null || c.dep == null) return false;
+  const arr = c.arr < c.dep ? c.arr + 1440 : c.arr;
+  const due = by < c.dep ? by + 1440 : by;
+  return arr > due;
+}
+
+/**
  * How much standing costs, in minutes-equivalent, by the seat word the engine
  * gave - for a REFERENCE stand of this many minutes.
  *
@@ -173,6 +194,8 @@ export function allocate(chains, { profile = 'balanced', limits = {}, maxChanges
     // a seat she would not otherwise get is worth waiting longer for
     const buysASeat = seatRank(c) > seatRank(fastest) && (w.seat || 0) >= L.seatProfileMin;
     const slack = L.extraMin + (buysASeat ? L.extraMinForASeat : 0);
+    // she named an hour; arriving after it is not a candidate for meeting it
+    if (missesDeadline(c, by)) overLimit.push('ARRIVES_AFTER_DEADLINE');
     if (sp(c) - sp(fastest) > slack) overLimit.push('SLOWER_THAN_LIMIT');
     if (c.changes - fastest.changes > L.extraChanges) overLimit.push('MORE_CHANGES_THAN_LIMIT');
     if (walkKm(c) > L.maxWalkKm) overLimit.push('LONGER_WALK_THAN_LIMIT');
