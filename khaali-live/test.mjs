@@ -32,6 +32,8 @@ import * as CN from './constraint.mjs';
 import * as SP from './split.mjs';
 import * as BLG from './busledger.mjs';
 import * as SPP from './splitplan.mjs';
+import * as DEC from './decision.mjs';
+import * as JN from './journey.mjs';
 import { BUSES } from './buses.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
@@ -5094,6 +5096,220 @@ t('inventory khaali cannot read is never a reason to put anybody on a bus', () =
   const r = SPP.findFor({ fromIdx: CORRIDOR_BWT, toIdx: SBC, date: DATE, pax: 2, after: 400, countsFor });
   assert.strictEqual(r.code, 'NO_TRIGGER');
   assert.ok(/cannot count/.test(r.says), r.says);
+});
+
+console.log('\nsix controlled changes: does the decision move when the facts do');
+
+/* The point of these is not that a split appears. It is that ONE input moves,
+   and the gate result, the candidate set, the recommendation and the sentence
+   move with it - or stay put for a reason khaali states. A planner that always
+   answers the same thing is not capacity-aware however good the sentence is. */
+
+const H_DATE = '2026-09-05';
+const hIdx = c => ST.findIndex(x => x.c === c);
+const H_BWT = hIdx('BWT'), H_WFD = hIdx('WFD'), H_BNC = hIdx('BNC');
+
+// Bangarpet to Hebbala, as the page builds it: a train to Bengaluru Cantt, a
+// walk, a BMTC bus, a walk. Hebbala is a bus stop, not a corridor station -
+// which is precisely the shape the old rail-to-rail gate never ran on.
+const toHebbala = () => ({
+  kind: 'train|BNC', dep: 695, arr: 786, fare: 210, changes: 2,
+  legs: [
+    { mode: 'train', id: '22625', name: 'MAS-SBC AC D', from: 'Bangarpet', to: 'Bengaluru Cantt',
+      fromIdx: H_BWT, toIdx: H_BNC, depMin: 695, arrMin: 753, source: 'timetable',
+      seat: { word: 'yes', rank: 3, why: 'berths free on your stretch' } },
+    { mode: 'walk', name: 'Walk', from: 'Bengaluru Cantt', to: 'Vasantha Nagara',
+      depMin: 761, arrMin: 762, min: 1, source: 'measured', seat: null },
+    { mode: 'bus', id: '298-MS', name: 'BMTC 298-MS', from: 'Vasantha Nagara', to: 'Hebbala Canara Bank',
+      depMin: 764, arrMin: 778, min: 14, every: 30, source: 'timetable',
+      scheduleKind: 'frequency', departureDerived: true,
+      seat: { word: 'likely', rank: 2, why: 'you board early on the route' } },
+    { mode: 'walk', name: 'Walk', from: 'Hebbala Canara Bank', to: 'Hebbala',
+      depMin: 778, arrMin: 786, min: 8, source: 'measured', seat: null },
+  ],
+});
+
+// one knob per scenario, and nothing else moves
+const world2 = (over = {}) => ({
+  wholeSpanSeats: 40,      // A: what the train can sell Bangarpet -> Cantt
+  onwardSeats: 120,        // what it can sell from the rejoining station
+  busProfiles: null,       // C, E: what the conductor ledger says
+  busTimes: null,          // D: when the replacements run
+  ...over,
+});
+
+function runDecision(w, { pax = 2 } = {}) {
+  const chain = toHebbala();
+  const countsFor = (no, d, cls, f, t) => {
+    if (f === H_BWT) return { anySeats: w.wholeSpanSeats, free: 0 };
+    return { anySeats: w.onwardSeats, free: 0 };
+  };
+  const findSplit = (req) => SP.find({
+    fromIdx: req.fromIdx, toIdx: req.toIdx, pax: req.pax, after: req.after, now: 1,
+    keepTrace: true, ledger: CL.ledger(),
+    sellWhole: () => w.wholeSpanSeats,
+    onwardFrom: k => (k === H_WFD && w.onwardSeats >= req.pax)
+      ? [{ trainNo: '56232', name: 'WFD-SBC MEMU', depMin: 700, arrMin: 760,
+        stopId: 'WFD', sell: w.onwardSeats }] : [],
+    busesFor: () => (w.busTimes || [{ dep: 540, run: 95 }]).map((b, i) => ({
+      tripInstanceId: 'KSRTC|T' + i, id: 'KSRTC BNG-BLR', name: 'KSRTC BNG-BLR',
+      depMin: b.dep, arrMin: b.dep + b.run, source: 'simulated', every: 30,
+      fromStopSequence: 0, toStopSequence: 6, walkMinutes: 9,
+      // a bus khaali knows nothing about is not a bus with room; the
+      // default world gives every candidate a readable, roomy ledger so a
+      // scenario changes one thing and not two
+      profile: w.busProfiles ? w.busProfiles[i] : busProf(50, [[0, 11, 4]]), basis: 'model',
+    })),
+  });
+  return DEC.decide({ chain, pax, date: H_DATE, after: 400, now: 1, countsFor, findSplit });
+}
+
+// a bus ledger with a stated capacity, so "no room" and "cannot tell" differ
+const busProf = (cap, ticketed = [], broken = false) => {
+  let n = 0;
+  const evs = [CD.event({ kind: 'bustrip', id: 'sc' + (++evn), tripInstanceId: 'KSRTC|T0',
+    stopCount: 12, capacity: cap == null ? {} : { seatedCapacity: cap, source: 'demo' } })];
+  ticketed.forEach(([f, t2, p]) => evs.push(CD.event({ kind: 'ticket', id: 'sc' + (++evn) + (++n),
+    tripInstanceId: 'KSRTC|T0', stopSequence: f, toStopSequence: t2, pax: p })));
+  if (broken) evs.push(CD.event({ kind: 'alight', id: 'sc' + (++evn), tripInstanceId: 'KSRTC|T0',
+    stopSequence: 1, count: 99 }));
+  return { ...CD.profile(evs, { tripInstanceId: 'KSRTC|T0' }), generatedAt: 1 };
+};
+
+t('A \u2014 the train can carry the party, so nothing is replaced', () => {
+  const d = runDecision(world2({ wholeSpanSeats: 40 }));
+  assert.strictEqual(d.kind, 'KEEP_ROUTE');
+  assert.strictEqual(d.railCheck.outcome, 'SELLABLE');
+  assert.strictEqual(d.railCheck.anySeats, 40);
+  assert.strictEqual(d.railCheck.partySize, 2);
+  assert.deepStrictEqual(d.reasons, ['DIRECT_TRAIN_BOOKABLE']);
+  assert.strictEqual(d.chosenBusDeparture, null, 'khaali must not swap a prefix it did not need to');
+  assert.ok(/no reason to replace any of it/.test(d.says), d.says);
+  // and it ran at all, on a journey that ENDS AT A BUS STOP
+  assert.strictEqual(d.railCheck.trainInstanceId, 'IR|22625|2026-09-05');
+  assert.strictEqual(d.railCheck.fromSequence, H_BWT);
+  assert.strictEqual(d.railCheck.toSequence, H_BNC, 'the check is on the rail leg, not the journey ends');
+});
+
+t('B \u2014 the full span goes, the onward stays: a prefix replacement is chosen', () => {
+  const before = runDecision(world2({ wholeSpanSeats: 40 }));
+  const after = runDecision(world2({ wholeSpanSeats: 0 }));   // one knob
+  assert.strictEqual(before.kind, 'KEEP_ROUTE');
+  assert.strictEqual(after.kind, 'SWAP_PREFIX', after.reasons.join(','));
+  assert.strictEqual(after.railCheck.outcome, 'UNSELLABLE');
+  assert.ok(after.reasons.includes('DIRECT_TRAIN_UNSELLABLE'));
+  assert.ok(after.reasons.includes('PREFIX_REPLACEMENT_FEASIBLE'));
+  const b = after.chosenBusDeparture;
+  assert.ok(b, 'a swap with no named departure is not an answer');
+  assert.strictEqual(b.boardingFeasible, true);
+  assert.strictEqual(b.spanWithinPlanningLimit, true);
+  assert.strictEqual(b.transferFeasible, true);
+  assert.strictEqual(b.onwardTrain, '56232', 'and it names the train she joins');
+  assert.ok(b.tripInstanceId, 'a departure, not a route');
+  assert.ok(/No bus seat is reserved/.test(DEC.lines(after).join(' ')));
+});
+
+t('C \u2014 the replacement fills past the planning limit, so another is chosen', () => {
+  const packed = busProf(20, [[0, 11, 20]]);
+  const roomy = busProf(20, [[0, 11, 2]]);
+  const d = runDecision(world2({ wholeSpanSeats: 0,
+    busTimes: [{ dep: 540, run: 95 }, { dep: 545, run: 95 }],
+    busProfiles: [packed, roomy] }));
+  assert.strictEqual(d.kind, 'SWAP_PREFIX', d.reasons.join(','));
+  assert.strictEqual(d.chosenBusDeparture.tripInstanceId, 'KSRTC|T1',
+    'a route-level average would have passed the full one too');
+  assert.ok(d.reasons.includes('BUS_SPAN_OVER_PLANNING_LIMIT'),
+    'and it says the earlier one was rejected: ' + d.reasons.join(','));
+  assert.ok(/fills past what khaali will plan into/.test(DEC.lines(d).join(' ')));
+  // with only the packed one, there is no swap at all
+  const only = runDecision(world2({ wholeSpanSeats: 0, busProfiles: [packed] }));
+  assert.strictEqual(only.kind, 'NO_FEASIBLE_CONNECTION');
+  assert.ok(only.reasons.includes('BUS_SPAN_OVER_PLANNING_LIMIT'));
+});
+
+t('D \u2014 room on the bus is no use if it misses the train', () => {
+  const roomy = busProf(20, [[0, 11, 2]]);
+  // arrives 640, needs 9 walk + 3 entry + 25 = 677 > the 700 train... so make
+  // it late enough to miss: arrive 690, earliest boarding 727, train at 700
+  const d = runDecision(world2({ wholeSpanSeats: 0,
+    busTimes: [{ dep: 595, run: 95 }], busProfiles: [roomy] }));
+  assert.strictEqual(d.kind, 'NO_FEASIBLE_CONNECTION');
+  assert.ok(d.reasons.includes('EARLIER_BUS_MISSES_TRANSFER'), d.reasons.join(','));
+  assert.ok(/the change onto the train does not work/.test(DEC.lines(d).join(' ')));
+  assert.strictEqual(d.chosenBusDeparture, null, 'a bus with room she cannot use is not an answer');
+});
+
+t('E \u2014 broken bus accounting is an evidence error, never a full bus', () => {
+  const d = runDecision(world2({ wholeSpanSeats: 0, busProfiles: [busProf(20, [[0, 4, 2]], true)] }));
+  assert.strictEqual(d.kind, 'NO_FEASIBLE_CONNECTION');
+  assert.ok(d.reasons.includes('BUS_DATA_UNVERIFIED'), d.reasons.join(','));
+  assert.ok(!d.reasons.includes('BUS_SPAN_OVER_PLANNING_LIMIT'), 'that is a different claim');
+  const said = DEC.lines(d).join(' ');
+  assert.ok(/could not determine its planning room/.test(said), said);
+  assert.ok(/not the same as it being full/.test(said), said);
+  ['is full', 'no room', 'sold out'].forEach(c =>
+    assert.ok(!said.toLowerCase().includes(c), 'khaali said ' + c));
+  // capacity nobody stated lands in the same family, not in "full"
+  const noCap = runDecision(world2({ wholeSpanSeats: 0, busProfiles: [busProf(null, [[0, 4, 2]])] }));
+  assert.ok(noCap.reasons.includes('BUS_DATA_UNVERIFIED'), noCap.reasons.join(','));
+});
+
+t('F \u2014 the journey to Hebbala is kept, re-timed, and flagged if it cannot be', () => {
+  const d = runDecision(world2({ wholeSpanSeats: 0 }));
+  assert.strictEqual(d.kind, 'SWAP_PREFIX');
+  const leg = DEC.railLegOf(toHebbala());
+  const ch = SPP.chainOf(d.split, { fromIdx: leg.fromIdx, toIdx: leg.toIdx,
+    date: H_DATE, tail: toHebbala() });
+  assert.ok(ch, 'a swap that cannot be assembled into a journey is not an answer');
+  const modes = ch.legs.map(l => l.mode);
+  assert.ok(modes.includes('bus'), 'the replacement');
+  assert.ok(modes.includes('train'), 'the train she joins');
+  assert.strictEqual(ch.legs[ch.legs.length - 1].to, 'Hebbala',
+    'a journey that stops at a railway station answers a question nobody asked');
+  // the tail moved with the new train rather than keeping its old clock
+  const oldBus = toHebbala().legs.find(l => l.mode === 'bus');
+  const newBus = ch.legs.filter(l => l.mode === 'bus').pop();
+  assert.notStrictEqual(newBus.depMin, oldBus.depMin, 'the last mile was re-timed');
+  assert.ok(ch.arr > ch.dep);
+  // and a fixed onward departure that would have gone is not quietly kept
+  const fixedTail = toHebbala();
+  fixedTail.legs[2] = { ...fixedTail.legs[2], every: null, scheduleKind: 'timetable' };
+  const ch2 = SPP.chainOf(d.split, { fromIdx: leg.fromIdx, toIdx: leg.toIdx,
+    date: H_DATE, tail: fixedTail });
+  if (ch2.split && d.split.split.onward.arrMin > fixedTail.legs[0].arrMin)
+    assert.strictEqual(ch2.tailNote, 'ONWARD_NOT_REVALIDATED');
+});
+
+t('every reason khaali reports is one the checks can actually produce', () => {
+  const seen = new Set();
+  [world2({ wholeSpanSeats: 40 }), world2({ wholeSpanSeats: 0 }),
+    world2({ wholeSpanSeats: 0, onwardSeats: 0 }),
+    world2({ wholeSpanSeats: 0, busProfiles: [busProf(20, [[0, 11, 20]])] }),
+    world2({ wholeSpanSeats: 0, busProfiles: [busProf(20, [[0, 4, 2]], true)] }),
+    world2({ wholeSpanSeats: 0, busTimes: [{ dep: 595, run: 95 }] }),
+  ].forEach(w => runDecision(w).reasons.forEach(r => seen.add(r)));
+  seen.forEach(r => assert.ok(DEC.REASONS.includes(r), 'undeclared reason: ' + r));
+  assert.ok(seen.has('DIRECT_TRAIN_BOOKABLE'));
+  assert.ok(seen.has('DIRECT_TRAIN_UNSELLABLE'));
+  assert.ok(seen.has('NO_BOUNDARY_WITH_ONWARD_ROOM'));
+});
+
+t('a journey with no train on it is not diagnosed as a rail shortage', () => {
+  const busOnly = { kind: 'direct|298-MS', dep: 600, arr: 660, fare: 20, changes: 0,
+    legs: [{ mode: 'bus', id: '298-MS', name: 'BMTC 298-MS', from: 'A', to: 'B',
+      depMin: 600, arrMin: 660, seat: { word: 'likely', rank: 2, why: '' } }] };
+  const d = DEC.decide({ chain: busOnly, pax: 2, date: H_DATE, countsFor: () => ({ anySeats: 0 }) });
+  assert.strictEqual(d.kind, 'KEEP_ROUTE');
+  assert.deepStrictEqual(d.reasons, ['NO_RAIL_LEG']);
+  assert.strictEqual(d.railCheck, null);
+});
+
+t('a journey is named by an id, never by where it sits in the list', () => {
+  const a = toHebbala(), b = toHebbala();
+  assert.strictEqual(DEC.chainId(a), DEC.chainId(b), 'the same journey keys the same way');
+  const moved = toHebbala(); moved.legs[0] = { ...moved.legs[0], depMin: 700 };
+  assert.notStrictEqual(DEC.chainId(a), DEC.chainId(moved), 'a different departure is a different journey');
+  assert.ok(/^ch_/.test(DEC.chainId(a)));
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
