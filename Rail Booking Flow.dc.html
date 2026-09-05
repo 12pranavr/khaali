@@ -8282,7 +8282,8 @@ class Component extends DCLogic {
         tags,
         legs:c.legs.map(l=>({
           dotStyle:{background:(MODE[l.mode]||MODE.walk).c},
-          title:l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m '+'\u00b7'+' about '+l.min+' min')
+          title:l.mode==='walk'?(l.km?('Walk '+Math.round(l.km*1000)+' m '+'\u00b7'+' about '+l.min+' min')
+              :('Walk '+'\u00b7'+' about '+l.min+' min'))
             :l.mode==='auto'?(l.name+' '+'\u00b7'+' about '+l.km+' km, '+l.min+' min '+'\u00b7'+' \u20b9'+l.fare+' estimated')
             :(l.mode==='car'||l.mode==='bike')?(l.name+' '+'\u00b7'+' '+l.km+' km, about '+l.min+' min'
               +' '+'\u00b7'+' \u20b9'+l.fareMin+'\u2013'+l.fareMax+' estimated')
@@ -8417,7 +8418,8 @@ class Component extends DCLogic {
           font:"600 11.5px/1 'JetBrains Mono',monospace",color:'var(--k-fg-8a8a84)'},
         // the journey as a bar, and the bar's legend
         legend:c.legs.map(l=>{const M=MODE[l.mode]||MODE.walk;
-          const t=l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' m')
+          // a walk khaali did not measure is not a walk of zero metres
+          const t=l.mode==='walk'?(l.km?('Walk '+Math.round(l.km*1000)+' m'):'Walk')
             :l.mode==='train'?('Train '+(l.id||'')+' \u00b7 '+(this.planCode(l.from)||l.from)+'\u2192'+(this.planCode(l.to)||l.to))
             :l.mode==='metro'?((l.line||'Metro')+' \u00b7 '+l.from+'\u2192'+l.to)
             :l.mode==='bus'?('Bus '+String(l.id||'').replace(/^BMTC /,'')+' \u00b7 to '+l.to)
@@ -8425,19 +8427,30 @@ class Component extends DCLogic {
           return {t,note:dhm(l.min||0),
             sw:{width:8,height:8,borderRadius:2,display:'block',flex:'none',background:M.c}};}),
         // why this one is here at all
-        whyLine:isRec?(R.explanation||''):(c.alloc&&c.alloc.why)||'',
+        /* The narrated line is generated from the allocator's codes and it
+           drifted: on a checked bus-and-metro journey it said "the fastest and
+           direct option available, taking 70 minutes with a fare of 20" beside
+           a card reading 58 minutes, one change and forty-one rupees. Two
+           explanations of one journey is one too many, and the one with the
+           arithmetic behind it wins. */
+        whyLine:isRec?((R.card&&R.card.recommendation)?'':(R.explanation||''))
+          :(c.alloc&&c.alloc.why)||'',
         // ---- every step of it ----
         stepLabel:open?'Hide the steps':'See full journey',
         openPanel:{display:open?'flex':'none',flexDirection:'column',gap:15,
           background:'var(--k-fafaf8)',borderRadius:16,padding:'18px 20px'},
         steps:(()=>{let at=c.dep;
           const out=c.legs.map(l=>{const t=at;at+=(l.min||0);const M=MODE[l.mode]||MODE.walk;
-            const title=l.mode==='walk'?('Walk '+Math.round((l.km||0)*1000)+' metres')
+            const title=l.mode==='walk'?(l.km?('Walk '+Math.round(l.km*1000)+' metres'):'Walk')
               :l.mode==='train'?((l.name||'Train')+' '+(l.id||''))
               :l.mode==='metro'?(l.line||'Metro')
-              :l.mode==='bus'?('BMTC '+String(l.id||'').replace(/^BMTC /,''))
+              /* "BMTC A" named an operator that does not run this service.
+                 The leg carries its own name; use it, and only fall back to
+                 stamping BMTC on a bare route number. */
+              :l.mode==='bus'?(l.name||('BMTC '+String(l.id||'').replace(/^BMTC /,'')))
               :(l.name||M.n);
-            const detail=l.mode==='walk'?('To '+l.to+(l.entrance?' \u00b7 '+l.entrance.n:'')+' \u00b7 about '+l.min+' min')
+            const detail=l.mode==='walk'?('To '+l.to+(l.entrance?' \u00b7 '+l.entrance.n:'')
+              +(l.km?(' \u00b7 '+Math.round(l.km*1000)+' m'):'')+' \u00b7 about '+l.min+' min')
               :l.mode==='train'?(l.from+' to '+l.to+(l.seat&&l.seat.why?' \u00b7 '+l.seat.why:''))
               :l.mode==='metro'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes')
               /* A headway is not a departure. GTFS keeps the two apart and so
