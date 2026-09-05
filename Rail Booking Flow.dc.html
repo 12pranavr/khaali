@@ -8163,14 +8163,23 @@ class Component extends DCLogic {
           marginTop:2,padding:'11px 13px',borderRadius:10,
           background:'var(--k-f6f6f3)',border:'1px solid var(--k-e6e5e0)',
           font:'600 12.5px/1.65 Archivo,sans-serif',color:'var(--k-fg-40434a)'},
+        /* Two planners answer here and they have different vocabularies: the
+           rail check says whether a berth allocation holds, the multimodal
+           planner says which vehicle to be on for each stretch. The tag names
+           whichever one produced this answer. */
         decisionTag:isRec&&R.decision?({KEEP_ROUTE:'TRAIN KEPT',
           SWAP_PREFIX:'FIRST STRETCH REPLACED',
-          NO_FEASIBLE_CONNECTION:'NOTHING PASSES THE CHECKS'}[R.decision.kind]||''):'',
+          NO_FEASIBLE_CONNECTION:'NOTHING PASSES THE CHECKS',
+          RECOMMEND_DIRECT:'STAY ON \u00b7 CHECKED',
+          RECOMMEND_MODE_CHANGE:'CHANGE MODE \u00b7 CHECKED',
+          RECOMMEND_BUS_TRANSFER:'CHANGE BUS \u00b7 CHECKED',
+          RECOMMEND_TRANSFER:'CHANGE \u00b7 CHECKED',
+          NO_FEASIBLE_JOURNEY:'NOTHING FEASIBLE'}[R.decision.kind]||''):'',
         decisionTagStyle:{display:(isRec&&R.decision&&R.decision.kind)?'inline-block':'none',
           font:"700 9.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
           padding:'5px 8px',borderRadius:5,marginBottom:8,
-          background:(R.decision&&R.decision.kind==='SWAP_PREFIX')?'var(--k-e6f4ec)':'var(--k-f1f1ee)',
-          color:(R.decision&&R.decision.kind==='SWAP_PREFIX')?'var(--k-fg-14663a)':'var(--k-fg-6a6d75)'},
+          background:(R.decision&&/SWAP_PREFIX|RECOMMEND_MODE_CHANGE|RECOMMEND_BUS_TRANSFER/.test(R.decision.kind))?'var(--k-e6f4ec)':'var(--k-f1f1ee)',
+          color:(R.decision&&/SWAP_PREFIX|RECOMMEND_MODE_CHANGE|RECOMMEND_BUS_TRANSFER/.test(R.decision.kind))?'var(--k-fg-14663a)':'var(--k-fg-6a6d75)'},
         whyStyle:{display:isRec&&R.explanation?'block':'none',margin:'0 18px 14px',padding:'11px 13px',
           borderRadius:12,background:INKINS,font:'600 12.5px/1.55 Archivo,sans-serif',color:ONINK},
         dep:c.depText,arr:c.arrText,
@@ -8276,11 +8285,15 @@ class Component extends DCLogic {
           const rail=cl&&cl.rail;
           const railWord=rail?(rail.word==='yes'?'BERTH YES':rail.word==='likely'?'BERTH LIKELY'
             :rail.word==='maybe'?'BERTH IF LUCKY':rail.word==='standing'?'NO BERTH':'BERTH UNKNOWN'):null;
-          const w=wide?base:(railWord||'SEE EACH LEG');
+          /* "TRAIN ONLY" is a scope, and it is only true when there IS a
+             train. On a bus-and-metro journey khaali holds nothing at all, so
+             the badge says that rather than pointing at a train that is not
+             in the journey. */
+          const w=wide?base:(railWord||'NOTHING RESERVED');
           const t=tint(wide?base:(rail&&rail.word==='standing'?'STANDING'
             :rail&&(rail.word==='yes'||rail.word==='likely')?'SEAT YES':'SEAT UNKNOWN'));
           return {
-            seatWord:w+(wide?'':' \u00b7 TRAIN ONLY'),
+            seatWord:w+((wide||!railWord)?'':' \u00b7 TRAIN ONLY'),
             seatTint:{font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
               padding:'6px 10px',borderRadius:6,background:t.bg,color:t.fg},
             unreserved:(cl&&cl.road)?cl.road.why:'',
