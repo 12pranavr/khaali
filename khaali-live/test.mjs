@@ -5812,6 +5812,22 @@ t('nothing feasible is said plainly, not as an empty list', () => {
   SCN.reset();
 });
 
+t('every page Saarthi offers is a page the server actually serves', () => {
+  /* Saarthi's page list drifted away from the routes: it was sending people to
+     /hop, /odds, /tatkal, /map and /bookings, none of which exist - a helpful
+     answer ending in a 404. The list and the router are checked against each
+     other rather than against anyone's memory of them. */
+  const src = fs.readFileSync(new URL('./server.mjs', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf('const APP_ROUTES = new Set(['));
+  const served = new Set((block.slice(0, block.indexOf(']')).match(/'([^']+)'/g) || [])
+    .map(s => s.slice(1, -1)));
+  assert.ok(served.size > 8, 'the route list was not read: ' + served.size);
+  SA.PAGES.forEach(([label, path]) => {
+    assert.ok(served.has(path), 'Saarthi offers ' + label + ' at ' + path
+      + ', which the server does not serve');
+  });
+});
+
 t('the website request runs this planner, not a demo of it', () => {
   // a source-level guard: the endpoint the page calls must reach multiplan,
   // and the demo network must be found from ordinary coordinates

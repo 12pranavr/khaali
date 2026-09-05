@@ -23,13 +23,13 @@ const iso = ms => { const d = new Date(ms); return d.getFullYear() + '-' + Strin
 export const PAGES = [
   ['Trains', '/', 'book a berth on the Bangarpet to Mysuru corridor'],
   ['Plan a journey', '/plan', 'a whole journey across Bengaluru by train, metro, bus and the walks between'],
-  ['Seat hop', '/hop', 'a seat that is free for part of the way, cheaper for that stretch'],
-  ['Waitlist odds', '/odds', 'whether a waitlisted ticket is likely to confirm'],
-  ['Fair Tatkal', '/tatkal', 'a fair draw for Tatkal seats instead of a race against bots'],
-  ['Route map', '/map', 'the corridor and the metro line, live'],
+  ['Seat hop', '/seat-hop', 'a seat that is free for part of the way, cheaper for that stretch'],
+  ['Waitlist odds', '/waitlist-odds', 'whether a waitlisted ticket is likely to confirm'],
+  ['Fair Tatkal', '/fair-tatkal', 'a fair draw for Tatkal seats instead of a race against bots'],
+  ['Route map', '/route-map', 'the corridor and the metro line, live'],
   ['Track', '/track', 'where the train, the bus or the ride is right now'],
   ['Wallet', '/wallet', 'passes and refunds'],
-  ['My bookings', '/bookings', 'tickets already booked'],
+  ['My bookings', '/my-bookings', 'tickets already booked'],
 ];
 
 /**
