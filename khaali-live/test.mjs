@@ -3475,6 +3475,18 @@ t('the deadline reads both clocks in one frame, so midnight is not a shortcut', 
   assert.strictEqual(AL.missesDeadline(same, null), false, 'no deadline, nothing to miss');
 });
 
+t('a missed deadline is reported, not left for her to notice', () => {
+  const g = golden();
+  const a = { ...g[0], kind: 'a', dep: 600, arr: 800, totalMin: 200 };
+  const b = { ...g[0], kind: 'b', dep: 600, arr: 900, totalMin: 300 };
+  const late = AL.allocate([a, b], { by: 700 });
+  assert.strictEqual(late.missesDeadline, true,
+    'khaali offered a journey past her hour without saying so');
+  const ok = AL.allocate([a, b], { by: 900 });
+  assert.strictEqual(ok.missesDeadline, false);
+  assert.strictEqual(AL.allocate([a, b], {}).missesDeadline, false, 'no hour, nothing missed');
+});
+
 t('when nothing meets the hour, the best of them is still offered', () => {
   // a deadline nobody can meet must not empty the page - it is a reason, and
   // the reason is reported, but she is still shown the closest thing

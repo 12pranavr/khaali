@@ -228,7 +228,11 @@ export function allocate(chains, { profile = 'balanced', limits = {}, maxChanges
   // CHOICE over it, not a necessity - and the recommendation has to say which.
   const netOnly = chains.filter(c => !rideKm(c));
   const netBest = netOnly.length ? netOnly.reduce((p, c) => sp(c) < sp(p) ? c : p) : null;
+  /* When nothing meets the hour she named, khaali still offers the closest
+     thing - but the caller has to be told, or it presents a journey arriving
+     eleven hours late as "the fastest way" and lets her find out herself. */
   return { chains, recommended: rec.alloc.idx,
+    missesDeadline: missesDeadline(rec, by),
     reason: explain(rec, fastest, cheapest, { after, by, netBest, span: sp }) };
 }
 

@@ -3771,11 +3771,14 @@ async function api(req, res, url) {
             break;
           }
           const date = DATE_FOR(day);
-          capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
-            if (!(fi >= 0 && ti >= 0)) return null;
-            const k = store.countsFor(String(no), date, 'SL', fi, ti);
-            return { free: k.free, total: k.free + k.part + k.taken + k.locked };
-          } });
+          const annot = chains => capacity.annotate(chains, {
+            busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()),
+            trainCap: (no, fi, ti) => {
+              if (!(fi >= 0 && ti >= 0)) return null;
+              const k = store.countsFor(String(no), date, 'SL', fi, ti);
+              return { free: k.free, total: k.free + k.part + k.taken + k.locked };
+            } });
+          annot(r.chains);
           /* Rank it the old way FIRST, and remember which journey that chose,
              so the answer can say what her change of mind actually bought -
              allocate writes onto the chains, so the order of these two matters. */
@@ -3784,8 +3787,26 @@ async function api(req, res, url) {
             const a0 = allocate.allocate(r.chains, { after: clock, by: deadline, profile: wasProfile });
             priorPick = a0.chains[a0.recommended != null ? a0.recommended : 0] || null;
           }
-          const a = allocate.allocate(r.chains, { after: clock, by: deadline, profile });
-          const c = a.chains[a.recommended != null ? a.recommended : 0];
+          let a = allocate.allocate(r.chains, { after: clock, by: deadline, profile });
+          let c = a.chains[a.recommended != null ? a.recommended : 0];
+          /* Her hour cannot be met, and the deadline was also filtering the
+             search - so the ways that miss it by twenty minutes were dropped
+             while an overnight survived, its arrival wearing a smaller number
+             than the hour it passed. Ask again without the deadline and offer
+             the SOONEST arrival, which is what she wants once the hour is
+             gone. */
+          if (a.missesDeadline && deadline != null) {
+            const r2 = hopFor(F.end, T.end, day, clock, null);
+            if (r2.ok && r2.chains.length) {
+              annot(r2.chains);
+              a = allocate.allocate(r2.chains, { after: clock, profile });
+              const land = x => (x.arr < x.dep ? x.arr + 1440 : x.arr);
+              const soonest = r2.chains.filter(x => x.arr != null && x.dep != null)
+                .sort((p, q) => land(p) - land(q))[0];
+              c = soonest || a.chains[a.recommended != null ? a.recommended : 0];
+              a.missesDeadline = true;         // the hour is still missed, and still said
+            }
+          }
           const legs = c.legs.filter(l => l.mode !== 'walk')
             .map(l => l.mode === 'metro' ? (l.line || 'the metro') : (l.name || l.mode));
           const lead = (i === 0)
@@ -3794,6 +3815,16 @@ async function api(req, res, url) {
           let line = lead + ' to ' + T.name + ', leave at ' + c.depText + ' and you are there by '
             + c.arrText + '. That is ' + legs.join(', then ') + ', about ₹' + c.fare + '. '
             + allocate.sentence(a.reason);
+          /* She named an hour and khaali cannot make it. Offering the closest
+             thing is right; calling it "the fastest way" and leaving her to
+             notice the arrival time herself is not. */
+          const clock12 = m => { const d = ((m % 1440) + 1440) % 1440, h = Math.floor(d / 60);
+            return (h % 12 === 0 ? 12 : h % 12) + ':' + String(d % 60).padStart(2, '0')
+              + (h < 12 ? ' am' : ' pm'); };
+          if (a.missesDeadline && deadline != null) line = lead + ' to ' + T.name
+            + ', nothing khaali found gets you there by ' + clock12(deadline)
+            + '. The earliest it can do is arrive ' + c.arrText + ' — leave at '
+            + c.depText + ', ' + legs.join(', then ') + ', about ₹' + c.fare + '.';
           /* Which one to take, and what taking it costs - the same ledger the
              card shows, said out loud. Saarthi used to name a journey and
              never the one it beat, so "why this?" had no answer in the chat. */
@@ -3806,9 +3837,13 @@ async function api(req, res, url) {
              what it costs you" across two turns. Otherwise it is the runner-up
              khaali would actually offer; a rival it has already ruled out is a
              sentence about a choice she never had. */
-          const rival = (priorPick && priorPick !== c) ? priorPick
-            : a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
-              .sort((p, q) => p.alloc.total - q.alloc.total)[0] || null;
+          /* Once her hour is gone the sentence is already about being late;
+             measuring the soonest arrival against an overnight adds "13h 9m
+             slower" to an answer that was clear without it. */
+          const rival = a.missesDeadline ? null
+            : (priorPick && priorPick !== c) ? priorPick
+              : a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
+                .sort((p, q) => p.alloc.total - q.alloc.total)[0] || null;
           if (rival) {
             try {
               const oc = card.optionComparisonOf(c, rival, {});
