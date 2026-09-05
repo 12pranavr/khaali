@@ -28,6 +28,8 @@ import * as XF from './transfer.mjs';
 import * as TP from './trip.mjs';
 import * as CD from './conductor.mjs';
 import * as CL from './claims.mjs';
+import * as CN from './constraint.mjs';
+import * as SP from './split.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4733,6 +4735,234 @@ t('the room khaali reports is the room it then takes', () => {
     fromStopSequence: 1, toStopSequence: 6, pax: 3, id: 'c1' });
   assert.ok(took.ok);
   assert.strictEqual(took.room.worst.value, seen.worst.value, 'the quote and the take saw one bus');
+});
+
+console.log('\nwhat may move somebody, and what may only describe them');
+
+t('a metro reading cannot be turned into a reason, by any argument', () => {
+  [null, 0.0, 0.99, 1.5].forEach(value => {
+    const m = CN.metroProfile({ n: 0, of: 100, need: 4, value });
+    assert.strictEqual(m.mayTrigger, false);
+    assert.strictEqual(m.triggers, false);
+    assert.strictEqual(m.ok, null, 'it has no verdict to give');
+  });
+  assert.strictEqual(CN.EVIDENCE.metro.mayTrigger, false);
+  assert.strictEqual(CN.EVIDENCE.metro.mayReplace, false);
+  const says = CN.constraint({ mode: 'metro', n: 0, need: 4 }).says;
+  assert.ok(/describes the station, not the stretch/.test(says), says);
+});
+
+t('a shortage khaali cannot count is not a shortage', () => {
+  const c = CN.constraint({ mode: 'bus', n: null, need: 3 });
+  assert.strictEqual(c.ok, null, 'null is not false');
+  assert.strictEqual(c.triggers, false);
+  assert.ok(/will not move anybody/.test(c.says), c.says);
+});
+
+t('a description has no verdict in it at all', () => {
+  const d = CN.describe({ value: 0.95, quality: 'predicted', key: 'metro' });
+  assert.strictEqual(d.ok, undefined);
+  assert.strictEqual(d.triggers, undefined);
+  assert.ok(d.colour && d.word);
+  assert.ok(/not going to guess/.test(CN.describe({ value: null }).says));
+});
+
+t('each mode says what its evidence actually is', () => {
+  assert.strictEqual(CN.EVIDENCE.train.rung, 'exact');
+  assert.strictEqual(CN.EVIDENCE.bus.rung, 'simulated');
+  assert.ok(/no operator is connected/i.test(CN.EVIDENCE.bus.label));
+  assert.ok(CN.RUNGS.includes(CN.EVIDENCE.metro.rung), 'one ladder, not a second one');
+});
+
+t('the model says it is the model, and does not call two trips no record', () => {
+  assert.strictEqual(CN.basisFor({ hasTripLedger: true }).basis, 'this-trip');
+  assert.strictEqual(CN.basisFor({ completedTrips: 5 }).basis, 'completed-trips');
+  const thin = CN.basisFor({ completedTrips: 2 });
+  assert.strictEqual(thin.basis, 'model');
+  assert.ok(thin.says.includes('Insufficient completed-trip history'), thin.says);
+  assert.ok(!/no record/i.test(thin.says), 'two completed trips are records, just not enough');
+});
+
+t('registering an operator does not relabel what was simulated when it happened', () => {
+  assert.strictEqual(CN.publishedQuality(['simulation']), 'simulated');
+  assert.strictEqual(CN.publishedQuality(['simulation'], { registeredOperator: true }), 'simulated');
+  assert.strictEqual(CN.publishedQuality(['production'], { registeredOperator: true }), 'counted');
+  assert.strictEqual(CN.publishedQuality(['production', 'simulation'], { registeredOperator: true }),
+    'simulated', 'one simulated event floors the lot');
+  assert.strictEqual(CN.publishedQuality([]), 'unknown');
+});
+
+console.log('\nthe split: change the stretch, not the journey');
+
+// A train sold out for the first stretch and free after it, a bus that starts
+// where she does, and the question of whether the two can be put together.
+// Everything is injected: split.mjs imports no planner, so it cannot recurse
+// into the enumerator that calls it.
+
+const BUSSTOPS = 12;
+const busProfile = (cap = 30, ticketed = []) => {
+  let k = 0;
+  const evs = [CD.event({ kind: 'bustrip', id: 'sb' + (++evn), tripInstanceId: 'T1',
+    stopCount: BUSSTOPS, capacity: { seatedCapacity: cap, source: 'demo' } })];
+  ticketed.forEach(([f, t2, p]) => evs.push(CD.event({ kind: 'ticket', id: 'st' + (++evn) + (++k),
+    tripInstanceId: 'T1', stopSequence: f, toStopSequence: t2, pax: p })));
+  return CD.profile(evs);
+};
+const busAt = (id, depMin, runMin, over = {}) => ({
+  tripInstanceId: id, name: 'KSRTC ' + id, depMin, arrMin: depMin + runMin,
+  source: 'simulated', fromStopSequence: 0, toStopSequence: 6, walkMinutes: 4,
+  profile: busProfile(), ...over });
+// Bangarpet is 0, Whitefield is 4, Majestic is 9. Full to Whitefield, free after.
+const world = (over = {}) => ({
+  fromIdx: 0, toIdx: 9, pax: 2, after: 400,
+  train: { id: '56232' },
+  sell: (f, t2) => (f < 4 ? 0 : 120),
+  onwardAt: k => (k === 4 ? { depMin: 560, arrMin: 620, stopId: 'WFD' } : null),
+  busesFor: () => [busAt('T1', 420, 95)],
+  ledger: CL.ledger(),
+  ...over });
+
+t('a train that can carry her the whole way is not a problem to solve', () => {
+  const r = SP.find(world({ sell: () => 120 }));
+  assert.strictEqual(r.code, 'DIRECT_IS_BOOKABLE');
+  assert.strictEqual(r.silent, true);
+  assert.strictEqual(SP.gate(r).offer, false);
+  assert.strictEqual(SP.gate(r).silent, true, 'nothing was wrong, so khaali says nothing');
+});
+
+t('a train khaali cannot count is not a train it moves people off', () => {
+  const r = SP.find(world({ sell: () => null }));
+  assert.strictEqual(r.code, 'NO_TRIGGER');
+  assert.ok(/cannot count/.test(r.says), r.says);
+  assert.strictEqual(SP.gate(r).offer, false);
+});
+
+t('the split khaali is for: bus to the boundary, and the same train onward', () => {
+  const r = SP.find(world());
+  assert.ok(r.ok, r.code + ' ' + (r.says || ''));
+  assert.strictEqual(r.split.boundaryIdx, 4);
+  assert.strictEqual(r.split.onward.train, '56232', 'the onward half is pinned to the same train');
+  assert.strictEqual(r.split.onward.to, 9);
+  assert.strictEqual(r.split.replacement.tripInstanceId, 'T1');
+  assert.strictEqual(r.split.transfer.ok, true);
+  assert.strictEqual(r.split.releasesInventory, false);
+  // and the two constraints are labelled for what they are
+  assert.strictEqual(r.split.trigger.evidence.rung, 'exact');
+  assert.strictEqual(r.split.busConstraint.evidence.rung, 'simulated');
+});
+
+t('the destination is never a boundary', () => {
+  // free only from the destination onward, which is not a place to rejoin
+  const r = SP.find(world({ sell: (f, t2) => (f < 9 ? 0 : 120) }));
+  assert.ok(!r.ok);
+  assert.strictEqual(r.code, 'NO_PINNED_ONWARD');
+});
+
+t('two departures of one route are two answers, and the full one is refused', () => {
+  const L = CL.ledger();
+  const packed = busProfile(30, [[0, 11, 30]]);
+  const roomy = busProfile(30, [[0, 11, 2]]);
+  const r = SP.find(world({ ledger: L, busesFor: () => [
+    busAt('T1', 420, 95, { profile: packed }),
+    busAt('T2', 425, 95, { profile: roomy }),
+  ] }));
+  assert.ok(r.ok, r.code);
+  assert.strictEqual(r.split.replacement.tripInstanceId, 'T2',
+    'a route-level average would have passed the full one too');
+});
+
+t('room is measured over the span she rides, not the stop she boards at', () => {
+  const L = CL.ledger();
+  // empty where she gets on, packed through the middle of her ride
+  const fillsLater = busProfile(20, [[3, 9, 20]]);
+  const r = SP.find(world({ ledger: L,
+    busesFor: () => [busAt('T1', 420, 95, { profile: fillsLater })] }));
+  assert.ok(!r.ok);
+  assert.strictEqual(r.code, 'SPAN_OVER_PLANNING_LIMIT');
+});
+
+t('a bus khaali cannot read is refused as unreadable, not as full', () => {
+  const L = CL.ledger();
+  const broken = CD.profile([
+    CD.event({ kind: 'bustrip', id: 'x1', tripInstanceId: 'T1', stopCount: BUSSTOPS,
+      capacity: { seatedCapacity: 30, source: 'demo' } }),
+    CD.event({ kind: 'ticket', id: 'x2', tripInstanceId: 'T1', stopSequence: 0, toStopSequence: 3, pax: 1 }),
+    CD.event({ kind: 'alight', id: 'x3', tripInstanceId: 'T1', stopSequence: 1, count: 9 })]);
+  const r = SP.find(world({ ledger: L, keepTrace: true,
+    busesFor: () => [busAt('T1', 420, 95, { profile: broken })] }));
+  assert.ok(!r.ok);
+  assert.strictEqual(r.code, 'NO_DEPARTURE_WITH_ROOM');
+  const t0 = SP.trace(r).tried.find(x => x.bus === 'T1');
+  assert.strictEqual(t0.code, 'BUS_DATA_INCONSISTENT', 'the trace keeps the real reason');
+});
+
+t('a change she could not make is not offered, however much room there is', () => {
+  const tight = SP.find(world({ busesFor: () => [busAt('T1', 420, 155)] }));
+  assert.strictEqual(tight.code, 'TRANSFER_TOO_TIGHT');
+  const loose = SP.find(world({ busesFor: () => [busAt('T1', 300, 60)] }));
+  assert.strictEqual(loose.code, 'TRANSFER_TOO_LONG');
+});
+
+t('a split that arrives after something she could already book has not earned its place', () => {
+  const r = SP.find(world({ alternativeArr: 600 }));
+  assert.strictEqual(r.code, 'NO_CLEAR_BENEFIT');
+  assert.ok(SP.find(world({ alternativeArr: 700 })).ok, 'and it is offered when it does beat it');
+});
+
+t('the earliest rejoining station she can reach, not the first one that exists', () => {
+  // stop 2 is sellable onward but no bus reaches it; stop 4 is reachable
+  const r = SP.find(world({ keepTrace: true,
+    sell: (f) => (f < 2 ? 0 : 120),
+    onwardAt: k => (k === 2 ? { depMin: 470, arrMin: 620, stopId: 'A' }
+      : k === 4 ? { depMin: 560, arrMin: 630, stopId: 'WFD' } : null),
+    busesFor: (f, k) => (k === 4 ? [busAt('T1', 420, 95)] : []) }));
+  assert.ok(r.ok, r.code);
+  assert.strictEqual(r.split.boundaryIdx, 4, 'an unreachable earlier boundary must not hide a later one');
+  assert.ok(SP.trace(r).tried.some(x => x.boundary === 2 && x.code === 'BOUNDARY_NOT_REACHABLE'));
+});
+
+t('the party size asked for is the party size checked', () => {
+  const four = SP.find(world({ pax: 4, sell: (f) => (f < 4 ? 3 : 120) }));
+  assert.ok(four.ok, 'three places is not enough for four, so the split stands');
+  const two = SP.find(world({ pax: 2, sell: (f) => (f < 4 ? 3 : 120) }));
+  assert.strictEqual(two.code, 'DIRECT_IS_BOOKABLE', 'three places is enough for two');
+});
+
+t('khaali never says it watched a crowd, or that a booking freed a berth', () => {
+  const r = SP.find(world());
+  const lines = SP.whyLines(r.split, { stationName: i => ['BWT', '', '', '', 'Whitefield'][i] || ('stop ' + i) });
+  const all = lines.join(' ');
+  ['the crowd', 'crowded platform', 'we saw', 'frees a berth', 'releases a seat',
+    'a seat on the bus is yours', 'you will be seated', 'get off', 'deboard'].forEach(claim =>
+    assert.ok(!all.toLowerCase().includes(claim), 'khaali said: ' + claim));
+  assert.ok(all.includes('No bus seat is reserved.'), all);
+  assert.ok(all.includes('does not free the early stretch'), all);
+  assert.ok(all.includes('khaali’s demo conductor'), all);
+  assert.ok(/It has room again from Whitefield onward/.test(all), all);
+});
+
+t('the reason for the switch is carried only by a journey that actually split', () => {
+  // the old rule fired on any bus+train chain that scored well on seats, about
+  // a split point that came from wherever a bus route happened to end
+  const legs = [{ mode: 'bus', min: 60, seat: { word: 'yes', rank: 3 } },
+    { mode: 'train', min: 40, seat: { word: 'yes', rank: 3 } }];
+  const seatedSwitch = { kind: 'bus+train', legs, seat: { word: 'yes', rank: 3 },
+    fare: 60, changes: 1, totalMin: 100, dep: 400, arr: 500, modes: ['bus', 'train'] };
+  const stander = { kind: 'train', legs: [{ mode: 'train', min: 60, seat: { word: 'standing', rank: 0 } }],
+    seat: { word: 'standing', rank: 0 }, fare: 40, changes: 0, totalMin: 60, dep: 400, arr: 460, modes: ['train'] };
+  const without = AL.allocate([seatedSwitch, stander], { profile: 'comfortable', after: 400 });
+  assert.ok(!without.reason.reasons.includes('SWITCHED_WHERE_IT_FILLS'),
+    'a bus+train chain khaali did not assemble may not claim the split');
+  const withSplit = AL.allocate([{ ...seatedSwitch, split: { boundaryIdx: 4 } }, stander],
+    { profile: 'comfortable', after: 400 });
+  assert.ok(withSplit.chains, 'allocate still returns');
+  const rec = [{ ...seatedSwitch, split: { boundaryIdx: 4 } }, stander][withSplit.recommended];
+  if (rec.split) {
+    assert.ok(withSplit.reason.reasons.includes('SWITCHED_WHERE_IT_FILLS'));
+    const said2 = AL.sentence(withSplit.reason);
+    assert.ok(/more berth capacity becomes available/.test(said2), said2);
+    assert.ok(!/crowd does/.test(said2), 'khaali has never watched a crowd');
+  }
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');

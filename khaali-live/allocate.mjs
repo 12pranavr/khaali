@@ -247,8 +247,16 @@ export function explain(rec, fastest, cheapest, ref = {}) {
   if (rec.changes < fastest.changes) reasons.push('FEWER_CHANGES');
   if (rec !== fastest && dt > 0) reasons.push(dt <= 10 ? 'ONLY_MINUTES_SLOWER' : 'SLOWER_BUT_WORTH_IT');
   if (rec.changes === 0) reasons.push('DIRECT');
-  // the switch itself is the point, when it is the point
-  if (rec.kind === 'bus+train' && seatRank(rec) > seatRank(fastest)) reasons.unshift('SWITCHED_WHERE_IT_FILLS');
+  // The switch itself is the point, when it is the point - but only when khaali
+  // actually did the thing it is about to claim credit for.
+  //
+  // This used to fire on any bus+train chain that scored better on seats, and
+  // the split point came from wherever a bus route happened to end. It said
+  // "you change vehicles where the crowd does", which khaali has never seen: it
+  // counts booked berth inventory, not people on a platform. The reason is now
+  // carried only by a chain that split.find assembled, and it says what that
+  // module actually established.
+  if (rec.split && rec.split.boundaryIdx != null) reasons.unshift('SWITCHED_WHERE_IT_FILLS');
   // a hired ride is never silently preferred: if one is on the recommended
   // journey, saying why is part of the recommendation
   if (facts.hired.length) {
@@ -275,7 +283,7 @@ export function sentence(reason) {
   const parts = [];
   if (has('FASTEST')) parts.push('This is the fastest way');
   else if (f.timeDifferenceMinutes > 0) parts.push('About ' + f.timeDifferenceMinutes + ' minutes slower than the fastest way');
-  if (has('SWITCHED_WHERE_IT_FILLS')) parts.push('you change vehicles where the crowd does');
+  if (has('SWITCHED_WHERE_IT_FILLS')) parts.push('you join the train where more berth capacity becomes available');
   if (has('BETTER_SEAT')) parts.push(f.seat === 'yes' ? 'you get a seat' : 'a seat is ' + f.seat);
   if (has('LOWER_CROWDING')) parts.push('it keeps you off the most crowded stretch');
   if (has('CHEAPER')) parts.push('it saves ₹' + (-f.fareDifference));
