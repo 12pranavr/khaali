@@ -38,6 +38,11 @@ import * as orders from './orders.mjs';
 import * as digilocker from './digilocker.mjs';
 import * as sos from './sos.mjs';
 import * as journey from './journey.mjs';
+
+/* Holds placed by the /api/demo/exhaust lever, so {release:true} can let every
+   one of them go at once. Ids only - the holds themselves live in the store,
+   expiring like anyone else's. */
+const EXHAUST_HOLDS = [];
 import * as demand from './demand.mjs';
 import * as dispatch from './dispatch.mjs';
 import * as commit from './commit.mjs';
@@ -1568,6 +1573,62 @@ async function api(req, res, url) {
       note: demonet.LABEL });
   }
 
+  /* The demo lever for the availability-triggered split.
+     It places ORDINARY holds - the same five-minute holds the payment screen
+     takes, visible in availability and stats, counted by the same inventory
+     arithmetic - on every train serving a span until nothing whole-journey is
+     sellable for the requested party size. It never edits raw inventory, never
+     touches charting, and reverses two ways: {release:true} lets every hold go
+     at once, and the holds expire on their own like anyone else's. Gated like
+     the scenario knobs: a signed-in person may do this, a cross-site POST may
+     not. */
+  if (p === '/api/demo/exhaust' && req.method === 'POST') {
+    const who = await whoIs(req);
+    if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to work the demo lever.' });
+    const b = (await readBody(req)) || {};
+    if (b.release) {
+      const released = EXHAUST_HOLDS.length;
+      EXHAUST_HOLDS.splice(0).forEach(id => { try { store.release(id, 'demo-lever-released'); } catch {} });
+      return send(res, 200, { ok: true, released,
+        note: 'Every demo-lever hold let go; the inventory is as it was.' });
+    }
+    /* The split's trigger is "no train can sell the WHOLE span", and its offer
+       needs room from the boundary onward - so the lever holds the PREFIX
+       (from -> boundary) on every train serving the full span (from -> to),
+       leaving every berth's onward stretch untouched. A whole-span hold would
+       consume the onward room too and prove nothing but emptiness. */
+    const fIdx = ST.findIndex(s => s.c === String(b.from || 'BWT'));
+    const kIdx = ST.findIndex(s => s.c === String(b.boundary || 'WFD'));
+    const tIdx = ST.findIndex(s => s.c === String(b.to || 'BNC'));
+    if (fIdx < 0 || kIdx < 0 || tIdx < 0 || !(fIdx < kIdx && kIdx < tIdx))
+      return send(res, 400, { error: 'from, boundary and to must be corridor codes in riding order' });
+    const d0 = simNow();
+    const date = String(b.date
+      || new Date(d0.getTime() - d0.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+    const keep = Math.max(0, Math.floor(+b.keep || 0));
+    const report = [];
+    journey.trainsBetween(fIdx, tIdx, 0, 24).forEach(t => {
+      const no = String(t.train);
+      const before = store.countsFor(no, date, 'SL', fIdx, kIdx).anySeats;
+      let placed = 0, guard = 0;
+      let n = before;
+      while (n != null && n > keep && guard++ < 400) {
+        const pax = Math.min(store.MAX_BERTHS_PER_HOLD, n - keep);
+        const h = store.hold({ train: no, date, cls: 'SL', from: fIdx, to: kIdx,
+          pax, who: 'demo:exhaust', mode: 'any', cap: false });
+        if (!h.ok) break;
+        EXHAUST_HOLDS.push(h.hold.id); placed += pax;
+        n = store.countsFor(no, date, 'SL', fIdx, kIdx).anySeats;
+      }
+      report.push({ train: no, name: t.name, before, after: n, heldPax: placed,
+        onwardStillSellable: store.countsFor(no, date, 'SL', kIdx, tIdx).anySeats });
+    });
+    return send(res, 200, { ok: true, from: ST[fIdx].c, boundary: ST[kIdx].c, to: ST[tIdx].c,
+      date, keep, trains: report, holdCount: EXHAUST_HOLDS.length,
+      expiresInMs: store.HOLD_MS,
+      note: 'Ordinary holds on the prefix only, honestly counted; they expire on their own, or POST {release:true}.' });
+  }
+
   if (p === '/api/geo') {
     return send(res, 200, {
       stations: ST.map((s, i) => ({
@@ -2475,8 +2536,14 @@ async function api(req, res, url) {
              row measures itself against the recommended one - "take this
              instead of that, and here is what it buys and what it costs". A
              row that is worse on every axis says so; that is the point of it. */
-          const yardstick = (ch === pickedForCards) ? altForPicked
-            : (pickedForCards && pickedForCards !== ch ? pickedForCards : null);
+          /* A split chain exists BECAUSE the direct train cannot be sold for
+             this party - measuring it against that train would claim time or
+             fare wins over an option she cannot take. Its benefit is that a
+             feasible complete journey exists at all, and its own split.why
+             lines say so; it gets no comparative yardstick. */
+          const yardstick = ch.kind === 'split' ? null
+            : (ch === pickedForCards) ? altForPicked
+              : (pickedForCards && pickedForCards !== ch ? pickedForCards : null);
           ch.card = card.build({ chain: ch, mp: null, railDecision: d2,
             searchAt: (after >= 0 && after < 1440) ? after : null,
             role,

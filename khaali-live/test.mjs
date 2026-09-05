@@ -6103,6 +6103,97 @@ t('no comparison, no role - the label cannot outlive its evidence', () => {
   assert.strictEqual(c.recommendation.chooseIf, null);
 });
 
+console.log('\nthe demo lever: ordinary holds, a real split, and everything put back');
+
+const LEV_DATE = '2026-12-01';
+const levF = hIdx('BWT'), levK = hIdx('WFD'), levT = hIdx('BNC');
+const levCf = (no, d, cls, f, t2) => S.countsFor(String(no), d, cls, f, t2);
+const LEV_HOLDS = [];
+const levTrains = () => JY.trainsBetween(levF, levT, 0, 24);
+const levExhaust = () => {
+  levTrains().forEach(tr => {
+    const no = String(tr.train);
+    let g = 0, n = levCf(no, LEV_DATE, 'SL', levF, levK).anySeats;
+    while (n != null && n > 0 && g++ < 400) {
+      const h = S.hold({ train: no, date: LEV_DATE, cls: 'SL', from: levF, to: levK,
+        pax: Math.min(S.MAX_BERTHS_PER_HOLD, n), who: 'demo:exhaust-test',
+        mode: 'any', cap: false });
+      if (!h.ok) break;
+      LEV_HOLDS.push(h.hold.id);
+      n = levCf(no, LEV_DATE, 'SL', levF, levK).anySeats;
+    }
+  });
+};
+const levChain = () => {
+  const tr = levTrains()[0];
+  return { kind: 'train|BNC', dep: 695, arr: 786, fare: 210, changes: 0,
+    legs: [{ mode: 'train', id: String(tr.train), name: tr.name,
+      from: ST[levF].n, to: ST[levT].n, fromIdx: levF, toIdx: levT,
+      depMin: 695, arrMin: 753, source: 'timetable', seat: { word: 'yes', rank: 3 } }] };
+};
+const levDecide = () => DEC.decide({ chain: levChain(), pax: 2, date: LEV_DATE,
+  after: 400, now: 1, countsFor: levCf,
+  findSplit: rq => SPP.findFor({ ...rq, countsFor: levCf, keepTrace: true }) });
+let levBaseline = null;
+
+t('prefix holds exhaust every full-span train, and the onward room survives', () => {
+  levBaseline = S.snapshot(String(levTrains()[0].train), LEV_DATE, 'SL');
+  levExhaust();
+  levTrains().forEach(tr => {
+    const no = String(tr.train);
+    assert.strictEqual(levCf(no, LEV_DATE, 'SL', levF, levK).anySeats, 0,
+      no + ' still sells the prefix');
+    assert.ok(levCf(no, LEV_DATE, 'SL', levK, levT).anySeats > 0,
+      no + ' lost its onward room - the lever held the wrong span');
+  });
+});
+
+t('with the span unsellable, the availability-triggered split fires for real', () => {
+  const d = levDecide();
+  assert.strictEqual(d.kind, 'SWAP_PREFIX', (d.reasons || []).join(','));
+  assert.ok(d.reasons.includes('DIRECT_TRAIN_UNSELLABLE'));
+  const b = d.chosenBusDeparture;
+  assert.ok(b && b.tripInstanceId, 'a swap with no named departure is not an answer');
+  assert.strictEqual(b.boardingFeasible, true);
+  assert.strictEqual(b.transferFeasible, true);
+  assert.ok(b.onwardTrain, 'the train she joins goes unnamed');
+  // and the assembled chain still reaches the requested destination
+  const chain = SPP.chainOf(d.split, { fromIdx: levF, toIdx: levT, date: LEV_DATE });
+  assert.ok(chain, 'the split produced no drawable chain');
+  const rail = chain.legs.find(l => l.mode === 'train');
+  assert.strictEqual(rail.toIdx, levT, 'the onward leg stops short of the destination');
+});
+
+t('the split card claims feasibility, never a win over the unsellable train', () => {
+  const d = levDecide();
+  const chain = SPP.chainOf(d.split, { fromIdx: levF, toIdx: levT, date: LEV_DATE });
+  const why = chain.split.why.join(' ');
+  assert.ok(/No train khaali can sell you runs the whole way/.test(why), why);
+  assert.ok(/does not free the early stretch/.test(why), why);
+  assert.ok(!/arrives .* earlier|cheaper|faster/.test(why),
+    'the split argued a comparison against a train she cannot take: ' + why);
+  // the card path: a split chain gets no comparative yardstick, so no pill,
+  // no role, no "X minutes faster" against an option that is not on the table
+  const card = CARD.build({ chain, role: 'ALTERNATIVE' });
+  assert.strictEqual(card.recommendation.optionComparison, null);
+  assert.strictEqual(card.recommendation.roleLabel, null);
+});
+
+t('release restores the inventory bit for bit, and the split stops firing', () => {
+  LEV_HOLDS.splice(0).forEach(id => S.release(id, 'demo-lever-released'));
+  levTrains().forEach(tr => {
+    assert.ok(levCf(String(tr.train), LEV_DATE, 'SL', levF, levK).anySeats > 0,
+      String(tr.train) + ' did not get its prefix back');
+  });
+  const snap = S.snapshot(String(levTrains()[0].train), LEV_DATE, 'SL');
+  assert.deepStrictEqual(snap, levBaseline,
+    'the lever left fingerprints on the inventory it borrowed');
+  const d = levDecide();
+  assert.strictEqual(d.kind, 'KEEP_ROUTE', (d.reasons || []).join(','));
+  assert.strictEqual(d.chosenBusDeparture, null,
+    'the regression: restored availability must silence the split');
+});
+
 t('the same name twice gets its departure time, both ways home included', () => {
   const oc = CARD.optionComparisonOf(trainChain('MEMU', 600, 660, 0.5),
     trainChain('MEMU', 630, 690, 0.5), {});
