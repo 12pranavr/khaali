@@ -283,6 +283,44 @@ export function planFromText(text) {
   return act;
 }
 
+/**
+ * "I want comfort instead of this." - a change of mind about the SAME journey.
+ *
+ * She has been given an answer and is not arguing with the route; she is
+ * arguing with what khaali optimised for. That names no origin and no
+ * destination, so every reader here returned nothing and khaali apologised for
+ * not understanding a sentence that could not have been clearer. What comes
+ * back is the knob she turned, to be applied to the journey already on the
+ * table - never a journey on its own.
+ */
+const PROFILE_WORDS = [
+  [/\b(comfort|comfortable|comfy|relaxed|easier|easy ride|nice ride)\b/, 'comfortable'],
+  [/\b(cheap|cheaper|cheapest|budget|save money|less money|lower fare|low fare)\b/, 'cheapest'],
+  [/\b(fast|faster|fastest|quick|quicker|quickest|soonest|hurry|in a rush)\b/, 'fastest'],
+  [/\b(less crowded|not crowded|empty|quieter|network smart)\b/, 'network'],
+];
+export function tweakFromText(text) {
+  const t = ' ' + clauses(text) + ' ';
+  const out = {};
+  for (const [re, p] of PROFILE_WORDS) if (re.test(t)) { out.profile = p; break; }
+  const local = parseLocally(text);
+  // "what about the metro", "is there a cab" - the same question, other wheels
+  if (local.modes) out.modes = local.modes;
+  /* A follow-up is already known not to be a journey, so naming one mode and
+     no other is a request to be held to it - "by metro", "take the metro",
+     "what about the bus" - none of which the strict "metro only" grammar
+     catches. */
+  if (!out.modes) {
+    const named = ['train', 'metro', 'bus'].filter(m => new RegExp('\\b' + m + 's?\\b').test(t));
+    if (named.length === 1) out.modes = named;
+  }
+  if (local.maxTransfers != null) out.maxTransfers = local.maxTransfers;
+  if (local.preferences && local.preferences.wantSeat && !out.profile) out.profile = 'comfortable';
+  if (local.preferences && local.preferences.minimizeCost && !out.profile) out.profile = 'cheapest';
+  if (local.preferences && local.preferences.minimizeTime && !out.profile) out.profile = 'fastest';
+  return Object.keys(out).length ? out : null;
+}
+
 // --------------------------------------------------------------- the model --
 const INTENT_SYSTEM = `You convert a traveller's sentence about a journey in Bengaluru into JSON. Reply with JSON only.
 Schema: {"origin":{"text":string}|null,"destination":{"text":string}|null,

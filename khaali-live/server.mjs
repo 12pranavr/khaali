@@ -3558,7 +3558,24 @@ async function api(req, res, url) {
          not understanding a message it had never needed a model to read. This
          is the floor: a journey khaali can read is planned whether or not
          anything answered. */
-      const readable = intel.planFromText(lastUser ? lastUser.content : '');
+      let readable = intel.planFromText(lastUser ? lastUser.content : '');
+      /* "I want comfort instead of this." She is not arguing with the route -
+         she is arguing with what khaali optimised for, and that names no
+         origin and no destination. The journey is the one already on the
+         table, carried forward from the last thing she asked for, with the
+         knob she just turned applied to it. */
+      if (!readable && lastUser) {
+        const tweak = intel.tweakFromText(lastUser.content);
+        if (tweak) {
+          for (let i = users.length - 2; i >= 0; i--) {
+            const prev = intel.planFromText(users[i].content);
+            if (prev) {
+              readable = { ...prev, ...tweak, wasProfile: prev.profile || 'balanced' };
+              break;
+            }
+          }
+        }
+      }
       const chatLlm = llmFor('chat');
       let first = '';
       if (chatLlm) {
@@ -3705,6 +3722,12 @@ async function api(req, res, url) {
         const modes = (Array.isArray(act.modes) ? act.modes : [])
           .map(x => String(x).toLowerCase()).filter(x => journey.ALL_MODES.includes(x));
         const use = modes.length ? modes : [...journey.MODES];
+        /* What she wants optimised. The chat never passed one, so every answer
+           was the balanced one however she asked - "I want comfort instead of
+           this" could not have changed the reply even if it had been read. */
+        const PROFILES = ['balanced', 'fastest', 'cheapest', 'comfortable', 'network'];
+        const profile = PROFILES.includes(String(act.profile || '')) ? act.profile : 'balanced';
+        const wasProfile = PROFILES.includes(String(act.wasProfile || '')) ? act.wasProfile : null;
         const clockOf = v => { const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(v || ''));
           return m ? (+m[1]) * 60 + (+m[2]) : null; };
         // "tomorrow" is a day, not a turn of phrase: it changes which trains
@@ -3753,7 +3776,15 @@ async function api(req, res, url) {
             const k = store.countsFor(String(no), date, 'SL', fi, ti);
             return { free: k.free, total: k.free + k.part + k.taken + k.locked };
           } });
-          const a = allocate.allocate(r.chains, { after: clock, by: deadline });
+          /* Rank it the old way FIRST, and remember which journey that chose,
+             so the answer can say what her change of mind actually bought -
+             allocate writes onto the chains, so the order of these two matters. */
+          let priorPick = null;
+          if (wasProfile && wasProfile !== profile) {
+            const a0 = allocate.allocate(r.chains, { after: clock, by: deadline, profile: wasProfile });
+            priorPick = a0.chains[a0.recommended != null ? a0.recommended : 0] || null;
+          }
+          const a = allocate.allocate(r.chains, { after: clock, by: deadline, profile });
           const c = a.chains[a.recommended != null ? a.recommended : 0];
           const legs = c.legs.filter(l => l.mode !== 'walk')
             .map(l => l.mode === 'metro' ? (l.line || 'the metro') : (l.name || l.mode));
@@ -3770,17 +3801,37 @@ async function api(req, res, url) {
              row. Comparing against whatever happened to sit next in the array
              produced "12h 34m slower" against a train she was never going to
              take - true arithmetic, useless as a reason. */
-          const rival = a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
-            .sort((p, q) => p.alloc.total - q.alloc.total)[0] || null;
-          // no rival khaali would actually offer means no comparison: measuring
-          // her journey against one it has already ruled out is a sentence
-          // about a choice she never had
+          /* When she changed her mind, the thing worth comparing against is
+             what she was offered BEFORE - "this instead of that, and here is
+             what it costs you" across two turns. Otherwise it is the runner-up
+             khaali would actually offer; a rival it has already ruled out is a
+             sentence about a choice she never had. */
+          const rival = (priorPick && priorPick !== c) ? priorPick
+            : a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
+              .sort((p, q) => p.alloc.total - q.alloc.total)[0] || null;
           if (rival) {
             try {
               const oc = card.optionComparisonOf(c, rival, {});
               if (oc) line += ' ' + oc.headline
                 + (oc.pills.length ? (' ' + oc.pills.map(x => x.text).join(', ') + '.') : '');
             } catch (e) { /* the plan stands without the comparison */ }
+          }
+          // she asked for a different sort of journey and got the same one
+          if (wasProfile && wasProfile !== profile && priorPick === c)
+            line += ' That is already the ' + (profile === 'comfortable' ? 'most comfortable'
+              : profile === 'cheapest' ? 'cheapest' : profile === 'fastest' ? 'fastest'
+                : 'best') + ' of the ways khaali found here.';
+          /* Asking for a different sort of journey is asking to CHOOSE, so the
+             other ways are put on the table with what each one costs - rather
+             than one verdict and no way to disagree with it. */
+          if (wasProfile && stops.length === 2) {
+            const opts = a.chains.filter(x => x !== c && x.alloc && x.alloc.candidate)
+              .sort((p, q) => p.alloc.total - q.alloc.total).slice(0, 2)
+              .map(x => { try {
+                const o = card.optionComparisonOf(x, c, {});
+                return o ? (o.selectedLabel + ' — ' + o.pills.map(pp => pp.text).join(', ')) : null;
+              } catch (e) { return null; } }).filter(Boolean);
+            if (opts.length) line += ' Or: ' + opts.join('; ') + '.';
           }
           lines.push(line);
           const qh = new URLSearchParams({ fromKind: F.end.kind, fromId: F.end.kind === 'place'
@@ -3791,6 +3842,7 @@ async function api(req, res, url) {
           if (deadline != null) qh.set('by', String(deadline));
           if (day) qh.set('day', String(day));
           if (modes.length) qh.set('modes', use.join(','));
+          if (profile !== 'balanced') qh.set('profile', profile);   // the page opens as she asked
           qh.set('pick', chainKey(c));
           links.push('/plan?' + qh.toString());
           // the next hop cannot begin before this one ends

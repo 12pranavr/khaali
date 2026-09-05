@@ -6861,6 +6861,31 @@ t('a chain stuffed into one field is split, not searched for whole', () => {
     'an ordinary place must survive the splitter intact');
 });
 
+t('a change of mind about the same journey is not a new journey', () => {
+  // "I want comfort instead of this" names no origin and no destination, so
+  // every reader returned nothing and khaali apologised for not following it
+  const t1 = IN.tweakFromText('Yo, I want comfort instead of this. Let me know.');
+  assert.ok(t1, 'a plain change of mind went unread');
+  assert.strictEqual(t1.profile, 'comfortable');
+  assert.strictEqual(IN.tweakFromText('something cheaper please').profile, 'cheapest');
+  assert.strictEqual(IN.tweakFromText('is there a faster one').profile, 'fastest');
+  assert.strictEqual(IN.tweakFromText('I want a seat').profile, 'comfortable');
+  // a mode is a change of mind too
+  assert.deepStrictEqual(IN.tweakFromText('what about the metro').modes, ['metro']);
+  assert.deepStrictEqual(IN.tweakFromText('metro only').modes, ['metro']);
+  assert.ok(IN.tweakFromText('can I take a cab instead').modes.includes('car'));
+  // and it must not fire on a sentence that is its own journey, nor on chatter
+  assert.strictEqual(IN.tweakFromText('hello'), null);
+  assert.strictEqual(IN.tweakFromText('what is my PNR status'), null);
+});
+
+t('a follow-up carries the journey, never invents one', () => {
+  // the tweak is only ever applied to a journey already on the table: on its
+  // own it names no ends, and planFromText must still refuse it
+  assert.strictEqual(IN.planFromText('Yo, I want comfort instead of this.'), null,
+    'a preference was mistaken for a journey');
+});
+
 t('where she stays is where she is starting from', () => {
   // "I stay near X" named no origin at all, so a complete request came back
   // as "sorry, I did not follow that"
