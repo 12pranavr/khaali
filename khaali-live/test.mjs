@@ -5660,7 +5660,7 @@ t('the button says what the click does', () => {
   // a journey with nothing reservable does not offer to hold one
   const busOnly = { kind: 'x', fare: 20, legs: [{ mode: 'bus', name: 'BMTC 500D', from: 'A', to: 'B',
     depMin: 600, arrMin: 640, min: 40 }] };
-  assert.strictEqual(CARD.build({ chain: busOnly }).booking.actionLabel, 'Continue with this journey');
+  assert.strictEqual(CARD.build({ chain: busOnly }).booking.actionLabel, 'Choose this journey');
 });
 
 t('when whole journeys were compared, the card says so and names the loser', () => {
@@ -5701,11 +5701,92 @@ t('with the road clear the card says stay on, and says why not to change', () =>
 
 t('a walk with no vehicle after it does not become a change', () => {
   const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  // the journey now ends with its own YOUR ARRIVAL row, after the walk
   const last = c.journey.steps[c.journey.steps.length - 1];
-  assert.strictEqual(last.kind, 'WALK');
+  assert.strictEqual(last.kind, 'ARRIVE');
+  assert.strictEqual(c.journey.steps[c.journey.steps.length - 2].kind, 'WALK');
   assert.strictEqual(c.journey.steps.filter(x => x.kind === 'BOARD').length, 1,
     'exactly one leg is the one she boards first');
   assert.strictEqual(c.journey.steps.filter(x => x.kind === 'CHANGE').length, 1);
+});
+
+console.log('\nthe card, restructured: plan on the front, calculation behind the toggle');
+
+const evaluatedCard = () => {
+  SCN.reset();
+  const mp = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1, policy: 'balanced' });
+  const chain = { kind: 'planned', fare: mp.answer.totalFare, simulated: true,
+    chainId: mp.answer.chainId, legs: mp.answer.legs.map(l => ({ ...l, min: l.minutes })) };
+  return CARD.build({ chain, mp, searchAt: 600,
+    scenario: { scenarioId: mp.scenarioId, revision: mp.revision } });
+};
+
+t('steps are actions with a clock, and every ride says when it arrives', () => {
+  const c = evaluatedCard();
+  const st = c.journey.steps;
+  assert.strictEqual(st[0].action, 'BOARD BUS A');
+  assert.strictEqual(st[2].action, 'TAKE METRO M', 'the action, not the category "YOU CHANGE"');
+  assert.strictEqual(st[st.length - 1].action, 'YOUR ARRIVAL');
+  // the arrival at the interchange is the number the next step hangs off
+  assert.ok(st[0].lines.some(x => /^Arrive at /.test(x)), st[0].lines.join(' | '));
+  assert.ok(st[2].lines.some(x => /^Arrive at /.test(x)));
+  assert.ok(/–/.test(st[1].timeLabel), 'a walk shows its span: ' + st[1].timeLabel);
+  SCN.reset();
+});
+
+t('the wait is explained once, on the step where she stands in it', () => {
+  const c = evaluatedCard();
+  const change = c.journey.steps.find(x => x.kind === 'CHANGE');
+  assert.ok(change.lines.some(x => /^Wait about /.test(x)), change.lines.join(' | '));
+  const front = c.recommendation.headline + ' ' + c.recommendation.mainReason;
+  assert.ok(!/minutes in hand|Wait about/.test(front),
+    'the wait must not be argued again on the front of the card: ' + front);
+  SCN.reset();
+});
+
+t('headways come off the main card; the selected departure stays on it', () => {
+  const c = evaluatedCard();
+  c.journey.steps.forEach(st => (st.lines || []).forEach(x =>
+    assert.ok(!/every \d+ min/.test(x), 'a headway leaked onto the main card: ' + x)));
+  const ride = c.journey.steps.find(x => x.kind === 'BOARD');
+  assert.ok(/every 20 minutes/.test(ride.serviceDetail), ride.serviceDetail);
+  assert.ok(/khaali\u2019s estimate|khaali’s estimate/.test(ride.serviceDetail));
+  SCN.reset();
+});
+
+t('one reason on the front, and it names the loser exactly once', () => {
+  const c = evaluatedCard();
+  const r = c.recommendation;
+  assert.strictEqual(r.titleChip, 'YOUR RECOMMENDED JOURNEY');
+  assert.ok(/Changing at K R Puram Bus Stand gets you to Hebbala 20 minutes earlier/.test(r.mainReason), r.mainReason);
+  const names = (r.mainReason.match(/arriving \d{1,2}:\d{2}/g) || []).length;
+  assert.strictEqual(names, 1, 'the alternative is named once, not re-argued: ' + r.mainReason);
+  assert.ok(/Simulated traffic adds 38 minutes/.test(r.mainReason),
+    'the contributing factor appears because it contributed');
+  SCN.reset();
+});
+
+t('the comparison panel carries both journeys, the differences, and the method', () => {
+  const c = evaluatedCard();
+  const p = c.recommendation.comparison;
+  assert.strictEqual(p.thisLabel, 'Bus A \u2192 Metro M');
+  assert.ok(p.thisArrive && p.thisTotalMinutes > 0);
+  assert.ok(p.alternativeArrive, 'an alternative with no arrival is not comparable');
+  assert.ok(p.alternativeTotalMinutes > p.thisTotalMinutes);
+  assert.ok(p.whatChanges.some(x => /Arrives 20 minutes earlier/.test(x)));
+  assert.ok(p.whatChanges.some(x => /38 minutes of simulated road delay/.test(x)));
+  assert.ok(/Departure-level ticket simulation/.test(p.howEstimated));
+  assert.ok(/revision \d+/.test(p.howEstimated), 'the method names its scenario generation');
+  SCN.reset();
+});
+
+t('no comparison, no "recommended" - a found route says it was found', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const r = c.recommendation;
+  assert.ok(!/RECOMMENDED/i.test(r.titleChip), r.titleChip);
+  assert.ok(/NOT COMPARED/.test(r.titleChip), r.titleChip);
+  assert.strictEqual(r.comparison, null);
+  assert.ok(!/earlier|faster|less crowded|avoids/i.test(r.mainReason || r.summaryReason));
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');

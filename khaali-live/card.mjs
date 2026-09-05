@@ -97,8 +97,15 @@ export function headline(legs) {
 }
 
 /**
- * The steps, as things she does rather than as a coloured bar. A change is its
- * own step, with the walk, the wait and what khaali checked about it.
+ * The steps, as things she does rather than as a coloured bar.
+ *
+ * Each is an ACTION with its clock: "BOARD BUS A · 10:00 am", "TAKE METRO M ·
+ * 10:38 am" - never "YOU CHANGE", which names the category instead of the
+ * thing. A ride says when it ARRIVES, because the arrival at an interchange is
+ * the number the next step hangs off. The wait is said once, on the step where
+ * she actually stands in it. Headways and how the minute was derived move into
+ * `serviceDetail`, for the comparison panel - on the main card the selected
+ * departure matters more than the pattern behind it.
  */
 export function steps(legs, { railCheck = null } = {}) {
   const out = [];
@@ -106,17 +113,36 @@ export function steps(legs, { railCheck = null } = {}) {
     const prev = i > 0 ? legs[i - 1] : null;
     const wait = (prev && l.depMin != null && prev.arrMin != null)
       ? Math.max(0, l.depMin - prev.arrMin) : 0;
+    const n = out.length + 1;
     if (l.mode === 'walk') {
-      out.push({ kind: 'WALK', title: 'Walk to ' + l.to,
-        detail: (l.km != null ? (Math.round(l.km * 1000) + ' m · ') : '') + mins(span(l)),
+      const isLast = i === legs.length - 1;
+      out.push({ n, kind: 'WALK',
+        action: 'WALK TO ' + (isLast ? 'YOUR DESTINATION' : String(l.to).toUpperCase()),
+        title: 'Walk to ' + l.to,
+        timeLabel: (l.depMin != null && l.arrMin != null)
+          ? (hhmm(l.depMin) + '–' + hhmm(l.arrMin)) : '',
+        route: l.from + ' → ' + l.to,
+        lines: ['Walk for ' + mins(span(l)) + '.'],
         from: l.from, to: l.to, minutes: span(l),
         waitBefore: wait || null });
       return;
     }
     const isFirstRide = !legs.slice(0, i).some(x => x.mode !== 'walk');
+    const name = l.name || l.line || MODE_WORD[l.mode];
+    const availability = availabilityOf(l, isFirstRide ? railCheck : null);
+    const lines = [];
+    if (wait > 0) lines.push('Wait about ' + mins(wait)
+      + (prev && prev.mode === 'walk' ? ' after your walk.' : '.'));
+    lines.push('Ride for ' + mins(span(l)) + '.');
+    if (availability && availability.says) lines.push(availability.says + '.');
+    if (l.arrMin != null) lines.push('Arrive at ' + hhmm(l.arrMin) + '.');
     out.push({
-      kind: isFirstRide ? 'BOARD' : 'CHANGE',
-      title: (isFirstRide ? 'Board the ' : 'Change to the ') + (l.name || l.line || MODE_WORD[l.mode]),
+      n, kind: isFirstRide ? 'BOARD' : 'CHANGE',
+      action: (isFirstRide ? 'BOARD ' : 'TAKE ') + String(name).toUpperCase(),
+      title: (isFirstRide ? 'Board the ' : 'Change to the ') + name,
+      timeLabel: hhmm(l.depMin),
+      route: l.from + ' → ' + l.to,
+      lines,
       service: l.name || l.line || null, serviceId: l.id || null,
       tripInstanceId: l.tripInstanceId || null,
       mode: l.mode, from: l.from, to: l.to,
@@ -125,9 +151,18 @@ export function steps(legs, { railCheck = null } = {}) {
       waitBefore: wait || null,
       scheduleKind: l.scheduleKind || (l.every ? 'frequency' : 'timetable'),
       every: l.every || null,
-      availability: availabilityOf(l, isFirstRide ? railCheck : null),
+      serviceDetail: (l.every ? ('Runs about every ' + l.every + ' minutes. ') : '')
+        + ((l.scheduleKind === 'frequency' || l.departureDerived)
+          ? 'The departure time is khaali’s estimate from the gap, not a published minute.'
+          : 'Runs to a published timetable.'),
+      availability,
     });
   });
+  if (legs.length && legs[legs.length - 1].arrMin != null) {
+    out.push({ n: out.length + 1, kind: 'ARRIVE', action: 'YOUR ARRIVAL',
+      title: 'You are there', timeLabel: hhmm(legs[legs.length - 1].arrMin),
+      route: '', lines: [] });
+  }
   return out;
 }
 
@@ -146,7 +181,7 @@ function availabilityOf(l, railCheck) {
     return { kind: 'RESERVABLE', held: false, says: 'Train accommodation not checked', basis: null };
   }
   const room = l.room && l.room.ok != null
-    ? (l.room.ok ? 'Predicted boarding room for your party' : 'Not enough predicted room')
+    ? (l.room.ok ? 'Boarding room predicted for your party' : 'Not enough predicted boarding room')
     : null;
   const load = (l.cap && l.cap.occupancy != null)
     ? Math.round(l.cap.occupancy * 100) + '% full at its busiest on your stretch' : null;
@@ -177,7 +212,16 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
   return {
     recommendation: {
       status,
+      /* "Recommended" is a comparative word and it is only earned by a
+         comparison. When only the berth check ran, the card offers a route it
+         found, and says so in those words. */
+      titleChip: evaluated ? 'YOUR RECOMMENDED JOURNEY'
+        : status === 'AVAILABILITY_ONLY' ? 'A ROUTE KHAALI FOUND — NOT COMPARED'
+          : 'A ROUTE — NOT EVALUATED',
       headline: headline(legs),
+      mainReason: evaluated ? (mainReasonFor(mp.decision, cmp, legs)
+        || summaryFor(status, mp, railCheck, cmp))
+        : summaryFor(status, mp, railCheck, cmp),
       summaryReason: summaryFor(status, mp, railCheck, cmp),
       selectedChainId: (mp && mp.decision && mp.decision.selectedChainId) || chain.chainId || null,
       decisionKind: (mp && mp.decision && mp.decision.kind)
@@ -221,23 +265,90 @@ function comparisonOf(mp) {
   const road = r('AVOIDS_ROAD_DELAY');
   const crowd = r('AVOIDS_CROWDED_DOWNSTREAM_STRETCH');
   const below = r('BENEFIT_BELOW_THRESHOLD');
+  const altArrive = alt ? (alt.arrivalTime
+    || (alt.arriveMinute != null ? hhmm(alt.arriveMinute) : null)) : null;
+  const altTotal = alt ? (alt.totalMinutes != null ? alt.totalMinutes
+    : (alt.arriveMinute != null && mp.demoTime != null
+      ? alt.arriveMinute - mp.demoTime : null)) : null;
+  const whatChanges = [];
+  if (faster) whatChanges.push('Arrives ' + mins(faster.differenceMinutes) + ' earlier.');
+  if (road) whatChanges.push('Avoids ' + mins(road.differenceMinutes) + ' of simulated road delay.');
+  if (crowd) whatChanges.push('Avoids ' + mins(crowd.differenceMinutes)
+    + ' on stretches predicted to be crowded.');
+  const fareDiff = alt && alt.fare != null && mp.answer.totalFare != null
+    ? mp.answer.totalFare - alt.fare : null;
+  if (fareDiff != null && fareDiff !== 0) whatChanges.push(fareDiff > 0
+    ? ('Costs ₹' + fareDiff + ' more.') : ('Saves ₹' + (-fareDiff) + '.'));
+  if (below) whatChanges.push('The best change gained only ' + below.gain
+    + ' against a threshold of ' + below.threshold + ', so it was not taken.');
+  const rideNames = (mp.answer.legs || []).filter(l => l.mode !== 'walk')
+    .map(l => l.name || l.mode);
   return {
     alternativeChainId: d.comparisonChainId,
     // name it by when it gets there. "bus" on its own is not an alternative
     // anybody can weigh, and the trace rows carry a minute rather than a clock
     alternativeLabel: alt ? ((alt.modes || []).join(' then ')
-      + (alt.arrivalTime ? (', arriving ' + alt.arrivalTime)
-        : alt.arriveMinute != null ? (', arriving ' + hhmm(alt.arriveMinute)) : ''))
+      + (altArrive ? (', arriving ' + altArrive) : ''))
       : 'the next best journey',
+    // the panel behind "See comparison": both journeys side by side, what
+    // separates them, and where the numbers came from
+    thisLabel: rideNames.join(' → '),
+    thisArrive: mp.answer.arrivalTime, thisTotalMinutes: mp.answer.totalMinutes,
+    alternativeArrive: altArrive, alternativeTotalMinutes: altTotal,
+    whatChanges,
+    howEstimated: 'Departure-level ticket simulation, projected boarding demand at every '
+      + 'stop, and per-stretch simulated road delay at the minute each stretch is reached. '
+      + 'Scenario ' + mp.scenarioId + ', revision ' + mp.revision
+      + ' — the same inputs always give the same answer.',
     timeDifferenceMinutes: faster ? faster.differenceMinutes : (below ? 0 : null),
     roadDelayDifferenceMinutes: road ? road.differenceMinutes : null,
     crowdingDifferenceMinutes: crowd ? crowd.differenceMinutes : null,
-    fareDifference: alt && alt.fare != null && mp.answer.totalFare != null
-      ? mp.answer.totalFare - alt.fare : null,
+    fareDifference: fareDiff,
     reasons: d.reasons,
     question: questionFor(d, faster, road, crowd, below),
     answer: answerFor(d, mp, faster, road, crowd, below),
   };
+}
+
+/**
+ * ONE reason, and only what actually contributed.
+ *
+ * The card was making its case three times - the summary said "20 minutes
+ * earlier", the reasons box said it again, the comparison said it a third
+ * time, each with slightly different furniture. The main card gets a single
+ * sentence naming the result and the loser, plus the one contributing factor
+ * when there was one; everything else lives behind "See comparison".
+ */
+function mainReasonFor(d, cmp, legs) {
+  if (!cmp) return null;
+  const dest = legs.length ? legs[legs.length - 1].to : 'your destination';
+  const rides = legs.filter(l => l.mode !== 'walk');
+  // "the bus arriving 11:18" reads like a sentence; "bus, arriving 11:18" reads
+  // like a database row
+  const rival = 'the ' + cmp.alternativeLabel.replace(', arriving', ' arriving');
+  let s;
+  if (d.kind === 'RECOMMEND_DIRECT') {
+    s = cmp.timeDifferenceMinutes
+      ? ('Staying aboard arrives ' + mins(cmp.timeDifferenceMinutes) + ' before '
+        + rival + ' - changing adds walking and waiting it never earns back.')
+      : ('Staying aboard beats changing: the alternatives add walking and waiting '
+        + 'without arriving sooner.');
+  } else {
+    const at = rides.length ? rides[0].to : 'the interchange';
+    s = 'Changing at ' + at + ' gets you to ' + dest
+      + (cmp.timeDifferenceMinutes != null
+        ? (' ' + mins(cmp.timeDifferenceMinutes) + ' earlier than ' + rival)
+        : (' sooner than ' + rival))
+      + ', even after walking and waiting.';
+  }
+  if (cmp.roadDelayDifferenceMinutes) {
+    s += ' Simulated traffic adds ' + mins(cmp.roadDelayDifferenceMinutes)
+      + ' to the road ahead.';
+  } else if (cmp.crowdingDifferenceMinutes) {
+    s += ' It also avoids ' + mins(cmp.crowdingDifferenceMinutes)
+      + ' on stretches predicted to be crowded.';
+  }
+  return s;
 }
 
 function questionFor(d, faster, road, crowd, below) {
@@ -289,7 +400,7 @@ function bookingFor(legs, status) {
     status: 'NONE',
     // it creates a hold and a pending pass; saying "book" claims a state the
     // click does not reach
-    actionLabel: reservable ? 'Hold train accommodation and continue' : 'Continue with this journey',
+    actionLabel: reservable ? 'Hold train accommodation and continue' : 'Choose this journey',
     enabled: true,
     note: reservable
       ? 'This holds a berth and starts a pass. Nothing is confirmed until payment.'
