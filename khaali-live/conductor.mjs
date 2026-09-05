@@ -202,6 +202,8 @@ export function profile(events, { tripInstanceId = null } = {}) {
     usable: status === 'OK',
     inconsistentAt: inconsistent, reconcileAt: reconcile,
     quality,
+    // when this picture was taken, so a planner can refuse to plan on an old one
+    generatedAt: evs.reduce((a, e) => Math.max(a, e.at || 0), 0) || null,
     uncertainTotal: carriedTotal,
     exitAssumption: carriedTotal ? UNKNOWN_EXIT : null,
     eventCount: evs.length,

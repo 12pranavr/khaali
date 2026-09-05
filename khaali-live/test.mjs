@@ -27,6 +27,7 @@ import * as LD from './load.mjs';
 import * as XF from './transfer.mjs';
 import * as TP from './trip.mjs';
 import * as CD from './conductor.mjs';
+import * as CL from './claims.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4528,6 +4529,210 @@ t('one bus at a time: another departure\u2019s events are not this one\u2019s', 
     id: 'o1', kind: 'ticket', stopSequence: 0, toStopSequence: 5, pax: 30 });
   const p = CD.profile([start(8), tkt(0, 4, 2), other], { tripInstanceId: TRIP });
   assert.strictEqual(p.onboard[0], 2, 'the 08:40 does not fill up the 08:10');
+});
+
+console.log('\nclaims: counted once, and never against two buses');
+
+// A claim is khaali's recorded intention, not a seat and not a prediction. What
+// it protects is the planning room: having pointed four people at the 08:10,
+// khaali must stop telling everybody else the 08:10 is empty.
+
+const busOf = (stops = 10, cap = 20, ticketed = []) => {
+  let k = 0;
+  const evs = [CD.event({ kind: 'bustrip', id: 'b' + (++evn), tripInstanceId: TRIP,
+    stopCount: stops, capacity: { seatedCapacity: cap, source: 'demo' } })];
+  ticketed.forEach(([f, t2, p]) => evs.push(CD.event({ kind: 'ticket', id: 'bt' + (++evn) + (++k),
+    tripInstanceId: TRIP, stopSequence: f, toStopSequence: t2, pax: p })));
+  return CD.profile(evs);
+};
+const ask = (L, over, more = {}) => CL.roomOver(L, { profile: over.profile || busOf(),
+  tripInstanceId: TRIP, fromStopSequence: 1, toStopSequence: 6, pax: 1, ...over, ...more });
+
+t('the states that count are the states somebody has not boarded on', () => {
+  assert.strictEqual(CL.COUNTS.pending, true, 'a hold is room khaali is not free to promise again');
+  assert.strictEqual(CL.COUNTS.confirmed, true);
+  assert.strictEqual(CL.COUNTS.boarded, false, 'once aboard she is in the conductor ledger');
+  ['expired', 'cancelled', 'moved', 'noshow'].forEach(k =>
+    assert.strictEqual(CL.COUNTS[k], false, k + ' must not hold room'));
+});
+
+t('a party of four with two scanned keeps a claim for two', () => {
+  const L = CL.ledger();
+  const r = CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP,
+    fromStopSequence: 1, toStopSequence: 6, pax: 4, id: 'c1' });
+  assert.ok(r.ok, r.code);
+  CL.confirm(L, 'c1');
+  const emitted = [];
+  const b = CL.board(L, 'c1', 2, { emit: e => emitted.push(e) });
+  assert.ok(b.ok, b.code);
+  assert.strictEqual(CL.remaining(r.claim), 2, 'not four, which doubles them; not zero, which loses them');
+  assert.strictEqual(r.claim.status, 'confirmed', 'still a claim while two are on the pavement');
+  assert.strictEqual(emitted.length, 1);
+  assert.strictEqual(emitted[0].span.pax, 2, 'and the two who boarded are ticketed exactly once');
+  // the ledger now holds two, and the conductor holds two: four people, counted once
+  assert.strictEqual(CL.outstanding(L, TRIP).people, 2);
+  const rest = CL.board(L, 'c1', 2, { emit: e => emitted.push(e) });
+  assert.ok(rest.ok);
+  assert.strictEqual(r.claim.status, 'boarded');
+  assert.strictEqual(CL.outstanding(L, TRIP).people, 0, 'nobody is counted twice at the end of it');
+});
+
+t('a scanned passenger is never counted as a claim as well', () => {
+  const L = CL.ledger();
+  CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP, fromStopSequence: 1,
+    toStopSequence: 6, pax: 3, id: 'c1' });
+  CL.confirm(L, 'c1');
+  const before = CL.claimSpans(L, TRIP).reduce((a, sp) => a + sp.pax, 0);
+  CL.board(L, 'c1', 1, { emit: () => {} });
+  const after = CL.claimSpans(L, TRIP).reduce((a, sp) => a + sp.pax, 0);
+  assert.strictEqual(before - after, 1, 'the quantity moved across rather than being added');
+});
+
+t('a pass pending payment is not a boarding pass', () => {
+  const L = CL.ledger();
+  CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP, fromStopSequence: 1,
+    toStopSequence: 6, pax: 1, id: 'c1' });
+  assert.strictEqual(CL.board(L, 'c1', 1).code, 'PASS_PENDING_PAYMENT');
+});
+
+t('an expired hold stops holding room, and cannot then be confirmed', () => {
+  const L = CL.ledger();
+  const t0 = 1000;
+  CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP, fromStopSequence: 1,
+    toStopSequence: 6, pax: 5, id: 'c1', now: t0, holdExpiresAt: t0 + 300000 });
+  assert.strictEqual(CL.claimSpans(L, TRIP, t0).length, 1);
+  assert.strictEqual(CL.claimSpans(L, TRIP, t0 + 400000).length, 0, 'a lapsed hold is not demand');
+  assert.strictEqual(CL.confirm(L, 'c1', t0 + 400000).code, 'HOLD_EXPIRED');
+  assert.strictEqual(CL.expire(L, t0 + 400000), 0, 'and confirm already ended it');
+});
+
+t('a booking does not see itself when it is checked again', () => {
+  const L = CL.ledger();
+  const profile = busOf(10, 6);
+  const r = CL.reserve(L, { profile, tripInstanceId: TRIP,
+    fromStopSequence: 1, toStopSequence: 6, pax: 5, id: 'mine' });
+  assert.ok(r.ok, r.code);
+  CL.confirm(L, 'mine');
+  const blind = ask(L, { profile, pax: 5 });
+  assert.ok(!blind.ok, 'without exclusion her own booking fills the bus');
+  const fair = ask(L, { profile, pax: 5, excludeClaimId: 'mine' });
+  assert.ok(fair.ok, 'revalidating must not blame a booking for its own existence: ' + fair.code);
+});
+
+t('two requests for the last room do not both get it', () => {
+  const L = CL.ledger();
+  const profile = busOf(10, 4);
+  const one = { profile, tripInstanceId: TRIP, fromStopSequence: 1, toStopSequence: 6, pax: 3 };
+  const a = CL.reserve(L, { ...one, id: 'a' });
+  const b = CL.reserve(L, { ...one, id: 'b' });
+  assert.ok(a.ok, 'the first takes it');
+  assert.ok(!b.ok, 'the second must be told no, not sold the same room');
+  assert.strictEqual(b.undetermined, false, 'it is a determination that there is no room');
+  assert.ok(['BOARDING_NOT_FEASIBLE', 'SPAN_OVER_PLANNING_LIMIT'].includes(b.code), b.code);
+});
+
+t('boarding and the span are two different refusals', () => {
+  // full at her stop: she cannot get on at all
+  const packed = busOf(10, 10, [[0, 9, 10]]);
+  const board = ask(CL.ledger(), { profile: packed, fromStopSequence: 1, toStopSequence: 3, pax: 2 });
+  assert.strictEqual(board.code, 'BOARDING_NOT_FEASIBLE');
+  // room at her stop, but it fills before she is off - a planning rule, not a
+  // claim that she would be turned away at the door
+  const later = busOf(10, 10, [[3, 8, 10]]);
+  const span = ask(CL.ledger(), { profile: later, fromStopSequence: 1, toStopSequence: 6, pax: 2 });
+  assert.strictEqual(span.code, 'SPAN_OVER_PLANNING_LIMIT');
+  assert.ok(span.worst.stretch >= 3);
+});
+
+t('khaali cannot tell is not the same sentence as the bus is full', () => {
+  const L = CL.ledger();
+  const broken = CD.profile([CD.event({ kind: 'bustrip', id: 'z1', tripInstanceId: TRIP,
+    stopCount: 8, capacity: { seatedCapacity: 40, source: 'demo' } }),
+    CD.event({ kind: 'ticket', id: 'z2', tripInstanceId: TRIP, stopSequence: 0, toStopSequence: 3, pax: 2 }),
+    CD.event({ kind: 'alight', id: 'z3', tripInstanceId: TRIP, stopSequence: 1, count: 9 })]);
+  const r = ask(L, { profile: broken });
+  assert.strictEqual(r.code, 'BUS_DATA_INCONSISTENT');
+  assert.strictEqual(r.undetermined, true);
+  assert.ok(/cannot work out/.test(r.says), r.says);
+  // asserted as claims, not as words: the refusal legitimately contains the
+  // phrase 'how full this bus is', which a /full/ regex would have failed
+  ['is full', 'no room', 'sold out', 'fully booked'].forEach(claim =>
+    assert.ok(!r.says.toLowerCase().includes(claim), 'khaali said ' + claim));
+  // a displayed-as-zero count must never make a departure NEWLY eligible
+  assert.strictEqual(broken.onboard[1], 0);
+  assert.ok(!r.ok, 'zero on the screen is not room in the plan');
+});
+
+t('every undetermined reason has its own code and none of them means full', () => {
+  const L = CL.ledger();
+  const noCap = CD.profile([CD.event({ kind: 'bustrip', id: 'y1', tripInstanceId: TRIP, stopCount: 8 })]);
+  assert.strictEqual(ask(L, { profile: noCap }).code, 'BUS_CAPACITY_UNKNOWN');
+  assert.strictEqual(ask(L, { profile: null }).code, 'NO_PROFILE');
+  const old = busOf(10, 20);
+  assert.strictEqual(ask(L, { profile: old, now: (old.generatedAt || 0) + CL.STALE_MS + 1 }).code, 'BUS_DATA_STALE');
+  CL.UNDETERMINED.forEach(c => assert.ok(CL.CODES.includes(c)));
+  assert.ok(!CL.UNDETERMINED.has('BOARDING_NOT_FEASIBLE'), 'no room is a determination');
+  assert.ok(!CL.UNDETERMINED.has('SPAN_OVER_PLANNING_LIMIT'));
+});
+
+t('accepting a later bus moves the unboarded quantity, and only that', () => {
+  const L = CL.ledger();
+  const profile = busOf(10, 20);
+  CL.reserve(L, { profile, tripInstanceId: TRIP, fromStopSequence: 1,
+    toStopSequence: 6, pax: 4, id: 'c1' });
+  CL.confirm(L, 'c1');
+  CL.board(L, 'c1', 1, { emit: () => {} });
+  const LATER = 'BMTC|500D-08|2026-09-05|0|P1|520';
+  const m = CL.move(L, 'c1', { profile, tripInstanceId: LATER,
+    fromStopSequence: 1, toStopSequence: 6, id: 'c2' });
+  assert.ok(m.ok, m.code);
+  assert.strictEqual(m.claim.pax, 3, 'the one already aboard does not travel twice');
+  assert.strictEqual(CL.get(L, 'c1').status, 'moved');
+  assert.strictEqual(CL.outstanding(L, TRIP).people, 0, 'nobody is counted against both buses');
+  assert.strictEqual(CL.outstanding(L, LATER).people, 3);
+});
+
+t('a claim cannot be boarded outside the stops it covers', () => {
+  const L = CL.ledger();
+  CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP, fromStopSequence: 2,
+    toStopSequence: 5, pax: 1, id: 'c1' });
+  CL.confirm(L, 'c1');
+  assert.strictEqual(CL.board(L, 'c1', 1, { stopSequence: 6 }).code, 'OUTSIDE_PERMITTED_SPAN');
+  assert.strictEqual(CL.board(L, 'c1', 1, { stopSequence: 1 }).code, 'OUTSIDE_PERMITTED_SPAN');
+  assert.ok(CL.board(L, 'c1', 1, { stopSequence: 3 }).ok, 'boarding late along her own span is fine');
+});
+
+t('more people scanned than the claim covers is refused, not absorbed', () => {
+  const L = CL.ledger();
+  CL.reserve(L, { profile: busOf(), tripInstanceId: TRIP, fromStopSequence: 1,
+    toStopSequence: 6, pax: 2, id: 'c1' });
+  CL.confirm(L, 'c1');
+  assert.strictEqual(CL.board(L, 'c1', 3).code, 'QUANTITY_UNAVAILABLE');
+  assert.ok(CL.board(L, 'c1', 2, { emit: () => {} }).ok);
+  assert.strictEqual(CL.board(L, 'c1', 1).code, 'NOT_BOARDABLE', 'and a replayed scan creates no boarding');
+});
+
+t('a released claim gives its room back; a boarded one cannot be released', () => {
+  const L = CL.ledger();
+  const profile = busOf(10, 5);
+  CL.reserve(L, { profile, tripInstanceId: TRIP, fromStopSequence: 1, toStopSequence: 6, pax: 4, id: 'c1' });
+  assert.ok(!ask(L, { profile, pax: 3 }).ok);
+  CL.release(L, 'c1', 'cancelled');
+  assert.ok(ask(L, { profile, pax: 3 }).ok, 'a cancelled claim must not go on holding room');
+  CL.reserve(L, { profile, tripInstanceId: TRIP, fromStopSequence: 1, toStopSequence: 6, pax: 1, id: 'c2' });
+  CL.confirm(L, 'c2'); CL.board(L, 'c2', 1, { emit: () => {} });
+  assert.strictEqual(CL.release(L, 'c2').code, 'ALREADY_BOARDED');
+});
+
+t('the room khaali reports is the room it then takes', () => {
+  const L = CL.ledger();
+  const profile = busOf(10, 12, [[0, 9, 4]]);
+  const seen = ask(L, { profile, pax: 3 });
+  assert.ok(seen.ok);
+  const took = CL.reserve(L, { profile, tripInstanceId: TRIP,
+    fromStopSequence: 1, toStopSequence: 6, pax: 3, id: 'c1' });
+  assert.ok(took.ok);
+  assert.strictEqual(took.room.worst.value, seen.worst.value, 'the quote and the take saw one bus');
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
