@@ -52,6 +52,7 @@ import * as decision from './decision.mjs';
 import * as scenario from './scenario.mjs';
 import * as demonet from './demonet.mjs';
 import * as multiplan from './multiplan.mjs';
+import * as card from './card.mjs';
 import * as busledger from './busledger.mjs';
 import { BUSES } from './buses.mjs';
 import * as conductor from './conductor.mjs';
@@ -2363,10 +2364,21 @@ async function api(req, res, url) {
         : (toEnd.kind === 'rail' ? demonet.nearestStop(GEO[ST.findIndex(x => x.c === tid)].lat,
           GEO[ST.findIndex(x => x.c === tid)].lng) : null);
       if (A && B && A.stop.id !== B.stop.id) {
-        const st = scenario.state();
-        mp = multiplan.plan({ fromStop: A.stop.id, toStop: B.stop.id,
-          at: st.demoTime, pax, policy: profile });
-        mp.access = { from: A, to: B };
+        /* A per-request override, so a scenario is reproducible from a URL -
+           "the same page with the traffic removed" - without changing what
+           every other visitor sees. Applied, planned with no await in between,
+           and put back. Persisting a change for everybody stays behind the
+           sign-in gate on /api/scenario, where a shared state change belongs. */
+        const ov = scenario.parseOverride(q.get('sc'));
+        const before = ov ? scenario.state() : null;
+        if (ov) scenario.set(ov);
+        try {
+          const st = scenario.state();
+          mp = multiplan.plan({ fromStop: A.stop.id, toStop: B.stop.id,
+            at: st.demoTime, pax, policy: profile });
+          mp.access = { from: A, to: B };
+          mp.override = ov || null;
+        } finally { if (before) scenario.restore(before); }
       }
     } catch (e) { mp = null; }
 
@@ -2442,6 +2454,19 @@ async function api(req, res, url) {
       disclosure: mp ? mp.disclosure : null,
       decisionLines: mp ? [mp.answer && mp.answer.explanation, mp.disclosure].filter(Boolean)
         : decision.lines(decided),
+      /* One contract for the card, built from what was actually decided.
+         Its status is the load-bearing field: EVALUATED means whole journeys
+         were compared, AVAILABILITY_ONLY means khaali checked a berth and
+         nothing else, and the card is not allowed to borrow the language of the
+         first while in the second. */
+      card: (() => {
+        const picked2 = a.chains[a.recommended] || a.chains[0];
+        try {
+          return card.build({ chain: picked2, mp, railDecision: decided,
+            searchAt: mp ? (mp.demoTime) : ((after >= 0 && after < 1440) ? after : null),
+            scenario: mp ? { scenarioId: mp.scenarioId, revision: mp.revision } : null });
+        } catch (e) { return null; }
+      })(),
       explanation: allocate.sentence(a.reason) };
     /* allocate.trace reads fields allocate.allocate put there, and the
        planner's chain never went through it - it has its own trace. Tracing

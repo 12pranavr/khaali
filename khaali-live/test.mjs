@@ -38,6 +38,7 @@ import * as DNET from './demonet.mjs';
 import * as RSIM from './roadsim.mjs';
 import * as RIDE from './ridership.mjs';
 import * as MPL from './multiplan.mjs';
+import * as CARD from './card.mjs';
 import * as JN from './journey.mjs';
 import { BUSES } from './buses.mjs';
 import * as BL from './busload.mjs';
@@ -5558,6 +5559,153 @@ t('the website request runs this planner, not a demo of it', () => {
   // Hope Farm and Hebbala, the coordinates the site's own search produces
   assert.ok(DNET.nearestStop(12.98273, 77.75223).stop.id === 'ORIGIN');
   assert.ok(DNET.nearestStop(13.04127, 77.58942).stop.id === 'DEST');
+});
+
+console.log('\nthe card: what she takes, where she changes, and what was not checked');
+
+/* The card used to open with "TRAIN KEPT - this train has 43 places khaali can
+   sell, so there is no reason to replace any of it". A true sentence about one
+   leg's inventory, and no help at all to somebody trying to reach Hebbala. */
+
+const railOnlyChain = () => ({
+  kind: 'train|BNC', dep: 725, arr: 835, fare: 101,
+  legs: [
+    { mode: 'train', id: '12639', name: 'MAS-SBC BRIN', from: 'Bangarpet', to: 'Bengaluru Cantt',
+      fromIdx: 0, toIdx: 4, depMin: 725, arrMin: 798, source: 'timetable',
+      seat: { word: 'yes', rank: 3, why: '43 berths free' } },
+    { mode: 'walk', name: 'Walk', from: 'Bengaluru Cantt', to: 'Vasantha Nagara',
+      depMin: 806, arrMin: 807, min: 1, km: 0.1, source: 'measured' },
+    { mode: 'bus', id: '285', name: 'BMTC 285 SBS-MKC-DDP', from: 'Vasantha Nagara',
+      to: 'Hebbala Canara Bank', depMin: 813, arrMin: 826, min: 13, every: 30,
+      scheduleKind: 'frequency', source: 'timetable',
+      cap: { occupancy: 0.24, quality: 'simulated' } },
+    { mode: 'walk', name: 'Walk', from: 'Hebbala Canara Bank', to: 'Hebbala',
+      depMin: 826, arrMin: 834, min: 8, km: 0.61, source: 'measured' },
+  ],
+});
+const railOnlyDecision = () => ({ kind: 'KEEP_ROUTE',
+  railCheck: { trainInstanceId: 'IR|12639|2026-09-05', trainNo: '12639',
+    fromSequence: 0, toSequence: 4, partySize: 1, anySeats: 43, outcome: 'SELLABLE' },
+  reasons: ['DIRECT_TRAIN_BOOKABLE'], chosenBusDeparture: null });
+
+t('every minute between leaving and arriving has a name', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const J = c.journey;
+  // the card showed 1h50m over legs adding to 95: fifteen minutes with no row
+  assert.strictEqual(J.rideMinutes, 86);
+  assert.strictEqual(J.walkingMinutes, 9);
+  assert.strictEqual(J.transferWaitMinutes, 14, 'the waiting was real and had nowhere to go');
+  assert.strictEqual(J.doorToDoorMinutes, 109);
+  assert.strictEqual(J.rideMinutes + J.walkingMinutes + J.transferWaitMinutes, J.doorToDoorMinutes);
+  assert.strictEqual(J.reconciles, true);
+});
+
+t('a berth check is not a comparison, and the card refuses to pretend', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const r = c.recommendation;
+  assert.strictEqual(r.status, 'AVAILABILITY_ONLY');
+  assert.strictEqual(r.comparison, null, 'there was nothing to compare against');
+  assert.ok(r.notEvaluated.length >= 2);
+  assert.ok(r.notEvaluated.some(x => /demand/i.test(x)));
+  assert.ok(r.notEvaluated.some(x => /traffic/i.test(x)));
+  // and none of the language of a comparison that never happened
+  const said = r.summaryReason + ' ' + r.headline;
+  ['minutes earlier', 'less crowded', 'avoids', 'faster than', 'best option'].forEach(claim =>
+    assert.ok(!said.toLowerCase().includes(claim), 'khaali claimed: ' + claim));
+  assert.ok(/has not evaluated/.test(said), said);
+});
+
+t('the headline is the journey, not the allocator', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  assert.strictEqual(c.recommendation.headline,
+    'Take the MAS-SBC BRIN to Bengaluru Cantt, then the BMTC 285 SBS-MKC-DDP to Hebbala Canara Bank.');
+  ['TRAIN KEPT', 'no reason to replace', 'places khaali can sell']
+    .forEach(x => assert.ok(!c.recommendation.headline.includes(x), 'headline says ' + x));
+});
+
+t('availability is stated for the train without seating the whole journey', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const board = c.journey.steps.find(x => x.kind === 'BOARD');
+  assert.strictEqual(board.availability.kind, 'RESERVABLE');
+  assert.ok(/Train accommodation available/.test(board.availability.says));
+  assert.ok(/43 places/.test(board.availability.detail), 'the count belongs beside the leg');
+  const bus = c.journey.steps.find(x => x.mode === 'bus');
+  assert.strictEqual(bus.availability.kind, 'UNRESERVED');
+  assert.ok(/no seat reserved/i.test(bus.availability.note));
+  // and the whole-journey claim is nowhere
+  const all = JSON.stringify(c);
+  ['seat for the entire trip', 'you will be seated', 'seat guaranteed']
+    .forEach(x => assert.ok(!all.toLowerCase().includes(x), 'card claims ' + x));
+});
+
+t('a change is its own step, with the walk and the wait on it', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const change = c.journey.steps.find(x => x.kind === 'CHANGE');
+  assert.ok(change, 'the change had no step of its own');
+  assert.strictEqual(change.waitBefore, 6, 'the wait before boarding belongs on the step');
+  assert.strictEqual(change.scheduleKind, 'frequency');
+  assert.strictEqual(change.every, 30);
+});
+
+t('the button says what the click does', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  assert.strictEqual(c.booking.actionLabel, 'Hold train accommodation and continue');
+  assert.ok(/Nothing is confirmed until payment/.test(c.booking.note));
+  assert.notStrictEqual(c.booking.actionLabel, 'Book the journey');
+  // held and confirmed are different words for different states
+  assert.strictEqual(CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    bookingStatus: 'HELD' }).booking.actionLabel, 'Pay and confirm');
+  assert.strictEqual(CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    bookingStatus: 'CONFIRMED' }).booking.enabled, false);
+  // a journey with nothing reservable does not offer to hold one
+  const busOnly = { kind: 'x', fare: 20, legs: [{ mode: 'bus', name: 'BMTC 500D', from: 'A', to: 'B',
+    depMin: 600, arrMin: 640, min: 40 }] };
+  assert.strictEqual(CARD.build({ chain: busOnly }).booking.actionLabel, 'Continue with this journey');
+});
+
+t('when whole journeys were compared, the card says so and names the loser', () => {
+  SCN.reset();
+  const mp = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1, policy: 'balanced' });
+  const chain = { kind: 'planned', fare: mp.answer.totalFare, simulated: true,
+    chainId: mp.answer.chainId,
+    legs: mp.answer.legs.map(l => ({ ...l, min: l.minutes })) };
+  const c = CARD.build({ chain, mp, searchAt: 600,
+    scenario: { scenarioId: mp.scenarioId, revision: mp.revision } });
+  const r = c.recommendation;
+  assert.strictEqual(r.status, 'EVALUATED');
+  assert.ok(r.comparison, 'an evaluated answer with no named alternative is not an explanation');
+  assert.ok(r.comparison.alternativeChainId);
+  assert.ok(/arriving \d{1,2}:\d{2}/.test(r.comparison.alternativeLabel),
+    'the alternative must be named by when it gets there: ' + r.comparison.alternativeLabel);
+  assert.strictEqual(r.comparison.timeDifferenceMinutes, 20);
+  assert.strictEqual(r.comparison.roadDelayDifferenceMinutes, 38);
+  assert.strictEqual(r.recommendation, undefined);
+  assert.strictEqual(r.notEvaluated.length, 0, 'nothing was left unchecked, so nothing is disclaimed');
+  assert.ok(/^Take the Bus A to K R Puram Bus Stand, then the Metro M/.test(r.headline), r.headline);
+  assert.ok(c.evidence.label && /simulated/.test(c.evidence.label));
+  SCN.reset();
+});
+
+t('with the road clear the card says stay on, and says why not to change', () => {
+  SCN.reset(); SCN.set({ downstreamRoadDelayMin: 0 });
+  const mp = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1, policy: 'balanced' });
+  const chain = { kind: 'planned', fare: mp.answer.totalFare, simulated: true,
+    legs: mp.answer.legs.map(l => ({ ...l, min: l.minutes })) };
+  const c = CARD.build({ chain, mp, searchAt: 600 });
+  assert.strictEqual(c.recommendation.decisionKind, 'RECOMMEND_DIRECT');
+  assert.ok(/^Stay on the Bus A the whole way/.test(c.recommendation.headline));
+  assert.strictEqual(c.recommendation.comparison.question, 'Why not change?');
+  assert.strictEqual(c.journey.transferCount, 0);
+  SCN.reset();
+});
+
+t('a walk with no vehicle after it does not become a change', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  const last = c.journey.steps[c.journey.steps.length - 1];
+  assert.strictEqual(last.kind, 'WALK');
+  assert.strictEqual(c.journey.steps.filter(x => x.kind === 'BOARD').length, 1,
+    'exactly one leg is the one she boards first');
+  assert.strictEqual(c.journey.steps.filter(x => x.kind === 'CHANGE').length, 1);
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');

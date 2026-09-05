@@ -119,3 +119,29 @@ export function rand(...parts) {
 
 /** A jitter of +/- `spread`, deterministic for the same subject. */
 export const wobble = (spread, ...parts) => Math.round((rand(...parts) * 2 - 1) * spread);
+
+/**
+ * Put the world back exactly as it was.
+ *
+ * /api/plan accepts a per-request override so a scenario can be reproduced from
+ * a URL - "here is the page with the traffic removed" - without changing what
+ * every other visitor sees. The override is applied, the plan is computed with
+ * no await in between, and this restores the shared state. Persisting a change
+ * for everybody stays behind the sign-in gate, where it belongs.
+ */
+export function restore(prev) {
+  if (!prev) return state();
+  S = { ...S, ...prev, cancelled: (prev.cancelled || []).slice() };
+  return state();
+}
+
+/** `sc=downstreamRoadDelayMin:0,walkExtraMin:14` - read-only, for one request. */
+export function parseOverride(str) {
+  if (!str) return null;
+  const out = {};
+  String(str).split(',').forEach(pair => {
+    const [k, v] = pair.split(':');
+    if (NUMERIC.includes((k || '').trim())) out[k.trim()] = Number(v);
+  });
+  return Object.keys(out).length ? out : null;
+}

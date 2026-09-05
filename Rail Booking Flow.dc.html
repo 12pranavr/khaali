@@ -1176,9 +1176,33 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           </div>
         </div>
 
-        <div style="{{ r.decisionStyle }}">
-          <div style="{{ r.decisionTagStyle }}">{{ r.decisionTag }}</div>
-          <div>{{ r.decisionText }}</div>
+        <div style="{{ r.cardStepsStyle }}">
+          <div style="{{ r.cardStatusStyle }}">{{ r.cardStatus }}</div>
+          <div style="{{ r.cardHeadlineStyle }}">{{ r.cardHeadline }}</div>
+          <div style="{{ r.cardWhyStyle }}">{{ r.cardWhy }}</div>
+          <div style="{{ r.cardBreakStyle }}">{{ r.cardBreak }}</div>
+
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:11px">
+            <sc-for list="{{ r.cardSteps }}" as="st" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:11px;align-items:start">
+                <span style="{{ st.tagStyle }}">{{ st.tag }}</span>
+                <div style="min-width:0">
+                  <div style="font:700 13.5px/1.4 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ st.title }}</div>
+                  <div style="font:600 12px/1.5 Archivo,sans-serif;color:var(--k-fg-6a6d75);margin-top:1px">{{ st.where }}</div>
+                  <div style="font:600 11.5px/1.5 Archivo,sans-serif;color:var(--k-fg-8a8a84);margin-top:1px">{{ st.detail }}</div>
+                  <div style="{{ st.availStyle }}">{{ st.avail }}</div>
+                  <div style="font:500 11px/1.5 Archivo,sans-serif;color:var(--k-fg-8a8a84)">{{ st.note }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="{{ r.cardQAStyle }}">
+            <div style="font:700 12.5px/1.4 Archivo,sans-serif;color:var(--k-fg-14161a);margin-bottom:4px">{{ r.cardQ }}</div>
+            <div>{{ r.cardA }}</div>
+          </div>
+          <div style="{{ r.cardGapsStyle }}">{{ r.cardGaps }}</div>
+          <div style="{{ r.cardEvidenceStyle }}">{{ r.cardEvidence }}</div>
         </div>
 
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--k-f0efeb)">
@@ -7200,6 +7224,10 @@ class Component extends DCLogic {
              property of a list; it is not an answer to "did you check
              whether this train can carry me". */
           decision:j.decision||null,decisionLines:j.decisionLines||[],
+          /* The rendering contract. Every bracket on the card is filled from
+             a field in here; a check that never ran has no field, so the card
+             cannot describe it. */
+          card:j.card||null,
           compare:j.compare||null,
           err:j.chains.length?null:this.planEmptyText(after,by)};
         this.setState({pBusy:false,pRes:res,pAskAns:'',pAskTxt:'',pWant:null});
@@ -8158,28 +8186,81 @@ class Component extends DCLogic {
            train's accommodation was looked at, for whom, or over which
            stretch. The lines below are generated from the decision's own
            reasons, so the page cannot narrate a check that never ran. */
-        decisionText:isRec?((R.decisionLines||[]).join(' ')):'',
-        decisionStyle:{display:(isRec&&(R.decisionLines||[]).length)?'block':'none',
-          marginTop:2,padding:'11px 13px',borderRadius:10,
-          background:'var(--k-f6f6f3)',border:'1px solid var(--k-e6e5e0)',
-          font:'600 12.5px/1.65 Archivo,sans-serif',color:'var(--k-fg-40434a)'},
-        /* Two planners answer here and they have different vocabularies: the
-           rail check says whether a berth allocation holds, the multimodal
-           planner says which vehicle to be on for each stretch. The tag names
-           whichever one produced this answer. */
-        decisionTag:isRec&&R.decision?({KEEP_ROUTE:'TRAIN KEPT',
-          SWAP_PREFIX:'FIRST STRETCH REPLACED',
-          NO_FEASIBLE_CONNECTION:'NOTHING PASSES THE CHECKS',
-          RECOMMEND_DIRECT:'STAY ON \u00b7 CHECKED',
-          RECOMMEND_MODE_CHANGE:'CHANGE MODE \u00b7 CHECKED',
-          RECOMMEND_BUS_TRANSFER:'CHANGE BUS \u00b7 CHECKED',
-          RECOMMEND_TRANSFER:'CHANGE \u00b7 CHECKED',
-          NO_FEASIBLE_JOURNEY:'NOTHING FEASIBLE'}[R.decision.kind]||''):'',
-        decisionTagStyle:{display:(isRec&&R.decision&&R.decision.kind)?'inline-block':'none',
-          font:"700 9.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
-          padding:'5px 8px',borderRadius:5,marginBottom:8,
-          background:(R.decision&&/SWAP_PREFIX|RECOMMEND_MODE_CHANGE|RECOMMEND_BUS_TRANSFER/.test(R.decision.kind))?'var(--k-e6f4ec)':'var(--k-f1f1ee)',
-          color:(R.decision&&/SWAP_PREFIX|RECOMMEND_MODE_CHANGE|RECOMMEND_BUS_TRANSFER/.test(R.decision.kind))?'var(--k-fg-14663a)':'var(--k-fg-6a6d75)'},
+        /* The card explains the JOURNEY.
+           It used to open with "TRAIN KEPT - this train has 43 places khaali
+           can sell, so there is no reason to replace any of it", which is a
+           true sentence about one leg's inventory and no help at all to
+           somebody trying to get to Hebbala. Everything below comes from
+           card.mjs, which knows whether whole journeys were compared or only a
+           berth was checked - and says which, rather than borrowing the
+           language of a comparison that never happened. */
+        ...(()=>{
+          const K=isRec?(R.card||null):null;
+          const off={display:'none'};
+          if(!K)return {cardHeadline:'',cardHeadlineStyle:off,cardWhy:'',cardWhyStyle:off,
+            cardStatus:'',cardStatusStyle:off,cardSteps:[],cardStepsStyle:off,
+            cardQ:'',cardA:'',cardQAStyle:off,cardGaps:'',cardGapsStyle:off,
+            cardBreak:'',cardBreakStyle:off,cardEvidence:'',cardEvidenceStyle:off};
+          const rec=K.recommendation,J=K.journey;
+          const evaluated=rec.status==='EVALUATED';
+          const chip=evaluated?'COMPARED AGAINST THE ALTERNATIVES'
+            :rec.status==='AVAILABILITY_ONLY'?'AVAILABILITY CHECKED '+'\u2014'+' NOT COMPARED'
+              :'ROUTE FOUND '+'\u2014'+' NOT EVALUATED';
+          const mono="700 9.5px/1 'JetBrains Mono',monospace";
+          return {
+            cardHeadline:rec.headline,
+            cardHeadlineStyle:{font:'700 16.5px/1.35 Archivo,sans-serif',
+              letterSpacing:'-.015em',color:'var(--k-fg-14161a)',marginTop:4},
+            cardStatus:chip,
+            cardStatusStyle:{display:'inline-block',font:mono,letterSpacing:'.1em',
+              padding:'5px 8px',borderRadius:5,marginBottom:8,
+              background:evaluated?'var(--k-e6f4ec)':'var(--k-fdf0e3)',
+              color:evaluated?'var(--k-fg-14663a)':'var(--k-fg-8a4a12)'},
+            cardWhy:rec.summaryReason,
+            cardWhyStyle:{marginTop:6,font:'600 12.5px/1.65 Archivo,sans-serif',
+              color:'var(--k-fg-40434a)'},
+            // every minute between leaving and arriving, named
+            cardBreak:(J.rideMinutes+'m riding '+'\u00b7'+' '+J.walkingMinutes+'m walking'
+              +(J.transferWaitMinutes?(' '+'\u00b7'+' '+J.transferWaitMinutes+'m waiting for the change'):'')
+              +(J.initialWaitMinutes?(' '+'\u00b7'+' '+J.initialWaitMinutes+'m before you start'):'')
+              +' '+'\u00b7'+' '+J.totalMinutes+'m in all'),
+            cardBreakStyle:{marginTop:8,font:"600 11px/1.5 'JetBrains Mono',monospace",
+              letterSpacing:'.02em',color:J.reconciles?'var(--k-fg-8a8a84)':'var(--k-fg-a71f3d)'},
+            cardSteps:(J.steps||[]).map(st=>({
+              tag:st.kind==='BOARD'?'YOU BOARD':st.kind==='CHANGE'?'YOU CHANGE':'YOU WALK',
+              tagStyle:{font:mono,letterSpacing:'.1em',color:'var(--k-fg-8a8a84)'},
+              title:st.title+(st.departs?(' '+'\u00b7'+' '+st.departs):''),
+              where:(st.from&&st.to)?(st.from+' '+'\u2192'+' '+st.to):'',
+              detail:[st.waitBefore?('Wait about '+st.waitBefore+' min'):'',
+                st.detail||'',
+                st.scheduleKind==='frequency'?('every '+st.every+' min '+'\u00b7'+' time estimated'):''
+                ].filter(Boolean).join(' '+'\u00b7'+' '),
+              avail:st.availability?st.availability.says:'',
+              availStyle:{marginTop:2,font:'600 11.5px/1.5 Archivo,sans-serif',
+                color:(st.availability&&st.availability.kind==='RESERVABLE')
+                  ?'var(--k-fg-14663a)':'var(--k-fg-8a4a12)'},
+              note:(st.availability&&st.availability.note)||''}),
+            ),
+            cardStepsStyle:{display:'block',marginTop:12},
+            cardQ:rec.comparison?rec.comparison.question:'',
+            cardA:rec.comparison
+              ?(rec.comparison.answer+' Compared with '+rec.comparison.alternativeLabel+'.')
+              :'',
+            cardQAStyle:{display:rec.comparison?'block':'none',marginTop:10,
+              padding:'10px 12px',borderRadius:9,background:'var(--k-f6f6f3)',
+              font:'600 12px/1.6 Archivo,sans-serif',color:'var(--k-fg-40434a)'},
+            // a check that did not run is a fact about the answer
+            cardGaps:(rec.notEvaluated||[]).length
+              ?('Not evaluated for this journey: '+rec.notEvaluated.join(', ')+'.'):'',
+            cardGapsStyle:{display:(rec.notEvaluated||[]).length?'block':'none',marginTop:8,
+              font:'600 11.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-8a4a12)'},
+            cardEvidence:[K.evidence.label,
+              K.evidence.timetableSource?('Timetable: '+K.evidence.timetableSource+'.'):''
+              ].filter(Boolean).join(' '),
+            cardEvidenceStyle:{marginTop:8,font:'500 11px/1.55 Archivo,sans-serif',
+              color:'var(--k-fg-8a8a84)'},
+          };
+        })(),
         whyStyle:{display:isRec&&R.explanation?'block':'none',margin:'0 18px 14px',padding:'11px 13px',
           borderRadius:12,background:INKINS,font:'600 12.5px/1.55 Archivo,sans-serif',color:ONINK},
         dep:c.depText,arr:c.arrText,
@@ -8251,7 +8332,14 @@ class Component extends DCLogic {
               this.setState({from:fi,to:ti,train:tl.id,allCls:true,picks:[],pax:1,
                 classModal:true,onlyThis:true,hov:null});}}
           else this.planTripPass(c);},
-        chooseLabel:tl?'Book the journey':(this.planTripOf(c).legs.length?'Book the trip pass':'Show me on the map'),
+        /* "Book the journey" claimed a state the click does not reach. It
+           creates a HOLD on the berth and a pending pass; nothing is confirmed
+           until she pays. The server says what the operation is - card.booking
+           - and this uses that when it has it rather than guessing from the
+           shape of the legs. */
+        chooseLabel:((isRec&&R.card&&R.card.booking&&R.card.booking.actionLabel)
+          ||(tl?'Hold the berth and continue'
+            :(this.planTripOf(c).legs.length?'Start the trip pass':'Show me on the map'))),
         // Filled means "press this". Twelve filled buttons means nothing does.
         // The recommended way, and whichever she has picked, are filled; the
         // rest wait quietly until she chooses one.
