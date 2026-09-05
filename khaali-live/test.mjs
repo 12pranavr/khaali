@@ -5502,6 +5502,84 @@ t('turn one knob and the chosen departure changes', () => {
   SCN.reset();
 });
 
+t('the jam decides the shape of the journey, not just its verdict', () => {
+  // the counter-test pair, on the composition of the winner itself: with the
+  // road jammed the answer changes vehicles; with it clear the answer is the
+  // one bus, door to door
+  const jammed = run();
+  const clear = run({ downstreamRoadDelayMin: 0 });
+  assert.ok(jammed.answer.transferCount > 0, 'a jam khaali routes straight through');
+  assert.ok(jammed.answer.legs.some(l => l.mode === 'metro'),
+    'the mode change the jam justified never happened');
+  assert.strictEqual(clear.answer.transferCount, 0);
+  assert.deepStrictEqual([...new Set(clear.answer.legs.map(l => l.mode)
+    .filter(m => m !== 'walk'))], ['bus']);
+  assert.ok(clear.answer.arriveMinute <= jammed.answer.arriveMinute,
+    'removing forty minutes of delay made the day worse');
+  SCN.reset();
+});
+
+t('only the road moved: the same journey, re-priced, loses', () => {
+  const jammed = run();
+  const clear = run({ downstreamRoadDelayMin: 0 });
+  /* A chain id is a hash of the journey AS TIMED, so a jam mints new ids for
+     the same vehicles - the identity to compare across the two worlds is the
+     SHAPE: one bus, no transfer, all the way. It exists in both, and the only
+     thing that changed about it is when it arrives. */
+  const directOf = r => r.trace.scores
+    .filter(x => x.transfers === 0 && x.modes.length === 1 && x.modes[0] === 'bus')
+    .sort((a, b) => a.arriveMinute - b.arriveMinute)[0];
+  const dj = directOf(jammed), dc = directOf(clear);
+  assert.ok(dj && dc, 'the straight-through bus was not even considered in one of the two');
+  assert.ok(dj.arriveMinute > dc.arriveMinute,
+    'the jam did not delay the journey that rides the jammed road');
+  // the winner under the jam is a different journey, and it is the one that
+  // leaves the road
+  assert.ok(jammed.trace.scores.find(x => x.chainId === jammed.decision.selectedChainId)
+    .modes.includes('metro'), 'the jam was routed around by staying on the road');
+  assert.strictEqual(dc.chainId, clear.decision.selectedChainId,
+    'with the road clear the straight-through bus should win outright');
+  SCN.reset();
+});
+
+t('a surge makes the chosen departure later, and names the bus it filled', () => {
+  const before = run({}, { pax: 2 });
+  const after = run({ demandBeforeBoarding: 5.5 }, { pax: 2 });
+  assert.ok(firstRide(after).dep > firstRide(before).dep,
+    'the surge should push her onto a LATER departure, not an arbitrary other one');
+  const full = after.trace.rejections.find(x => x.code === 'BOARDING_NOT_FEASIBLE');
+  assert.ok(full && full.trip, 'the full bus goes unnamed in the trace');
+  assert.ok(/^DEMO\|/.test(full.trip), 'a rejection must name a departure, not a route: ' + full.trip);
+  assert.ok(full.fromStopSequence != null && full.toStopSequence != null,
+    'the stretch she could not board over goes unsaid');
+  // crowded is not impossible: the surged city still has an answer, said
+  // plainly, rather than an empty page
+  assert.ok(after.answer, 'a crowded morning was declared unplannable');
+  assert.notStrictEqual(after.decision.kind, 'NO_FEASIBLE_JOURNEY');
+  SCN.reset();
+});
+
+t('the sc= override is applied, planned with, and put back whole', () => {
+  SCN.reset();
+  const st0 = SCN.state();
+  const ov = SCN.parseOverride('downstreamRoadDelayMin:0,walkExtraMin:3');
+  assert.deepStrictEqual(ov, { downstreamRoadDelayMin: 0, walkExtraMin: 3 });
+  // the server's exact sequence: remember, set, plan, restore - and the world
+  // afterwards is the world before, revision included
+  const before = SCN.state();
+  SCN.set(ov);
+  const r = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST',
+    at: SCN.state().demoTime, pax: 1, policy: 'balanced' });
+  assert.strictEqual(r.decision.kind, 'RECOMMEND_DIRECT',
+    'the override was parsed but never reached the planner');
+  SCN.restore(before);
+  assert.deepStrictEqual(SCN.state(), st0,
+    'a per-request override leaked into the shared demo');
+  // and only numeric knobs may ride in a URL - cancellations may not
+  assert.strictEqual(SCN.parseOverride('cancelled:everything'), null);
+  SCN.reset();
+});
+
 t('the same scenario gives the same answer, however many times it is asked', () => {
   const a = run();
   const b = run();
