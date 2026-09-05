@@ -26,6 +26,7 @@ import * as PV from './providers.mjs';
 import * as LD from './load.mjs';
 import * as XF from './transfer.mjs';
 import * as TP from './trip.mjs';
+import * as CD from './conductor.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4363,6 +4364,172 @@ t('a trip that leaves at 23:40 arrives after it left', () => {
   assert.strictEqual(TP.dayNumber('2026-09-06') - TP.dayNumber('2026-09-05'), 1);
 });
 
+console.log('\nthe conductor: three numbers, never collapsed into one');
+
+// Nobody publishes bus occupancy. What exists on every bus is a person with a
+// ticketing machine who knows who got on and where they said they were going.
+// All of this is simulated - no operator is connected - and the tests below are
+// mostly about not adding the same passenger twice.
+
+const TRIP = 'BMTC|500D-07|2026-09-05|0|P1|490';
+let evn = 0;
+const ev = o => CD.event({ tripInstanceId: TRIP, id: 'e' + (++evn), ...o });
+const start = (stopCount = 8, cap = 50) => ev({ kind: 'bustrip', stopCount,
+  capacity: { seatedCapacity: cap, source: 'demo' } });
+const tkt = (from, to, pax = 1) => ev({ kind: 'ticket', stopSequence: from, toStopSequence: to, pax });
+const got = (stop, count) => ev({ kind: 'alight', stopSequence: stop, count });
+const counted = (stop, count, covers) => ev({ kind: 'onboard', stopSequence: stop, count,
+  coversEventsThroughSeq: covers == null ? CD.seqAt() : covers });
+
+t('no record of the departure is not an empty bus', () => {
+  const p = CD.profile([tkt(0, 3)]);
+  assert.strictEqual(p.status, 'NO_TRIP');
+  assert.strictEqual(p.usable, false);
+  assert.ok(!/empty|room|full/.test(p.says), p.says);
+});
+
+t('the tickets alone give a curve, and it comes back down', () => {
+  const p = CD.profile([start(6), tkt(0, 2, 3), tkt(1, 4, 2), tkt(2, 5, 1)]);
+  assert.strictEqual(p.status, 'OK');
+  assert.deepStrictEqual(p.onboard, [3, 5, 3, 3, 1, 0]);
+  assert.deepStrictEqual(p.stretch, [3, 5, 3, 3, 1]);
+  assert.strictEqual(p.quality, 'simulated');
+  assert.ok(/no operator is connected/i.test(p.says), p.says);
+});
+
+t('a retry is not a second boarding', () => {
+  const one = tkt(0, 3, 2);
+  const twice = CD.profile([start(6), one, { ...one }]);
+  assert.deepStrictEqual(twice.onboard, CD.profile([start(6), one]).onboard);
+  assert.strictEqual(twice.eventCount, 2, 'the duplicate is dropped, not counted');
+});
+
+t('a shuffled feed is the same profile as a sorted one', () => {
+  const evs = [start(7), tkt(0, 3, 2), tkt(1, 5), got(3, 1), tkt(2, 6, 4), got(5, 2)];
+  const sorted = CD.profile(evs);
+  for (let i = 0; i < 6; i++) {
+    const shuffled = evs.slice().sort(() => Math.random() - 0.5);
+    assert.deepStrictEqual(CD.profile(shuffled).onboard, sorted.onboard,
+      'a journal replay is not the order things were entered in');
+  }
+});
+
+t('expected five, confirmed zero: subtract zero', () => {
+  // the tickets say five get off at stop 3. The conductor watched, and nobody
+  // did. The reconciled count has to be what was watched.
+  const base = [start(6), tkt(0, 3, 5), tkt(0, 5, 1)];
+  const asTicketed = CD.profile(base);
+  assert.strictEqual(asTicketed.onboard[3], 1);
+  const asSeen = CD.profile(base.concat([got(3, 0)]));
+  assert.strictEqual(asSeen.exit[3], 0, 'zero is an observation, not a missing value');
+  assert.strictEqual(asSeen.onboard[3], 6);
+});
+
+t('confirming the number the tickets already counted changes nothing', () => {
+  const base = [start(6), tkt(0, 3, 5), tkt(0, 5, 1)];
+  assert.deepStrictEqual(CD.profile(base.concat([got(3, 5)])).onboard,
+    CD.profile(base).onboard);
+});
+
+t('more people off than were ever on is a broken bus, not an empty one', () => {
+  const p = CD.profile([start(6), tkt(0, 2, 2), got(1, 9)]);
+  assert.strictEqual(p.status, 'DATA_INCONSISTENT');
+  assert.strictEqual(p.usable, false);
+  assert.strictEqual(p.onboard[1], 0, 'displayed as zero');
+  assert.ok(p.codes.includes('DATA_INCONSISTENT'));
+  assert.ok(!/empty|plenty of room/i.test(p.says), p.says);
+  // and being displayed as zero must never make it look bookable
+  assert.strictEqual(CD.overSpan(p, 0, 5), null);
+});
+
+t('a correction rebases from its checkpoint, and later stops follow from there', () => {
+  const evs = [start(8), tkt(0, 6, 2)];
+  const before = CD.profile(evs);
+  assert.strictEqual(before.onboard[2], 2);
+  const after = CD.profile(evs.concat([counted(2, 20), tkt(3, 5, 1)]));
+  assert.strictEqual(after.onboard[2], 20, 'the person counting heads outranks the tickets');
+  assert.strictEqual(after.onboard[3], 21, 'and the next stop carries on from the corrected total');
+  assert.strictEqual(after.onboard[5], 20);
+});
+
+t('a checkpoint total higher than the tickets is people, not arithmetic', () => {
+  const p = CD.profile([start(8), tkt(0, 6, 2), counted(2, 20)]);
+  assert.strictEqual(p.uncertain[2], 18);
+  assert.strictEqual(p.uncertainTotal, 18);
+  assert.strictEqual(p.exitAssumption, CD.UNKNOWN_EXIT);
+  assert.ok(/never ticketed through khaali/.test(p.says), p.says);
+  assert.ok(!/get off at|alight at stop \d/.test(p.says), 'khaali must not invent a destination');
+  // they leave when the route does, and the bus is empty at the end
+  assert.strictEqual(p.onboard[7], 0);
+});
+
+t('a ticket arriving after its stop was confirmed does not quietly become a passenger', () => {
+  const evs = [start(8), tkt(0, 4, 2), counted(1, 20)];
+  const clean = CD.profile(evs);
+  assert.strictEqual(clean.status, 'OK');
+  const late = CD.profile(evs.concat([ev({ kind: 'ticket', stopSequence: 1, toStopSequence: 5, pax: 3 })]));
+  assert.strictEqual(late.status, 'NEEDS_RECONCILIATION');
+  assert.strictEqual(late.usable, false);
+  assert.ok(/do not agree yet/.test(late.says), late.says);
+  assert.strictEqual(CD.overSpan(late, 0, 5), null, 'and nothing is recommended from it');
+});
+
+t('an event the checkpoint did cover is not a disagreement', () => {
+  const head = start(8), a = tkt(0, 4, 2), b = tkt(1, 5, 3);
+  const p = CD.profile([head, a, b, counted(1, 20, CD.seqAt())]);
+  assert.strictEqual(p.status, 'OK', 'the conductor confirmed after both tickets, which is the rule');
+});
+
+t('the worst stretch she rides, and what it is a fraction of', () => {
+  const evs = [start(10, 40), tkt(0, 2, 4)];
+  for (let k = 4; k < 8; k++) evs.push(tkt(k, k + 2, 9));
+  const p = CD.profile(evs);
+  const boarding = CD.overSpan(p, 0, 1);
+  const riding = CD.overSpan(p, 0, 9);
+  assert.ok(riding.value > boarding.value * 2, 'the boarding stop was not the story');
+  assert.strictEqual(riding.capacity, 40);
+  assert.ok(riding.occupancy > 0 && riding.occupancy <= 1.2);
+  assert.strictEqual(riding.quality, 'simulated');
+});
+
+t('capacity nobody stated leaves the fraction unknown rather than guessed', () => {
+  const head = CD.event({ tripInstanceId: TRIP, id: 'x1', kind: 'bustrip', stopCount: 6 });
+  const p = CD.profile([head, CD.event({ tripInstanceId: TRIP, id: 'x2', kind: 'ticket',
+    stopSequence: 0, toStopSequence: 4, pax: 3 })]);
+  const w = CD.overSpan(p, 0, 4);
+  assert.strictEqual(w.capacity, null);
+  assert.strictEqual(w.occupancy, null, 'a fraction of an unknown is not a number');
+  assert.strictEqual(w.value, 3);
+});
+
+t('the simulated label survives everything', () => {
+  const p = CD.profile([start(6), tkt(0, 3, 2), counted(1, 9)]);
+  assert.strictEqual(p.quality, 'simulated');
+  assert.strictEqual(CD.overSpan(p, 0, 4).quality, 'simulated');
+  // Asserted as the exact disclosure rather than as a banned word. "no number
+  // here was measured" is the sentence khaali is supposed to say, and a regex
+  // hunting for /measured/ would have failed it for saying the right thing.
+  assert.ok(p.says.includes('No operator is connected, and no number here was measured.'), p.says);
+  ['counted from a real bus', 'measured on the road', 'verified by the operator',
+    'live data', 'from the operator’s system'].forEach(claim =>
+    assert.ok(!p.says.includes(claim), 'khaali claimed ' + claim));
+});
+
+t('an event without an id, a departure, or a whole number of people is refused', () => {
+  assert.throws(() => CD.event({ kind: 'ticket', tripInstanceId: TRIP, stopSequence: 0, toStopSequence: 2 }), /needs an id/);
+  assert.throws(() => CD.event({ kind: 'ticket', id: 'z', stopSequence: 0, toStopSequence: 2 }), /belongs to a departure/);
+  assert.throws(() => CD.event({ kind: 'alight', id: 'z', tripInstanceId: TRIP, stopSequence: 1, count: -2 }), /whole number/);
+  assert.throws(() => CD.event({ kind: 'nonsense', id: 'z', tripInstanceId: TRIP }), /unknown event kind/);
+  assert.throws(() => CD.event({ kind: 'bustrip', id: 'z', tripInstanceId: TRIP, stopCount: 1 }), /at least two stops/);
+});
+
+t('one bus at a time: another departure\u2019s events are not this one\u2019s', () => {
+  const other = CD.event({ tripInstanceId: 'BMTC|500D-08|2026-09-05|0|P1|520',
+    id: 'o1', kind: 'ticket', stopSequence: 0, toStopSequence: 5, pax: 30 });
+  const p = CD.profile([start(8), tkt(0, 4, 2), other], { tripInstanceId: TRIP });
+  assert.strictEqual(p.onboard[0], 2, 'the 08:40 does not fill up the 08:10');
+});
+
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
 
 // The point from the screenshot: 20 km north of Majestic, where nothing runs.
@@ -4504,12 +4671,12 @@ t('khaali does not claim no bus runs there when a bus runs there', () => {
   assert.ok(net.length, 'this place should be reachable without hiring');
   if (anyHire(rec)) {
     assert.ok(a.reason.reasons.includes('RIDE_IS_FASTER_THAN_THE_NETWORK'),
-      'khaali said nothing runs there while a bus was in its own results');
+      'khaali counted nothing runs there while a bus was in its own results');
     assert.ok(!a.reason.reasons.includes('RIDE_BECAUSE_NOTHING_RUNS'));
     assert.ok(a.reason.facts.networkAlternative, 'the alternative is not in the facts');
-    const said = AL.sentence(a.reason);
-    assert.ok(!/no bus khaali knows runs/.test(said), said);
-    assert.ok(/gets there for/.test(said), said);
+    const counted = AL.sentence(a.reason);
+    assert.ok(!/no bus khaali knows runs/.test(counted), counted);
+    assert.ok(/gets there for/.test(counted), counted);
   }
   // and where genuinely nothing runs, the other code is used
   const none = plan({ kind: 'place', lat: 13.30, lng: 77.85, name: 'A far point' }, ['train', 'metro', 'bus', 'car']);
@@ -4719,14 +4886,14 @@ t('a mode is only ever taught when the traveller named one', () => {
   shots.forEach((m, i) => {
     if (m.role !== 'assistant') return;
     const a = JSON.parse(m.content).action;
-    if (a && a.type === 'plan') plans.push({ a, said: (shots[i - 1] || {}).content || '' });
+    if (a && a.type === 'plan') plans.push({ a, counted: (shots[i - 1] || {}).content || '' });
   });
-  plans.forEach(({ a, said: raw }) => {
+  plans.forEach(({ a, counted: raw }) => {
     if (!a.modes) return;
-    const said = raw.toLowerCase();
+    const counted = raw.toLowerCase();
     a.modes.forEach(m => {
       const named = { bus: /bus|ಬಸ್/, metro: /metro|ಮೆಟ್ರೋ/, train: /train|metro|ರೈಲು/, car: /cab|car|taxi/, bike: /bike/ }[m];
-      assert.ok(named && named.test(said), 'taught "' + m + '" from: ' + said);
+      assert.ok(named && named.test(counted), 'taught "' + m + '" from: ' + counted);
     });
   });
   // a hired ride is never volunteered
