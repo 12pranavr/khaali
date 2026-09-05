@@ -46,6 +46,7 @@ import * as gap from './gap.mjs';
 import * as pool from './pool.mjs';
 import * as providers from './providers.mjs';
 import * as capacity from './capacity.mjs';
+import * as transfer from './transfer.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
 import * as sim from './sim.mjs';
@@ -2071,8 +2072,13 @@ async function api(req, res, url) {
       legs.push(...pick.legs);
       fare += pick.fare;
       if (pick.simulated) anySimulated = true;
-      // the clock carries: the next hop cannot leave before this one lands
-      at = pick.arr;
+      // The clock carries - and not to the same minute. The next hop cannot
+      // leave when this one lands; it can leave once she is off one vehicle and
+      // able to board the next, which transfer.mjs prices out of the arriving
+      // leg rather than out of a constant.
+      const lastLeg = pick.legs[pick.legs.length - 1];
+      const win = transfer.windowFor(lastLeg, transfer.edge({}));
+      at = win.ok ? win.earliest : pick.arr;
     }
     const dep = out.length ? out[0].legs[0].depMin : start;
     return send(res, 200, { ok: true, date, profile,

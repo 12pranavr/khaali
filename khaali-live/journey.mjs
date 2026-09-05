@@ -21,6 +21,7 @@ import { BUSES, BUS_FARE_PER_KM, BUS_MIN_FARE } from './buses.mjs';
 import { TRAINS } from './data.mjs';
 import { serves, sMin, fare as railFare } from './engine.mjs';
 import * as hire from './hire.mjs';
+import * as transfer from './transfer.mjs';
 
 export const WALK_KMH = 4.5;
 /** The network: things that run whether or not she is on them. Every default
@@ -549,18 +550,28 @@ function busThenTrain(fromRail, toRail, after, freeOf, within = 2.5) {
     const nb = nextBus(bus, after);
     if (!nb.ok) return;
     const arrive = nb.board + bus.runMin;
-    const legs = [busLegOut(bus, nb, arrive)];
+    const inLeg = busLegOut(bus, nb, arrive);
+    const legs = [inLeg];
     // the walk from where the bus stops to the platform, if there is one
-    let ready = arrive;
+    let walkMin = 0;
     if (mid.km > 0.05) {
-      const w = Math.max(1, Math.round(mid.km / WALK_KMH * 60));
-      legs.push({ mode: 'walk', name: 'Walk', from: bus.to, to: ST[mid.i].n, km: mid.km, min: w,
-        depMin: arrive, arrMin: arrive + w, dep: hhmm(dayMin(arrive)), arr: hhmm(dayMin(arrive + w)),
+      walkMin = Math.max(1, Math.round(mid.km / WALK_KMH * 60));
+      legs.push({ mode: 'walk', name: 'Walk', from: bus.to, to: ST[mid.i].n, km: mid.km, min: walkMin,
+        depMin: arrive, arrMin: arrive + walkMin, dep: hhmm(dayMin(arrive)), arr: hhmm(dayMin(arrive + walkMin)),
         fare: 0, source: 'measured', fromLat: bus.toLat, fromLng: bus.toLng,
         toLat: GEO[mid.i].lat, toLng: GEO[mid.i].lng, seat: null });
-      ready = arrive + w;
     }
-    trainsBetween(mid.i, toRail, ready).slice(0, 4).forEach(t => {
+    // The change has to be one a person could make. Until now the onward train
+    // was asked for from the minute the bus landed, so khaali offered
+    // connections with nothing at all in them - and this is exactly where the
+    // slack matters most, because a bus that keeps a declared headway rather
+    // than a published timetable can be twenty minutes out and a missed train
+    // on this corridor is not another train soon.
+    const win = transfer.windowFor(inLeg, transfer.edge({
+      fromStopId: bus.to, toStopId: ST[mid.i].c, walkMinutes: walkMin,
+      source: 'measured', quality: walkMin ? 'measured' : 'declared' }), 'train');
+    if (!win.ok) return;
+    trainsBetween(mid.i, toRail, win.earliest).filter(t => t.dep <= win.latest).slice(0, 4).forEach(t => {
       out.push({ kind: 'bus+train',
         legs: legs.concat([LEG_TRAIN(t, mid.i, toRail, freeOf(t.train, mid.i, toRail))]),
         dep: nb.board, arr: t.arr,
@@ -643,10 +654,19 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
     // A. train to Whitefield, then the metro
     if (use('train') && use('metro') && fromRail !== WFD) {
       trainsBetween(fromRail, WFD, after).forEach(t => {
-        const p = plan({ arriveAt: t.arr, needs, to: to.id });
+        const tl = LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD));
+        // plan() already walks the 1.7 km this module was written about. What
+        // was missing is the minutes before that walk starts - getting off a
+        // train and out of a station is not instantaneous. No upper bound is
+        // applied here: plan() takes the next metro, and the headways are
+        // shorter than any wait khaali would object to.
+        const win = transfer.windowFor(tl, transfer.edge({
+          fromStopId: ST[WFD].c, toStopId: b.stop.id, source: 'measured' }), 'metro');
+        if (!win.ok) return;
+        const p = plan({ arriveAt: win.earliest, needs, to: to.id });
         if (!p.ok) return;
         out.push({ kind: 'train+metro',
-          legs: [LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD))]
+          legs: [tl]
             .concat(p.legs.map(l => metroLegOut(l, b.stop.id))),
           dep: t.dep, arr: p.arrive,
           fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + p.fare.qr });
@@ -673,9 +693,12 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
         const nb = nextBus(bus, after);
         if (!nb.ok) return;
         const arrive = nb.board + bus.runMin;
-        const legs = [busLegOut(bus, nb, arrive)];
+        const inLeg = busLegOut(bus, nb, arrive);
+        const legs = [inLeg];
         if (use('metro')) {
-          const p = plan({ arriveAt: arrive, needs, to: to.id });
+          const win = transfer.windowFor(inLeg, transfer.edge({
+            fromStopId: bus.to, toStopId: b.stop.id }), 'metro');
+          const p = win.ok ? plan({ arriveAt: win.earliest, needs, to: to.id }) : { ok: false };
           if (p.ok) out.push({ kind: 'bus+metro',
             legs: legs.concat(p.legs.filter(l => l.mode !== 'walk').map(l => metroLegOut(l, b.stop.id))),
             dep: nb.board, arr: p.arrive, fare: busFare(bus) + p.fare.qr });
@@ -683,8 +706,11 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
         // D. bus all the way, when one runs to the destination
         const on = busesBetween(bus.toLat, bus.toLng, STOPS[toMetro].lat, STOPS[toMetro].lng, 1.2);
         on.forEach(b2 => {
-          const nb2 = nextBus(b2, arrive);
-          if (!nb2.ok) return;
+          const wb = transfer.windowFor(inLeg, transfer.edge({
+            fromStopId: bus.to, toStopId: b2.from }), 'bus');
+          if (!wb.ok) return;
+          const nb2 = nextBus(b2, wb.earliest);
+          if (!nb2.ok || nb2.board > wb.latest) return;
           out.push({ kind: 'bus+bus', legs: legs.concat([busLegOut(b2, nb2, nb2.board + b2.runMin)]),
             dep: nb.board, arr: nb2.board + b2.runMin, fare: busFare(bus) + busFare(b2) });
         });
@@ -697,11 +723,14 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
       if (cityBus.length) {
         const bus = cityBus.sort((x, y) => x.runMin - y.runMin)[0];
         trainsBetween(fromRail, WFD, after).slice(0, 6).forEach(t => {
-          const nb = nextBus(bus, t.arr);
-          if (!nb.ok) return;
+          const tl = LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD));
+          const win = transfer.windowFor(tl, transfer.edge({
+            fromStopId: ST[WFD].c, toStopId: bus.from }), 'bus');
+          if (!win.ok) return;
+          const nb = nextBus(bus, win.earliest);
+          if (!nb.ok || nb.board > win.latest) return;
           out.push({ kind: 'train+bus',
-            legs: [LEG_TRAIN(t, fromRail, WFD, freeOf(t.train, fromRail, WFD)),
-              busLegOut(bus, nb, nb.board + bus.runMin)],
+            legs: [tl, busLegOut(bus, nb, nb.board + bus.runMin)],
             dep: t.dep, arr: nb.board + bus.runMin,
             fare: railFare('SL', Math.abs(ST[WFD].km - ST[fromRail].km)) + busFare(bus) });
         });

@@ -24,6 +24,7 @@ import * as GP from './gap.mjs';
 import * as PL from './pool.mjs';
 import * as PV from './providers.mjs';
 import * as LD from './load.mjs';
+import * as XF from './transfer.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4021,16 +4022,35 @@ t('the bus for the stretch it has seats on, the train for the stretch it does', 
   assert.ok(walk && walk.km > 0, 'the bus does not stop on the platform, and khaali says so');
 });
 
-t('the switch wins when standing is long, and loses when it buys nothing', () => {
+// This test used to assert that Comfortable takes the switch on this pair. It
+// did - but only because khaali was connecting at zero slack: the bus landed at
+// 08:50 and khaali sold her the 09:26 train off a bus whose timetable it had
+// declared rather than read. Priced honestly the next train she can actually
+// make is 10:30, and the switch costs about a hundred minutes more than
+// standing on the direct train. Nobody should be sold that as comfort.
+//
+// So the switch does not win here, and that is the finding, not a regression.
+// What makes a detour worth its time is per-stretch berth availability - the one
+// thing khaali can see and nobody else can - and the planner does not consult it
+// yet. Until it does, this asserts the two things that ARE true: the option is
+// offered, and the change inside it is one a person could make.
+t('the switch is offered, and every change in it is one she could make', () => {
   const long = ride('SBC', fullEarly);
   CAP.annotate(long.chains, { trainCap: capEarly });
+  const sw = long.chains.find(c => c.kind === 'bus+train');
+  assert.ok(sw, 'the switch must still be on the page');
+  assert.strictEqual(sw.seat.word, 'yes', 'she sits the whole way, which is the point of it');
+
+  const bus = sw.legs.find(l => l.mode === 'bus');
+  const train = sw.legs.find(l => l.mode === 'train');
+  const walk = sw.legs.find(l => l.mode === 'walk');
+  const v = XF.feasible(bus, train, XF.edge({ walkMinutes: walk ? walk.min : 0 }));
+  assert.ok(v.ok, 'khaali offered a change it had not checked: ' + v.code + ' / ' + v.says);
+
   const a = AL.allocate(long.chains, { profile: 'comfortable', after: 420 });
   assert.ok(a.recommended != null);
-  const rec = long.chains[a.recommended];
-  assert.strictEqual(rec.kind, 'bus+train', 'Comfortable should switch rather than stand for hours');
-  assert.strictEqual(rec.seat.word, 'yes');
-  assert.ok(a.reason.reasons.includes('SWITCHED_WHERE_IT_FILLS'), a.reason.reasons.join(','));
-  assert.ok(/crowd does/.test(AL.sentence(a.reason)), AL.sentence(a.reason));
+  assert.ok(sw.totalMin > long.chains[a.recommended].totalMin + 60,
+    'if the switch ever gets close on time, this test is measuring the wrong thing');
 
   // ...and the same journey when the train has berths all the way: no reason to move
   const easy = ride('SBC', plainly);
@@ -4069,6 +4089,122 @@ t('a bus that overshoots or doubles back is not a leg of this journey', () => {
     assert.ok(mid > iOf('BWT') && mid < iOf('BNC'),
       'switched at ' + ST[mid].n + ', which is not between Bangarpet and Cantt');
   });
+});
+
+console.log('\nthe change: whether a person could actually make it');
+
+// khaali connected at zero slack everywhere - busThenTrain asked for trains from
+// the minute the bus landed, train+metro planned from t.arr, train+bus asked for
+// the next bus from t.arr, and the multi-hop clock carried at = pick.arr. Every
+// one of them would sell her a train leaving the same minute she stepped off.
+
+t('a train leaving the minute the bus lands is not a connection', () => {
+  const bus = { arrMin: 530, source: 'timetable' };
+  assert.strictEqual(XF.feasible(bus, { depMin: 530, mode: 'train' }).code, 'TRANSFER_TOO_TIGHT');
+  assert.strictEqual(XF.feasible(bus, { depMin: 500, mode: 'train' }).code, 'TRANSFER_TOO_TIGHT');
+  assert.ok(/leaves before this one arrives/.test(XF.feasible(bus, { depMin: 500, mode: 'train' }).says));
+});
+
+t('same stop, published both sides: eight minutes and no more', () => {
+  const bus = { arrMin: 530, source: 'timetable' };
+  assert.strictEqual(XF.SAME_STOP, 8);
+  assert.ok(!XF.feasible(bus, { depMin: 530 + 7, mode: 'train' }).ok, 'seven is not enough');
+  assert.ok(XF.feasible(bus, { depMin: 530 + 8, mode: 'train' }).ok, 'eight is');
+});
+
+t('a declared headway costs twenty minutes, and khaali says which twenty', () => {
+  const declared = { arrMin: 530, source: 'simulated' };
+  const published = { arrMin: 530, source: 'timetable' };
+  const at = m => ({ depMin: 530 + m, mode: 'train' });
+  assert.ok(XF.feasible(published, at(10)).ok);
+  assert.ok(!XF.feasible(declared, at(10)).ok, 'a modelled arrival is not a known one');
+  assert.ok(XF.feasible(declared, at(28)).ok);
+  assert.strictEqual(XF.requiredFor(declared) - XF.requiredFor(published), XF.BUFFER.unpublished);
+  const says = XF.feasible(declared, at(10)).says;
+  assert.ok(/declared headway/.test(says), says);
+  assert.ok(!/guarantee|will be on time|make this connection/i.test(says), says);
+});
+
+t('a long walk is not loitering: the cap is on the wait, not the gap', () => {
+  // fifty minutes between two vehicles, forty of which she spends walking.
+  // Measured on the gap that is a rejection; measured on the wait it is ten
+  // minutes on a platform, which is exactly what it is.
+  const bus = { arrMin: 500, source: 'timetable' };
+  const e = XF.edge({ walkMinutes: 40, stationEntryMinutes: 0 });
+  const f = XF.feasible(bus, { depMin: 550, mode: 'bus' }, e);
+  assert.strictEqual(f.gap, 50);
+  assert.strictEqual(f.access, 40);
+  assert.strictEqual(f.wait, 10);
+  assert.ok(f.ok, f.says);
+});
+
+t('forty minutes onto a corridor train is a connection; onto a metro it is a mistake', () => {
+  const t0 = { arrMin: 500, source: 'timetable' };
+  const at = (m, mode) => ({ depMin: 500 + m, mode });
+  assert.ok(XF.feasible(t0, at(40, 'train')).ok, 'trains here run an hour apart');
+  assert.strictEqual(XF.feasible(t0, at(40, 'metro')).code, 'TRANSFER_TOO_LONG');
+  assert.ok(XF.maxWaitFor({ mode: 'train' }) > XF.maxWaitFor({ mode: 'metro' }),
+    'one number for both would either wave through loitering or throw away a real answer');
+});
+
+t('a missing time is not a passing check', () => {
+  assert.strictEqual(XF.feasible({ source: 'timetable' }, { depMin: 500 }).code, 'NO_TIMES');
+  assert.strictEqual(XF.feasible({ arrMin: 500 }, {}).code, 'NO_TIMES');
+  assert.strictEqual(XF.windowFor({ source: 'timetable' }).ok, false);
+  // and it is refused rather than repaired: twenty minutes does not invent an
+  // arrival khaali never had
+  assert.strictEqual(XF.feasible({ source: 'simulated' }, { depMin: 900 }).code, 'NO_TIMES');
+});
+
+t('the window a planner searches is exactly the window that passes', () => {
+  const bus = { arrMin: 530, source: 'simulated' };
+  const e = XF.edge({ walkMinutes: 9 });
+  const w = XF.windowFor(bus, e, 'train');
+  for (let d = w.earliest - 3; d <= w.latest + 3; d++) {
+    const inBand = d >= w.earliest && d <= w.latest;
+    assert.strictEqual(XF.feasible(bus, { depMin: d, mode: 'train' }, e).ok, inBand,
+      'window and verdict disagree at ' + d);
+  }
+});
+
+t('the earliest that works, and a record of the ones that did not', () => {
+  const bus = { arrMin: 500, source: 'timetable' };
+  const outs = [{ depMin: 502, mode: 'train' }, { depMin: 505, mode: 'train' },
+    { depMin: 520, mode: 'train' }, { depMin: 530, mode: 'train' }];
+  const r = XF.firstFeasible(bus, outs);
+  assert.ok(r.ok);
+  assert.strictEqual(r.out.depMin, 520, 'the first two are too tight');
+  assert.strictEqual(r.tried.length, 3, 'it stops at the one that works');
+  assert.strictEqual(r.tried[0].code, 'TRANSFER_TOO_TIGHT');
+  assert.strictEqual(XF.firstFeasible(bus, []).verdict.code, 'NO_TIMES');
+});
+
+t('no journey khaali offers contains a change khaali would refuse', () => {
+  // the point of the whole module: not that the planner has a checker beside
+  // it, but that nothing gets past the checker onto the page
+  const VEH = new Set(['bus', 'train']);
+  let checked = 0;
+  const sweep = (from, to) => {
+    const r = JY.journeys({ from, to, after: 420 });
+    if (!r.ok) return;
+    r.chains.forEach(c => {
+      let prev = null, walkMin = 0;
+      c.legs.forEach(l => {
+        if (l.mode === 'walk') { walkMin += (l.min || 0); return; }
+        if (!VEH.has(l.mode)) { prev = null; walkMin = 0; return; }
+        if (prev) {
+          const v = XF.feasible(prev, l, XF.edge({ walkMinutes: walkMin }));
+          assert.ok(v.ok, c.kind + ': ' + prev.mode + ' -> ' + l.mode + ' is ' + v.code
+            + ' (' + v.says + ')');
+          checked++;
+        }
+        prev = l; walkMin = 0;
+      });
+    });
+  };
+  ['SBC', 'BNC', 'KJM', 'BNCE'].forEach(d => sweep({ kind: 'rail', id: 'BWT' }, { kind: 'rail', id: d }));
+  sweep({ kind: 'rail', id: 'BWT' }, { kind: 'metro', id: 'KGWA' });
+  assert.ok(checked > 0, 'the sweep found no vehicle-to-vehicle change to check at all');
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
