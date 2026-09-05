@@ -5580,6 +5580,134 @@ t('the sc= override is applied, planned with, and put back whole', () => {
   SCN.reset();
 });
 
+console.log('\nany end to any end: the nine shapes, and the honest refusals');
+
+/* The matrix the page can actually be asked for. Every combination of the
+   three kinds of end khaali accepts, both ways round where direction is a
+   different journey, plus the answers that are a "no" - which must be a named
+   no, never an empty page that succeeded. */
+const COV_MODES = ['train', 'metro', 'bus'];
+const cov = (from, to, extra = {}) =>
+  JY.journeysAnywhere({ from, to, after: 480, modes: COV_MODES, ...extra });
+const RAIL = id => ({ kind: 'rail', id });
+const MET = id => ({ kind: 'metro', id });
+const PLC = (lat, lng, name) => ({ kind: 'place', lat, lng, name });
+const HOPE_FARM = PLC(12.98429, 77.75261, 'Hope Farm');
+const BANGARPET_STAND = PLC(12.9925, 78.1760, 'Bangarpet Bus Stand');
+// the pin the page itself sends for Hebbala, not the one a few streets north
+// that no BMTC route serves - a coverage test must use a pin the city covers
+const HEBBAL_PIN = PLC(13.04127, 77.58942, 'Hebbala');
+
+t('metro to metro, down the line and back up it', () => {
+  const down = cov(MET('KGWA'), MET('IDN'));
+  assert.ok(down.ok && down.chains.length, 'no way from Majestic to Indiranagar');
+  assert.ok(down.chains.some(c => c.legs.some(l => l.mode === 'metro')));
+  const up = cov(MET('IDN'), MET('KGWA'));
+  assert.ok(up.ok && up.chains.length, 'the way back was an empty page');
+  // the whole line, end to end, is still one ride
+  const far = cov(MET('WHTM'), MET('KGWA'));
+  assert.ok(far.ok && far.chains.length);
+  assert.ok(far.chains[0].arr > far.chains[0].dep, 'a metro that arrives before it leaves');
+});
+
+t('metro to metro after the last train is a no, not an empty list', () => {
+  const late = cov(MET('KGWA'), MET('IDN'), { after: 1400 });   // 23:20
+  assert.ok(!late.ok || late.chains.length === 0);
+  if (late.ok) assert.strictEqual(late.chains.length, 0,
+    'a service that has stopped running produced a journey');
+});
+
+t('a place to a station, and the party size rides along', () => {
+  const one = cov(BANGARPET_STAND, RAIL('SBC'));
+  assert.ok(one.ok && one.chains.length, JSON.stringify(one).slice(0, 160));
+  assert.ok(['walk', 'auto', 'bus'].includes(one.chains[0].legs[0].mode),
+    'a journey from a map pin must start on the ground');
+  const three = cov(BANGARPET_STAND, RAIL('SBC'), { pax: 3 });
+  assert.ok(three.ok && three.chains.length, 'a party of three lost the journey a single found');
+});
+
+t('a place to a place, with no station at either end of the question', () => {
+  const r = cov(HEBBAL_PIN, HOPE_FARM);
+  assert.ok(r.ok && r.chains.length, JSON.stringify(r).slice(0, 200));
+  const c = r.chains[0];
+  assert.strictEqual(c.legs[0].mode !== 'train', true, 'a map pin is not a platform');
+  assert.ok(c.arr != null && c.dep != null && c.arr > c.dep);
+});
+
+t('a place to a place is refused by name when nothing runs there', () => {
+  const far = cov(HEBBAL_PIN, PLC(13.9, 78.9, 'somewhere off the map'));
+  assert.strictEqual(far.ok, false);
+  assert.ok(['no-bus', 'to-too-far', 'no-way'].includes(far.reason), far.reason);
+});
+
+t('the same place twice is a named answer, not a page that succeeded at nothing', () => {
+  // this used to come back ok:true with an empty list, which reads as a broken
+  // search rather than an answer to a question nobody needs planned
+  ['rail', 'metro'].forEach(kind => {
+    const id = kind === 'rail' ? 'BWT' : 'IDN';
+    const r = cov({ kind, id }, { kind, id });
+    assert.strictEqual(r.ok, false, kind + ' to itself returned a success');
+    assert.strictEqual(r.reason, 'same-stop');
+  });
+  const p = cov(HEBBAL_PIN, { ...HEBBAL_PIN });
+  assert.strictEqual(p.ok, false);
+  assert.strictEqual(p.reason, 'same-stop');
+  // ...and a different place nearby is still a real question
+  const near = cov(HEBBAL_PIN, HOPE_FARM);
+  assert.ok(near.ok, 'the guard swallowed a genuine journey');
+});
+
+t('a cancelled sole departure is planned around, not planned onto', () => {
+  SCN.reset();
+  const before = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1 });
+  const rode = before.answer.legs.find(l => l.mode !== 'walk');
+  const trip = rode.tripInstanceId || (before.trace.scores.length ? null : null);
+  assert.ok(before.answer, 'nothing to cancel');
+  // cancel exactly the departure it chose
+  const chosen = DNET.allDepartures({ from: 540, to: 720 })
+    .find(d => d.departureTime === rode.depMinute || d.tripInstanceId === trip);
+  if (chosen) {
+    SCN.set({ cancelled: [chosen.tripInstanceId] });
+    const after = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1 });
+    assert.ok(after.answer, 'one cancellation emptied the whole city');
+    const ridesAfter = after.answer.legs.filter(l => l.mode !== 'walk')
+      .map(l => l.tripInstanceId).filter(Boolean);
+    assert.ok(!ridesAfter.includes(chosen.tripInstanceId),
+      'khaali put her on a departure it had been told was cancelled');
+  }
+  SCN.reset();
+});
+
+t('un-cancelling puts the departure back on the table', () => {
+  SCN.reset();
+  const all = DNET.allDepartures({ from: 540, to: 720 }).map(d => d.tripInstanceId);
+  SCN.set({ cancelled: all.slice(0, 3) });
+  const during = DNET.allDepartures({ from: 540, to: 720 });
+  assert.strictEqual(during.filter(d => d.cancelled).length, 3);
+  SCN.reset();
+  const after = DNET.allDepartures({ from: 540, to: 720 });
+  assert.strictEqual(after.filter(d => d.cancelled).length, 0,
+    'a cancellation outlived the scenario that made it');
+});
+
+t('every shape that plans carries the card contract on its cards', () => {
+  const r = cov(HEBBAL_PIN, HOPE_FARM);
+  CAP.annotate(r.chains, { trainCap: () => ({ free: 50, total: 432 }) });
+  const a = AL.allocate(r.chains, { after: 480 });
+  assert.ok(a.recommended != null, 'a plannable pair produced no ranking');
+  const picked = a.chains[a.recommended];
+  const other = a.chains.find(c => c !== picked) || null;
+  const card = CARD.build({ chain: picked, searchAt: 480, role: 'RECOMMENDED',
+    selectedChainId: DEC.chainId(picked),
+    alternative: other ? { chain: other, chainId: DEC.chainId(other) } : null });
+  assert.ok(card.chainId, 'a card with no identity cannot be booked by id');
+  assert.strictEqual(card.recommendationStatus, 'RECOMMENDED');
+  assert.ok(['EVALUATED', 'AVAILABILITY_ONLY', 'NOT_EVALUATED'].includes(card.evaluationStatus));
+  assert.ok(card.evidence, 'a card with no evidence block');
+  assert.ok('trainInventorySource' in card.evidence && 'busDemandSource' in card.evidence
+    && 'metroDemandSource' in card.evidence, 'the per-mode sources went missing');
+});
+
 t('the same scenario gives the same answer, however many times it is asked', () => {
   const a = run();
   const b = run();

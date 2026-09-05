@@ -1094,6 +1094,15 @@ export function pointOfEnd(end) {
  */
 export function journeysAnywhere(req) {
   const { from, to } = req;
+  /* Asked to plan from a place to itself, khaali used to answer ok:true with
+     an empty list - a page that succeeded at showing nothing, which reads as
+     a bug in the search rather than an answer. Two ends in the same spot is a
+     question with a name, and plan() already named it. */
+  if (from && to && from.kind === to.kind
+    && ((from.kind !== 'place' && String(from.id) === String(to.id))
+      || (from.kind === 'place' && from.lat != null && to.lat != null
+        && km({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }) < 0.05)))
+    return { ok: false, reason: 'same-stop' };
   // What she is willing to hire, if anything. Nothing, unless she said so.
   const hireKinds = (req.modes || MODES).filter(m => HIRE_MODES.includes(m));
   const mileOpts = { hire: hireKinds, pax: req.pax || 1, needs: req.needs || [] };
