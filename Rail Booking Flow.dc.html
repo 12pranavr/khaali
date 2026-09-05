@@ -1191,6 +1191,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <div onClick="{{ togglePMapPlain }}" style="{{ pMapPlainStyle }}">{{ pMapPlainLabel }}</div>
           </div>
           <div style="{{ pRoadNoteStyle }}">{{ pRoadNote }}</div>
+          <div style="{{ r.splitWhyStyle }}">{{ r.splitWhy }}</div>
           <div style="{{ r.whyTrafficStyle }}">{{ r.whyTraffic }}</div>
           <div style="{{ pRailNoteStyle }}">{{ pRailNote }}</div>
 
@@ -7915,6 +7916,11 @@ class Component extends DCLogic {
       const tag=(t,bg,fg2c)=>({t,style:{...TAGBASE,background:isRec?'rgba(255,255,255,.14)':bg,
         color:isRec?'#ffffff':fg2c}});
       const tags=labels.filter(k=>LBL[k]).map(k=>tag(LBL[k][0],LBL[k][1],LBL[k][2]));
+      /* A split is not just another shape of journey - it is khaali doing the
+         one thing nothing else can, so the card says which station she rejoins
+         at rather than leaving her to read it off the leg list. */
+      if(c.split&&c.split.boundary)
+        tags.unshift(tag('Change at '+c.split.boundary,'var(--k-e6f4ec)','var(--k-fg-14663a)'));
       if(c.simulated)tags.push(tag('Has a simulated leg','var(--k-f1f1ee)','var(--k-fg-8a8a84)'));
       const CAPQ={exact:'counted',estimated:'estimated',predicted:'predicted',unknown:'unknown'};
       // A ticket is printed in ink, not in brand colour: the recommended way
@@ -7948,6 +7954,14 @@ class Component extends DCLogic {
           border:'1px solid var(--k-e6e5e0)',background:'var(--k-f1f1ee)'},
         jmapBarStyle:{display:open?'flex':'none',alignItems:'center',gap:8,
           flexWrap:'wrap',marginTop:-6},
+        /* Why khaali split this journey, in the words split.mjs wrote.
+           Never recomputed here: two places doing the same arithmetic is two
+           places to disagree, and the one nearest the screen would win. */
+        splitWhy:(c.split&&c.split.why)?c.split.why.join(' '):'',
+        splitWhyStyle:{display:(c.split&&c.split.why&&c.split.why.length)?'block':'none',
+          marginTop:8,padding:'10px 12px',borderRadius:9,
+          background:isRec?INKINS:'var(--k-f6f6f3)',
+          font:'600 12px/1.65 Archivo,sans-serif',color:fg2},
         /* Why THIS way, against the network drawn under it.
            It was a global binding to begin with, which meant every card on the
            page repeated the reason for whichever route happened to be selected.
