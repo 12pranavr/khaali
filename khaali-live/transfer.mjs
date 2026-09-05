@@ -86,11 +86,36 @@ export function edge({ fromStopId = null, toStopId = null, walkMinutes = 0,
   };
 }
 
-const isUnpublished = leg => !!(leg && (leg.source === 'simulated' || leg.sourceKind === 'simulation'));
+/**
+ * Whether the arriving service had a departure anybody published.
+ *
+ * Three cases, not two. A train runs to a timetable. A BMTC route has a real
+ * run time and a real headway but no published departure - khaali derives the
+ * boarding minute from a grid. And the KSRTC route has neither, because
+ * Karnataka has never published it, so khaali declared the whole thing.
+ */
+export const scheduleKindOf = leg => (!leg ? 'fixed'
+  : (leg.source === 'simulated' || leg.sourceKind === 'simulation') ? 'declared'
+    : (leg.scheduleKind === 'frequency' || leg.departureDerived) ? 'frequency'
+      : 'fixed');
+const isUnpublished = leg => scheduleKindOf(leg) !== 'fixed';
 
-/** Minutes she needs on the platform, once she has walked there. */
+/**
+ * Minutes she needs on the platform, once she has walked there.
+ *
+ * The uncertainty allowance is sized to what a miss actually costs. Off a fixed
+ * departure, nothing beyond boarding. Off a frequency service, about a headway -
+ * that is how far the derived grid can be from the bus that turns up, and a
+ * fourteen-minute route does not deserve the penalty a thirty-minute one does.
+ * Off a service khaali declared outright, the full allowance.
+ */
 export function requiredFor(inLeg) {
-  return BUFFER.boarding + (isUnpublished(inLeg) ? BUFFER.unpublished : 0);
+  const kind = scheduleKindOf(inLeg);
+  if (kind === 'fixed') return BUFFER.boarding;
+  const head = Number(inLeg && inLeg.every) || 0;
+  const allow = (kind === 'frequency' && head > 0)
+    ? Math.min(head, BUFFER.unpublished) : BUFFER.unpublished;
+  return BUFFER.boarding + allow;
 }
 
 /** Minutes spent getting from one vehicle to the other. */

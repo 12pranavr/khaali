@@ -156,6 +156,13 @@ export function directBus({ fromLat, fromLng, toLat, toLng, after = 0, within = 
           { mode: 'bus', id: r.n, name: 'BMTC ' + r.n, headsign: r.ln, from: a.n, to: b.n,
             fromKind: stopKind(a.n), toKind: stopKind(b.n), path: pathBetween(p, k, j),
             dep: hhmm(board), arr: hhmm(alight), depMin: board, arrMin: alight, min: run, every, wait: board - ready,
+            /* GTFS separates services with published departures from services
+               described only by a headway. This is the second kind: the route,
+               the run time and the gap are real, and the specific boarding
+               minute is khaali putting the headway on a grid from the first bus
+               of the day. Printing it as an exact time with no mark implies a
+               departure somebody published, and nobody did. */
+            scheduleKind: 'frequency', departureDerived: true, waitEstimated: true,
             boardIdx: k, nStops: p.s.length, stops: j - k, km: Math.round(dist * 10) / 10, fare: fareFor(dist),
             seat: seatOdds({ mode: 'bus', at: k / p.s.length }), source: 'timetable', trips: p.t,
             fromLat: a.lat, fromLng: a.lng, toLat: b.lat, toLng: b.lng },

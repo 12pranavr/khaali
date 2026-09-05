@@ -7534,8 +7534,21 @@ class Component extends DCLogic {
       const j=await r.json();
       if(!j||!j.ok)return;
       this._prailAt=key;this._prailData=j;
+      /* This used to reduce over EVERY segment of the train and then say "on
+         this leg". On Bangarpet to Bengaluru Cantt it reported Ramanagara to
+         Channapatna at 405 of 432 - the far side of the corridor, on the
+         Mysuru run, a stretch she is never on - beside her own span's 82%.
+         Two different measures, one sentence, and the alarming one was the
+         one that had nothing to do with her.
+
+         The busiest leg khaali may talk about is the busiest leg she is on. */
+      const lo=Math.min(tl.fromIdx,tl.toIdx), hi=Math.max(tl.fromIdx,tl.toIdx);
+      const mine=(tl.fromIdx!=null&&tl.toIdx!=null)?j.segments.slice(lo,hi):j.segments;
       this.setState({pRail:{total:j.total,note:j.note,
-        worst:j.segments.reduce((a,b)=>(b.load>((a&&a.load)||0)?b:a),null)}});
+        span:(tl.fromIdx!=null&&tl.toIdx!=null)?{from:tl.from,to:tl.to}:null,
+        worst:mine.reduce((a,b)=>(b.load>((a&&a.load)||0)?b:a),null),
+        // kept apart, never mixed into the same sentence as hers
+        worstWholeTrain:j.segments.reduce((a,b)=>(b.load>((a&&a.load)||0)?b:a),null)}});
       // the route has to repaint now that its train has segment colours
       this._pmapSig=null;
       this.planLeaflet().then(ok=>{if(ok)setTimeout(()=>this.planPaintMap(),60);});
@@ -8300,13 +8313,24 @@ class Component extends DCLogic {
             const detail=l.mode==='walk'?('To '+l.to+(l.entrance?' \u00b7 '+l.entrance.n:'')+' \u00b7 about '+l.min+' min')
               :l.mode==='train'?(l.from+' to '+l.to+(l.seat&&l.seat.why?' \u00b7 '+l.seat.why:''))
               :l.mode==='metro'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes')
-              :l.mode==='bus'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes')
+              /* A headway is not a departure. GTFS keeps the two apart and so
+                 must khaali: the route, the run time and the gap are real, and
+                 the boarding minute is khaali putting that gap on a grid from
+                 the first bus of the day. Printing 12:44 flat implies somebody
+                 published 12:44, and nobody did. */
+              :l.mode==='bus'?(l.from+' to '+l.to+' \u00b7 every '+l.every+' minutes'
+                +((l.scheduleKind==='frequency'||l.departureDerived)
+                  ?' \u00b7 no departure is published for this route, so the time is khaali\u2019s estimate from the gap'
+                  :''))
               :((l.km!=null?l.km+' km \u00b7 ':'')+'fare is a range, not a price \u00b7 khaali runs no '+M.n.toLowerCase()+'s');
             const badge=l.mode==='train'?'Book this'
               :l.mode==='metro'?('Every '+l.every+' min')
-              :l.source==='simulated'?'Simulated':'';
+              :l.source==='simulated'?'Simulated'
+                :(l.scheduleKind==='frequency'||l.departureDerived)?'Time estimated':'';
             const bt=badge==='Book this'?{bg:IP.bg,fg:IP.fg}:tint(badge);
-            return {time:hm12(t),title,detail,badge,hasBadge:!!badge,
+            // a tilde, so the eye does not read an estimate as a timetable
+            const derived=(l.scheduleKind==='frequency'||l.departureDerived)&&l.mode!=='walk';
+            return {time:(derived?'~':'')+hm12(t),title,detail,badge,hasBadge:!!badge,
               dot:{width:12,height:12,borderRadius:999,flex:'none',display:'block',
                 marginTop:3,background:M.c},
               badgeStyle:{font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
@@ -8664,11 +8688,17 @@ class Component extends DCLogic {
       // The corridor is the one line on this map khaali counted rather than
       // worked out, and it is worth saying which one that is.
       pRailNote:(S.pTraffic&&S.pRail&&S.pRail.worst)
-        ?('The thick line along the corridor is counted, not estimated: '
-          +S.pRail.worst.says+', between '+S.pRail.worst.fromName+' and '
-          +S.pRail.worst.toName+', which is its busiest leg. A dashed leg is one '
-          +'nobody has booked through khaali \u2014 that is khaali\u2019s own starting '
-          +'occupancy, and it is a model.')
+        ?('Counted, not estimated: the busiest stretch of the part you ride is '
+          +S.pRail.worst.fromName+' to '+S.pRail.worst.toName+', at '
+          +Math.round(S.pRail.worst.load*100)+'% of '+S.pRail.total+' berths.'
+          +((S.pRail.worstWholeTrain&&S.pRail.worstWholeTrain!==S.pRail.worst)
+            ?(' The whole train is busier elsewhere \u2014 '
+              +Math.round(S.pRail.worstWholeTrain.load*100)+'% between '
+              +S.pRail.worstWholeTrain.fromName+' and '+S.pRail.worstWholeTrain.toName
+              +' \u2014 but you are not on that stretch.')
+            :'')
+          +' A dashed leg is one nobody has booked through khaali \u2014 that is '
+          +'khaali\u2019s own starting occupancy, and it is a model.')
         :'',
       pRailNoteStyle:{display:(S.pTraffic&&S.pRail&&S.pRail.worst)?'block':'none',marginTop:6,
         font:'500 11.5px/1.6 Archivo,sans-serif',color:'var(--k-fg-8a8a84)'},

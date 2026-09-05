@@ -48,6 +48,8 @@ export function departuresOf(bus, serviceDate, fromMin = 0, toMin = 1440) {
     if (m < fromMin || m > toMin) continue;
     out.push({
       depMin: m, arrMin: m + bus.runMin, bus,
+      // derived from first-bus plus headway, not read off a published board
+      scheduleKind: 'frequency', departureDerived: true,
       departure: trip.departure({
         operatorId: bus.op, tripId: bus.id, serviceDate,
         directionId: 0, patternId: bus.id + '/P0', scheduledStartTime: m,
@@ -170,6 +172,7 @@ export function candidates(bus, serviceDate, after, { toStopSequence = null, now
     departure: d.departure,
     id: bus.id, name: bus.op + ' ' + bus.id,
     depMin: d.depMin, arrMin: d.arrMin,
+    scheduleKind: 'frequency', departureDerived: true, every: bus.every,
     source: bus.source,                 // 'simulated' for KSRTC: the buffer knows
     fromStopSequence: from, toStopSequence: to,
     walkMinutes: 0,
