@@ -47,8 +47,17 @@ import * as pool from './pool.mjs';
 import * as providers from './providers.mjs';
 import * as capacity from './capacity.mjs';
 import * as transfer from './transfer.mjs';
+import * as splitplan from './splitplan.mjs';
+import * as busledger from './busledger.mjs';
+import * as conductor from './conductor.mjs';
+import * as claims from './claims.mjs';
 import * as allocate from './allocate.mjs';
 import * as intel from './intel.mjs';
+/* What khaali has already promised on bus departures. It is not inventory - a
+   bus is boarded, not booked - it is the room khaali is no longer free to
+   promise a second time. Held in memory beside the other books, and rebuilt
+   from the journal at boot like everything else that has to outlive a restart. */
+const BUSCLAIMS = claims.ledger();
 import * as sim from './sim.mjs';
 import * as bmtc from './bmtc.mjs';
 import * as saarthi from './saarthi.mjs';
@@ -2133,6 +2142,27 @@ async function api(req, res, url) {
       // the way out, offered rather than described
       return send(res, 400, { ...r, error: msg, canHire: !hired && (r.reason === 'no-bus' || r.reason === 'to-too-far' || r.reason === 'from-too-far') });
     }
+    /* THE SPLIT. Ride each vehicle for the stretch it has room on.
+       Offered only when khaali can count the inventory and the count says no
+       train runs the whole way for this party - and then only as one more way
+       on the page, ranked by the same allocator as everything else. It consumes
+       nothing: planning a split leaves the early stretch exactly as it was. */
+    let splitNote = null;
+    if (fk === 'rail' && tk === 'rail' && modes.includes('bus') && modes.includes('train')) {
+      const fi = ST.findIndex(x => x.c === fid), ti = ST.findIndex(x => x.c === tid);
+      if (fi >= 0 && ti >= 0 && fi !== ti) {
+        try {
+          const sp = splitplan.findFor({ fromIdx: fi, toIdx: ti, date, pax,
+            after: (after >= 0 && after < 1440) ? after : 0,
+            countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
+            ledger: BUSCLAIMS, now: Date.now() });
+          const ch = splitplan.chainOf(sp, { fromIdx: fi, toIdx: ti, date });
+          if (ch) r.chains.unshift(ch);
+          // a silent code is silent: nothing was wrong, so nothing is said
+          splitNote = sp.silent ? null : { code: sp.code, offered: !!ch, says: sp.says || null };
+        } catch (e) { splitNote = { code: 'NO_TRIGGER', offered: false, says: null }; }
+      }
+    }
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
     capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
@@ -2192,6 +2222,7 @@ async function api(req, res, url) {
       : null;
     const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
       recommended: a.recommended, reason: a.reason, compare: cmp,
+      split: splitNote,
       explanation: allocate.sentence(a.reason) };
     if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);
     return send(res, 200, out);
