@@ -25,6 +25,7 @@ import * as PL from './pool.mjs';
 import * as PV from './providers.mjs';
 import * as LD from './load.mjs';
 import * as XF from './transfer.mjs';
+import * as TP from './trip.mjs';
 import * as BL from './busload.mjs';
 import * as CP from './compare.mjs';
 import * as RD from './road.mjs';
@@ -4205,6 +4206,161 @@ t('no journey khaali offers contains a change khaali would refuse', () => {
   ['SBC', 'BNC', 'KJM', 'BNCE'].forEach(d => sweep({ kind: 'rail', id: 'BWT' }, { kind: 'rail', id: d }));
   sweep({ kind: 'rail', id: 'BWT' }, { kind: 'metro', id: 'KGWA' });
   assert.ok(checked > 0, 'the sweep found no vehicle-to-vehicle change to check at all');
+});
+
+console.log('\nwhich departure, and which stretch of it');
+
+const dep0 = { operatorId: 'BMTC', tripId: '500D-07', serviceDate: '2026-09-05',
+  directionId: 0, patternId: 'P1', scheduledStartTime: 490 };
+
+t('a route is not a departure: the 08:10 and the 08:40 are two different things', () => {
+  const a = TP.departure(dep0);
+  const b = TP.departure({ ...dep0, scheduledStartTime: 520 });
+  assert.notStrictEqual(a.id, b.id, 'one full and one with room would have averaged to fine');
+  assert.ok(!TP.sameDeparture(a, b));
+  assert.ok(TP.sameDeparture(a, TP.departure({ ...dep0 })), 'and the same one is the same one');
+});
+
+t('the same trip id on two mornings is two departures', () => {
+  const a = TP.departure(dep0);
+  const b = TP.departure({ ...dep0, serviceDate: '2026-09-06' });
+  assert.notStrictEqual(a.id, b.id);
+});
+
+t('the same road in the other direction is a different service', () => {
+  assert.notStrictEqual(TP.departure(dep0).id,
+    TP.departure({ ...dep0, directionId: 1 }).id);
+});
+
+t('a departure cannot be half-named', () => {
+  TP.ID_FIELDS.forEach(f => {
+    const partial = { ...dep0 }; delete partial[f];
+    assert.throws(() => TP.departure(partial), /missing /, 'a departure without ' + f + ' was accepted');
+  });
+  assert.throws(() => TP.departure({ ...dep0, serviceDate: '5 Sept' }), /ISO date/);
+});
+
+t('the key does not depend on the order somebody typed the object', () => {
+  const scrambled = {};
+  [...TP.ID_FIELDS].reverse().forEach(f => { scrambled[f] = dep0[f]; });
+  assert.strictEqual(TP.instanceId(scrambled), TP.instanceId(dep0));
+  // and a value containing the separator cannot forge another key
+  const odd = TP.departure({ ...dep0, tripId: 'A|B' });
+  const odd2 = TP.departure({ ...dep0, tripId: 'A', operatorId: 'BMTC' });
+  assert.notStrictEqual(odd.id, odd2.id);
+});
+
+t('a smaller bus changes what it can carry, not which bus it is', () => {
+  const a = TP.departure({ ...dep0, vehicleId: 'KA01-1111' });
+  const b = TP.withVehicle(a, 'KA01-2222');
+  assert.strictEqual(a.id, b.id, 'her pass is for the 08:10, whatever they send');
+  assert.notStrictEqual(a.vehicleId, b.vehicleId);
+  const big = TP.capacityOf({ seatedCapacity: 55, allowedStandingCapacity: 20, source: 'operator' });
+  const small = TP.capacityOf({ seatedCapacity: 35, allowedStandingCapacity: 10, source: 'operator' });
+  assert.strictEqual(big.boardingCapacity, 75);
+  assert.strictEqual(small.boardingCapacity, 45);
+});
+
+t('capacity nobody stated is unknown, which is not full and not empty', () => {
+  const c = TP.capacityOf({});
+  assert.strictEqual(c.boardingCapacity, null);
+  assert.strictEqual(c.known, false);
+  assert.strictEqual(TP.capacityOf({ seatedCapacity: 40 }).known, false, 'a number with no source is not evidence');
+  assert.strictEqual(TP.capacityOf({ seatedCapacity: 40, source: 'operator' }).known, true);
+});
+
+t('a span rides the stretches between its stops, and not the one it gets off at', () => {
+  const sp = TP.span({ fromStopSequence: 2, toStopSequence: 5 });
+  assert.deepStrictEqual([1, 2, 3, 4, 5].map(k => TP.covers(sp, k)),
+    [false, true, true, true, false]);
+  assert.throws(() => TP.span({ fromStopSequence: 5, toStopSequence: 5 }), /forward/);
+  assert.throws(() => TP.span({ fromStopSequence: 5, toStopSequence: 2 }), /forward/);
+  assert.throws(() => TP.span({ fromStopSequence: 1, toStopSequence: 2, pax: 0 }), /at least one/);
+});
+
+t('two people on one stretch are two people', () => {
+  const stops = 10;
+  const one = TP.span({ fromStopSequence: 2, toStopSequence: 6 });
+  const load = TP.loadBySpan([one, { ...one }, TP.span({ fromStopSequence: 3, toStopSequence: 4, pax: 3 })], stops);
+  assert.deepStrictEqual(load, [0, 0, 2, 5, 2, 2, 0, 0, 0]);
+  // this is what an OR of masks would have said instead
+  const orred = [one, { ...one }].reduce((m, sp) => {
+    let bits = 0; for (let k = sp.fromStopSequence; k < sp.toStopSequence; k++) bits |= (1 << k);
+    return m | bits;
+  }, 0);
+  assert.strictEqual((orred >> 2) & 1, 1, 'a mask can only ever say somebody is there');
+  assert.strictEqual(load[2], 2, 'and the count says how many');
+});
+
+t('a forty-three stop route counts past the thirty-second stretch', () => {
+  const stops = 43, n = TP.stretchCount(stops);
+  assert.strictEqual(n, 42);
+  assert.strictEqual(TP.maskable(n), false, 'nothing here may be represented as a mask');
+  const load = TP.loadBySpan([
+    TP.span({ fromStopSequence: 40, toStopSequence: 42, pax: 7 }),
+    TP.span({ fromStopSequence: 8, toStopSequence: 9, pax: 1 }),
+  ], stops);
+  assert.strictEqual(load[40], 7);
+  assert.strictEqual(load[8], 1, 'stretch 40 must not land on stretch 8');
+  // which is exactly what the shift does
+  assert.strictEqual(1 << 40, 1 << 8);
+  assert.throws(() => TP.loadBySpan([TP.span({ fromStopSequence: 41, toStopSequence: 43 })], stops), /past stop/);
+});
+
+t('a loop visits the same stop twice, and a sequence knows which one', () => {
+  // stop 'CIRCLE' is sequence 3 outbound round the loop and sequence 20 coming
+  // back to it. A stop id cannot tell those apart; the ride between them is
+  // seventeen stretches of bus, not zero.
+  const stops = 25;
+  const load = TP.loadBySpan([TP.span({ fromStopSequence: 3, toStopSequence: 20, pax: 2 })], stops);
+  assert.strictEqual(load.filter(x => x > 0).length, 17);
+  assert.strictEqual(load[3], 2);
+  assert.strictEqual(load[19], 2);
+  assert.strictEqual(load[20], 0);
+});
+
+t('the crowd on the stretch she rides, not the stop she boards at', () => {
+  // she gets on at stop 2 of 43, at the empty end of the route, and rides to 30.
+  // Reading the boarding stop says the bus is nearly empty; the stretch through
+  // town says it is not, and that is the one she is standing on.
+  const stops = 43;
+  const spans = [TP.span({ fromStopSequence: 0, toStopSequence: 3, pax: 4 })];
+  for (let k = 18; k < 26; k++) spans.push(TP.span({ fromStopSequence: k, toStopSequence: k + 4, pax: 6 }));
+  const load = TP.loadBySpan(spans, stops);
+  const w = TP.worstOver(load, 2, 30);
+  assert.ok(w.value > load[2] * 3, 'the boarding stop was not the story');
+  assert.ok(w.stretch >= 18 && w.stretch < 26);
+  assert.strictEqual(TP.worstOver(load, 5, 5), null, 'no stretch ridden, no worst stretch');
+});
+
+t('who got on and who got off, counted once each', () => {
+  const stops = 6;
+  const spans = [TP.span({ fromStopSequence: 0, toStopSequence: 3, pax: 2 }),
+    TP.span({ fromStopSequence: 1, toStopSequence: 3, pax: 1 }),
+    TP.span({ fromStopSequence: 3, toStopSequence: 5, pax: 4 })];
+  assert.deepStrictEqual(TP.boardings(spans, stops), [2, 1, 0, 4, 0, 0]);
+  assert.deepStrictEqual(TP.alightings(spans, stops), [0, 0, 0, 3, 0, 4]);
+  // and the running total agrees with the stretch load, from both directions
+  const load = TP.loadBySpan(spans, stops);
+  const b = TP.boardings(spans, stops), a = TP.alightings(spans, stops);
+  let on = 0;
+  for (let k = 0; k < TP.stretchCount(stops); k++) {
+    on += b[k] - a[k];
+    assert.strictEqual(on, load[k], 'the two counts disagree at stretch ' + k);
+  }
+});
+
+t('a trip that leaves at 23:40 arrives after it left', () => {
+  const night = TP.departure({ ...dep0, scheduledStartTime: 1420 });
+  const start = TP.absoluteMinute(night, 0);
+  const end = TP.absoluteMinute(night, 90);
+  assert.ok(end > start, 'the offset must not wrap into the morning it started in');
+  assert.strictEqual(end - start, 90);
+  // and it lands before a service the next morning, which is the comparison
+  // that goes wrong when minutes are taken modulo the day
+  const morning = TP.departure({ ...dep0, serviceDate: '2026-09-06', scheduledStartTime: 400 });
+  assert.ok(TP.absoluteMinute(morning, 0) > end);
+  assert.strictEqual(TP.dayNumber('2026-09-06') - TP.dayNumber('2026-09-05'), 1);
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
