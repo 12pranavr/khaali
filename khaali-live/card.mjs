@@ -470,6 +470,71 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     note: crowdingComparable ? null
       : 'These figures measure different things and are not compared.',
   } : null;
+
+  /* Whether she gets to sit down, which is a reason too.
+     A journey that arrives later can still be the better one, and a card that
+     only knows how to say "faster" has to stay silent about why this one won -
+     which reads as khaali always selling time. The rung comes from seatOdds,
+     and the three modes do not make the same promise: a train's rung counts
+     berths khaali allocates, a bus's is only WHERE ON THE ROUTE she boards,
+     and the metro's is the hour. So only the train may say berth, and the
+     unreserved modes say odds. */
+  const RUNG = { standing: 0, maybe: 1, likely: 2, yes: 3 };
+  const worstSeat = c => {
+    const L = (c.legs || []).filter(l => l.mode !== 'walk');
+    // one leg khaali cannot rank makes the journey unranked: unknown is not
+    // "fine", and a comfort claim over a gap in the evidence is invention
+    if (!L.length || L.some(l => !l.seat || RUNG[l.seat.word] == null)) return null;
+    return L.reduce((p, l) => RUNG[l.seat.word] < RUNG[p.seat.word] ? l : p);
+  };
+  const selS = worstSeat(chain), altS = worstSeat(alt);
+  const seatDifference = (selS && altS)
+    ? (RUNG[selS.seat.word] - RUNG[altS.seat.word]) || null : null;  // positive: seats her better
+  const SEAT_WORD = { yes: 'free', likely: 'likely', maybe: 'possible', standing: 'unlikely' };
+  /* A bus rung is blind to how full the bus is predicted to be - it only knows
+     she boards early. Calling that a better seat on a ride khaali itself
+     forecasts near capacity would be the model contradicting its own numbers,
+     so the pill is withheld rather than argued. */
+  const seatLegOk = l => !(l.mode !== 'train' && l.cap
+    && l.cap.occupancy != null && l.cap.occupancy >= 0.7);
+  /* Three ways to say it, because a pill, a bullet and a sentence are read
+     differently - but all three off the same rung, so they cannot disagree.
+     Direction is part of the wording, not just the colour: "Berth likely" in
+     the amber of a cost is a benefit wearing a warning, and the reader cannot
+     tell which way it cuts. A cost says the thing it costs her. */
+  const SEAT_SAY = {
+    better: {
+      free: { pill: 'Berth free', line: 'a berth is free', sentence: 'has a berth free' },
+      likely: { pill: 'Berth likely', line: 'a berth is likely', sentence: 'is likelier to have a berth' },
+      possible: { pill: 'Berth possible', line: 'a berth is possible', sentence: 'may have a berth' },
+      unlikely: { pill: 'Berth likelier', line: 'a berth is likelier here', sentence: 'is likelier to have a berth' },
+    },
+    worse: {
+      free: { pill: 'Berth less certain', line: 'a berth is less certain here', sentence: 'is less certain of a berth' },
+      likely: { pill: 'Berth less certain', line: 'a berth is less certain here', sentence: 'is less certain of a berth' },
+      possible: { pill: 'Berth less certain', line: 'a berth is less certain here', sentence: 'is less certain of a berth' },
+      unlikely: { pill: 'No berth', line: 'no berth for this stretch', sentence: 'has no berth for your stretch' },
+    },
+    odds: {
+      better: { pill: 'Better seat odds', line: 'better odds of a seat', sentence: 'gives better odds of a seat' },
+      worse: { pill: 'Worse seat odds', line: 'worse odds of a seat', sentence: 'gives worse odds of a seat' },
+    },
+  };
+  let seatAdvantage = null;
+  if (seatDifference && seatLegOk(selS)) {
+    const better = seatDifference > 0;
+    // the claim is about the ride SHE would take, never about theirs
+    const say = selS.mode === 'train'
+      ? SEAT_SAY[better ? 'better' : 'worse'][SEAT_WORD[selS.seat.word]]
+      : SEAT_SAY.odds[better ? 'better' : 'worse'];
+    seatAdvantage = { direction: better ? 'better' : 'worse',
+      mode: selS.mode, word: selS.seat.word,
+      basis: selS.mode === 'train' ? 'berth inventory khaali allocates and counts'
+        : selS.mode === 'bus' ? 'where on the route you board - no bus seat is reserved'
+          : 'how busy this station is at this hour',
+      ...say };
+    differences.push(say.line);
+  }
   if (!differences.length) return null;              // nothing established, nothing said
 
   // ONE sentence on the card: the comparison named once, what was won, and
@@ -492,6 +557,8 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
       + '% at its busiest against ' + b + '%)');
     else costs.push('is more crowded (' + a + '% at its busiest against ' + b + '%)');
   }
+  if (seatAdvantage) (seatAdvantage.direction === 'better' ? gains : costs)
+    .push(seatAdvantage.sentence);
   const list = a => a.length === 1 ? a[0]
     : a.slice(0, -1).join(', ') + (a.length > 2 ? ',' : '') + ' and ' + a[a.length - 1];
   // a journey with nothing to brag about states its costs plainly - "holds
@@ -569,6 +636,43 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
   else if (transferDifference > 0) reasonCodes.push('MORE_TRANSFERS');
   if (crowdingDifference != null) reasonCodes.push(crowdingDifference > 0
     ? 'LESS_CROWDED' : 'MORE_CROWDED');
+  if (seatAdvantage) reasonCodes.push(seatAdvantage.direction === 'better'
+    ? 'SEATS_YOU_BETTER' : 'SEATS_YOU_WORSE');
+
+  /* The pill row, built HERE rather than in the page.
+     It used to be derived in the client from the four raw numbers, which meant
+     the row could only ever say what arithmetic it happened to know - so a
+     journey that won on comfort showed nothing but its costs, and khaali read
+     as a machine that only sells time. The row is the ledger, in the order a
+     passenger asks: how long, how much, how many changes, will I sit, how full.
+     Costs are pills too - a slower journey says so on the same row it argues
+     from. Compact on purpose: four pills of "1 hour 50 minutes earlier" is a
+     paragraph wearing a costume. */
+  const mm = n => { n = Math.abs(n); const h = Math.floor(n / 60), m = n % 60;
+    return h ? (h + 'h' + (m ? ' ' + m + 'm' : '')) : (m + ' min'); };
+  const pills = [];
+  if (timeDifferenceMinutes) pills.push({
+    text: mm(timeDifferenceMinutes) + (timeDifferenceMinutes > 0 ? ' faster' : ' slower'),
+    kind: timeDifferenceMinutes > 0 ? 'gain' : 'cost', axis: 'time' });
+  if (fareDifference) pills.push({
+    text: '₹' + Math.abs(fareDifference) + (fareDifference < 0 ? ' cheaper' : ' dearer'),
+    kind: fareDifference < 0 ? 'gain' : 'cost', axis: 'fare' });
+  if (transferDifference) { const n = Math.abs(transferDifference);
+    pills.push({ text: n + (transferDifference < 0 ? ' fewer transfer' : ' more transfer')
+      + (n > 1 ? 's' : ''),
+    kind: transferDifference < 0 ? 'gain' : 'cost', axis: 'transfers' }); }
+  if (seatAdvantage) pills.push({ text: seatAdvantage.pill,
+    kind: seatAdvantage.direction === 'better' ? 'gain' : 'cost', axis: 'seat' });
+  if (crowdingDifference != null && selW && altW) {
+    /* "Avoids the busiest train" says more than "less crowded" when the one
+       she is not taking is the packed one - but only when it IS packed, and
+       only on the same basis, so this never becomes a flourish. */
+    const heavy = altW.cap.occupancy >= 0.8;
+    pills.push({ text: crowdingDifference > 0
+      ? (heavy ? ('Avoids the busiest ' + altW.mode) : 'Less crowded')
+      : 'More crowded',
+    kind: crowdingDifference > 0 ? 'gain' : 'cost', axis: 'crowding' });
+  }
 
   /* The card's ROLE against its yardstick, derived from the same ledger the
      sentence came from so the label can never claim what the numbers did not.
@@ -587,6 +691,9 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     roleGain = 'arriving ' + fmtDur(timeDifferenceMinutes) + ' earlier';
   } else if (crowdingDifference != null && crowdingDifference > 0) {
     role = 'CALMER RIDE'; roleGain = 'a calmer ride';
+  } else if (seatAdvantage && seatAdvantage.direction === 'better') {
+    role = selS.mode === 'train' ? 'BERTH LIKELIER' : 'BETTER SEAT ODDS';
+    roleGain = selS.mode === 'train' ? 'a better chance of a berth' : 'a better chance of a seat';
   }
   let roleCost = null;
   if (timeDifferenceMinutes < 0 && role !== 'ARRIVES EARLIER')
@@ -595,6 +702,8 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
   else if (transferDifference > 0) roleCost = transferDifference === 1
     ? 'an extra transfer' : transferDifference + ' extra transfers';
   else if (crowdingDifference != null && crowdingDifference < 0) roleCost = 'a busier ride';
+  else if (seatAdvantage && seatAdvantage.direction === 'worse')
+    roleCost = 'a poorer chance of sitting down';
   const chooseIf = role
     ? (roleCost
       ? 'Choose this option if ' + roleGain + ' matters more than ' + roleCost + '.'
@@ -628,6 +737,7 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     differences,
     timeDifferenceMinutes, fareDifference, transferDifference,
     crowdingDifference, crowdingComparable, crowdingComparison,
+    seatDifference, seatAdvantage, pills,
     demandEvidence,
     trafficEvidence: onRoad ? 'not evaluated' : 'no road legs',
     disclosure,

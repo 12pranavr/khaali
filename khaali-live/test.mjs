@@ -6191,6 +6191,133 @@ t('a metro figure names the station, not the inside of a carriage', () => {
     'onboard language on a station-entries number');
 });
 
+console.log('\nthe trade-off, not only the benefit');
+
+const seatOf = (word, rank) => ({ word, rank });
+const trainSeat = (name, dep, arr, occ, fare, seat) => {
+  const c = trainChain(name, dep, arr, occ, fare);
+  c.legs[0].seat = seat; return c;
+};
+
+t('a slower journey says slower, on the same row it argues from', () => {
+  // the point of the row: khaali must not be able to show only its wins
+  const slowerButCalmer = trainSeat('A', 450, 590, 0.40, 90, seatOf('yes', 3));
+  const fastPacked = trainSeat('B', 450, 565, 0.93, 90, seatOf('standing', 0));
+  const oc = CARD.optionComparisonOf(slowerButCalmer, fastPacked, {});
+  const text = oc.pills.map(p => p.text);
+  assert.ok(text.some(x => /slower$/.test(x)), 'the cost was left off the row: ' + text.join(' / '));
+  const cost = oc.pills.find(p => /slower$/.test(p.text));
+  assert.strictEqual(cost.kind, 'cost');
+  assert.ok(oc.pills.some(p => p.kind === 'gain'), 'a journey with reasons showed none');
+});
+
+t('the row reads the way the examples read', () => {
+  const better = trainSeat('A', 425, 565, 0.5, 90, seatOf('yes', 3));
+  const worse = trainSeat('B', 450, 615, 0.5, 152, seatOf('yes', 3));
+  worse.changes = 2; better.changes = 0;
+  const oc = CARD.optionComparisonOf(better, worse, {});
+  assert.deepStrictEqual(oc.pills.map(p => p.text),
+    ['50 min faster', '₹62 cheaper', '2 fewer transfers']);
+  assert.ok(oc.pills.every(p => p.kind === 'gain'));
+});
+
+t('a berth khaali counts may be named; a bus seat may not', () => {
+  // train: khaali allocates the berth, so the pill says berth
+  const roomy = trainSeat('A', 425, 565, 0.5, 90, seatOf('yes', 3));
+  const packed = trainSeat('B', 425, 565, 0.5, 90, seatOf('maybe', 1));
+  const tr = CARD.optionComparisonOf(roomy, packed, {});
+  assert.strictEqual(tr.seatAdvantage.direction, 'better');
+  assert.strictEqual(tr.seatAdvantage.pill, 'Berth free');
+  assert.ok(/berth inventory/.test(tr.seatAdvantage.basis), tr.seatAdvantage.basis);
+  // bus: the rung is only WHERE she boards, so the pill is odds, never a seat
+  const early = busOnlyChain('506-A', 600, 660, 0.30);
+  early.legs[0].seat = seatOf('likely', 2);
+  const late = busOnlyChain('289-GS', 600, 660, 0.30);
+  late.legs[0].seat = seatOf('standing', 0);
+  const bs = CARD.optionComparisonOf(early, late, {});
+  assert.strictEqual(bs.seatAdvantage.pill, 'Better seat odds');
+  assert.ok(!/berth/i.test(JSON.stringify(bs.pills)), 'a bus claimed a berth');
+  assert.ok(/no bus seat is reserved/i.test(bs.seatAdvantage.basis), bs.seatAdvantage.basis);
+  assert.ok(!/\bSeat likely\b/.test(JSON.stringify(bs.pills)),
+    'an unreserved bus promised a seat');
+});
+
+t('a bus khaali forecasts full gets no comfort pill, whatever the boarding rung says', () => {
+  // seatOdds only knows she boards early - it has never looked at the load.
+  // A "better seat odds" pill on a bus khaali itself predicts at 88% would be
+  // the model contradicting its own number.
+  const packedButEarly = busOnlyChain('506-A', 600, 660, 0.88, 20);
+  packedButEarly.legs[0].seat = seatOf('likely', 2);
+  const other = busOnlyChain('289-GS', 600, 660, 0.88, 45);   // a fare gap, so the
+  other.legs[0].seat = seatOf('standing', 0);                  // comparison survives
+  const oc = CARD.optionComparisonOf(packedButEarly, other, {});
+  assert.ok(oc, 'the fare difference should have kept the comparison alive');
+  assert.strictEqual(oc.seatAdvantage, null, 'a full bus was sold as a seat');
+  assert.ok(!oc.pills.some(p => p.axis === 'seat'));
+  assert.ok(!/seat/i.test(oc.summaryReason), oc.summaryReason);
+  // and with nothing else to say, the whole comparison is withheld rather
+  // than padded with a claim the load contradicts
+  const twin = busOnlyChain('289-GS', 600, 660, 0.88, 20);
+  twin.legs[0].seat = seatOf('standing', 0);
+  assert.strictEqual(CARD.optionComparisonOf(packedButEarly, twin, {}), null);
+});
+
+t('a cost says what it costs her, never a benefit in warning colours', () => {
+  // "Berth likely" tinted amber is a good thing wearing a bad thing's colour;
+  // the reader cannot tell which way it cuts, so the words carry the direction
+  const lessSure = trainSeat('A', 425, 565, 0.5, 90, seatOf('likely', 2));
+  const sure = trainSeat('B', 450, 580, 0.5, 90, seatOf('yes', 3));
+  const oc = CARD.optionComparisonOf(lessSure, sure, {});
+  const seat = oc.pills.find(p => p.axis === 'seat');
+  assert.strictEqual(seat.kind, 'cost');
+  assert.strictEqual(seat.text, 'Berth less certain');
+  assert.ok(!/likely|free/i.test(seat.text), 'a cost pill read as a benefit: ' + seat.text);
+  assert.ok(/less certain of a berth/.test(oc.summaryReason), oc.summaryReason);
+});
+
+t('one unranked leg makes the journey unranked, not comfortable', () => {
+  const known = trainSeat('A', 425, 565, 0.5, 90, seatOf('yes', 3));
+  const unknown = trainChain('B', 450, 580, 0.5, 90);   // no seat field at all
+  const oc = CARD.optionComparisonOf(known, unknown, {});
+  assert.strictEqual(oc.seatAdvantage, null,
+    'khaali compared a seat against a fact it does not have');
+});
+
+t('avoiding the packed one is said as avoiding it', () => {
+  const calm = trainSeat('A', 425, 565, 0.30, 90, seatOf('yes', 3));
+  const jammed = trainSeat('B', 425, 565, 0.92, 90, seatOf('yes', 3));
+  const oc = CARD.optionComparisonOf(calm, jammed, {});
+  const crowd = oc.pills.find(p => p.axis === 'crowding');
+  assert.strictEqual(crowd.text, 'Avoids the busiest train');
+  assert.strictEqual(crowd.kind, 'gain');
+  // ...and when the other one is merely fuller, it is only that
+  const mild = CARD.optionComparisonOf(trainSeat('A', 425, 565, 0.30, 90, seatOf('yes', 3)),
+    trainSeat('B', 425, 565, 0.55, 90, seatOf('yes', 3)), {});
+  assert.strictEqual(mild.pills.find(p => p.axis === 'crowding').text, 'Less crowded');
+});
+
+t('a comfort win still earns the card a role of its own', () => {
+  const calmer = trainSeat('A', 450, 577, 0.5, 90, seatOf('yes', 3));
+  const packed = trainSeat('B', 450, 577, 0.5, 90, seatOf('maybe', 1));
+  const oc = CARD.optionComparisonOf(calmer, packed, {});
+  assert.strictEqual(oc.role, 'BERTH LIKELIER');
+  assert.ok(/chance of a berth/.test(oc.chooseIf), oc.chooseIf);
+});
+
+t('the sentence and the row are the same ledger, never two opinions', () => {
+  const slowerCalmer = trainSeat('A', 450, 590, 0.40, 90, seatOf('yes', 3));
+  const fastPacked = trainSeat('B', 450, 565, 0.93, 90, seatOf('maybe', 1));
+  const oc = CARD.optionComparisonOf(slowerCalmer, fastPacked, {});
+  // every pill has its counterpart in the sentence's direction
+  oc.pills.forEach(p => {
+    if (p.axis === 'time') assert.strictEqual(p.kind,
+      /earlier/.test(oc.summaryReason) && oc.timeDifferenceMinutes > 0 ? 'gain' : 'cost');
+  });
+  assert.ok(/though it arrives/.test(oc.summaryReason), oc.summaryReason);
+  assert.ok(oc.reasonCodes.includes('SEATS_YOU_BETTER'));
+  assert.ok(oc.reasonCodes.includes('ARRIVES_LATER'));
+});
+
 console.log('\nthe card contract: identity, standing, and per-mode evidence');
 
 t('a comparison carries both sides whole, not just the differences', () => {
