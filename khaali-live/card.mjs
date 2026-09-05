@@ -223,6 +223,15 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
         || summaryFor(status, mp, railCheck, cmp))
         : summaryFor(status, mp, railCheck, cmp),
       summaryReason: summaryFor(status, mp, railCheck, cmp),
+      /* The selection, explained: one benefit sentence and at most three
+         reasons, each carrying the choice, the alternative it beat and the
+         evidence that separated them. Every one comes from the planner's own
+         trace; when the backend produced no comparison there is no rationale,
+         and the card says NOT COMPARED instead of manufacturing one. */
+      rationale: evaluated ? {
+        benefit: benefitFor(cmp, t, legs, mp),
+        choices: (mp.decision.choices || []).slice(0, 3),
+      } : null,
       selectedChainId: (mp && mp.decision && mp.decision.selectedChainId) || chain.chainId || null,
       decisionKind: (mp && mp.decision && mp.decision.kind)
         || (railDecision && railDecision.kind) || null,
@@ -308,6 +317,41 @@ function comparisonOf(mp) {
     question: questionFor(d, faster, road, crowd, below),
     answer: answerFor(d, mp, faster, road, crowd, below),
   };
+}
+
+/**
+ * YOUR BENEFIT, in one sentence - and the trade-off when that is what it is.
+ *
+ * "Arrive 20 minutes earlier than the bus arriving 11:18, with 10 minutes of
+ * walking and one change. It costs ₹11 more." A slower-but-calmer winner says
+ * so instead: a benefit sentence that only knows how to brag would have to lie
+ * about that journey.
+ */
+function benefitFor(cmp, t, legs, mp) {
+  if (!cmp) return null;
+  const arriveAt = mp && mp.answer ? mp.answer.arrivalTime : null;
+  const transfers = Math.max(0, legs.filter(l => l.mode !== 'walk').length - 1);
+  const changeWord = transfers === 0 ? 'no changes'
+    : transfers === 1 ? 'one change' : transfers + ' changes';
+  const rival = 'the ' + cmp.alternativeLabel.replace(', arriving', ' arriving');
+  let head;
+  if (cmp.timeDifferenceMinutes) {
+    head = 'Arrive' + (arriveAt ? (' at ' + arriveAt) : '') + ' - '
+      + mins(cmp.timeDifferenceMinutes) + ' earlier than ' + rival + ' -';
+  } else if (cmp.crowdingDifferenceMinutes) {
+    // the honest trade-off: it did not win on the clock
+    head = 'Spend ' + mins(cmp.crowdingDifferenceMinutes)
+      + ' less on stretches predicted to be crowded than ' + rival + ',';
+  } else {
+    head = 'The only journey that passed every check,';
+  }
+  let s = head + ' with ' + mins(t.walkingMinutes) + ' of walking and ' + changeWord + '.';
+  if (cmp.fareDifference != null && cmp.fareDifference !== 0) {
+    s += cmp.fareDifference > 0
+      ? (' It costs ₹' + cmp.fareDifference + ' more.')
+      : (' It saves ₹' + (-cmp.fareDifference) + '.');
+  }
+  return s;
 }
 
 /**

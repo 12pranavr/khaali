@@ -5789,6 +5789,86 @@ t('no comparison, no "recommended" - a found route says it was found', () => {
   assert.ok(!/earlier|faster|less crowded|avoids/i.test(r.mainReason || r.summaryReason));
 });
 
+console.log('\nthe rationale: selection explained, never manufactured');
+
+t('the benefit names the alternative, the arrival, the walking and the changes', () => {
+  const c = evaluatedCard();
+  const b = c.recommendation.rationale.benefit;
+  assert.ok(/Arrive at 10:58/.test(b), b);
+  assert.ok(/20 minutes earlier than the bus arriving 11:18/.test(b), b);
+  assert.ok(/10 minutes of walking and one change/.test(b), b);
+  assert.ok(/costs \u20b9|costs ₹/.test(b), 'the fare trade-off is stated, not hidden: ' + b);
+  SCN.reset();
+});
+
+t('at most three reasons, each with a choice, an alternative and evidence', () => {
+  const c = evaluatedCard();
+  const ch = c.recommendation.rationale.choices;
+  assert.ok(ch.length >= 2 && ch.length <= 3, 'got ' + ch.length);
+  ch.forEach(x => {
+    assert.ok(x.question && x.says, JSON.stringify(x));
+    assert.ok(x.alternative, 'a reason with nothing it beat is a description: ' + x.question);
+    assert.ok(x.evidence, 'a reason with no evidence is an assertion: ' + x.question);
+  });
+  SCN.reset();
+});
+
+t('why change here: the road delay it avoids, against actually staying aboard', () => {
+  const c = evaluatedCard();
+  const inter = c.recommendation.rationale.choices.find(x => x.about === 'INTERCHANGE');
+  assert.ok(inter, 'the crux choice has no reason');
+  assert.ok(/38 minutes of simulated delay/.test(inter.says), inter.says);
+  assert.ok(/staying aboard/.test(inter.alternative), inter.alternative);
+});
+
+t('why this departure: the one that leaves before she can reach it', () => {
+  const c = evaluatedCard();
+  const dep = c.recommendation.rationale.choices.find(x => x.about === 'ONWARD_DEPARTURE');
+  assert.ok(dep, 'no departure-level reason');
+  assert.ok(/The 10:32 leaves before you can reach the platform/.test(dep.says), dep.says);
+  assert.ok(/10:38 connects with 13 minutes in hand/.test(dep.says), dep.says);
+});
+
+t('a full earlier bus becomes the first-leg reason when demand surges', () => {
+  SCN.reset(); SCN.set({ demandBeforeBoarding: 5.5 });
+  const mp = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 2, policy: 'balanced' });
+  const first = (mp.decision.choices || []).find(x => x.about === 'FIRST_LEG');
+  assert.ok(first, 'the surge produced no first-leg reason');
+  assert.ok(/insufficient boarding room/.test(first.says), first.says);
+  assert.ok(/10:00/.test(first.alternative), first.alternative);
+  SCN.reset();
+});
+
+t('staying aboard gets its reason too, against the best change on the table', () => {
+  SCN.reset(); SCN.set({ downstreamRoadDelayMin: 0 });
+  const mp = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1, policy: 'balanced' });
+  const stay = (mp.decision.choices || []).find(x => x.about === 'STAY');
+  assert.ok(stay, 'RECOMMEND_DIRECT with no why-not-change');
+  assert.ok(/arrives at \d{1,2}:\d{2} against \d{1,2}:\d{2} staying aboard/.test(stay.says), stay.says);
+  SCN.reset();
+});
+
+t('no comparison, no rationale - and none invented downstream', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(), searchAt: 725 });
+  assert.strictEqual(c.recommendation.rationale, null,
+    'a rationale for an unevaluated journey is fiction with a heading');
+});
+
+t('the completion test: the selection is explainable without the timetable', () => {
+  // a passenger reading ONLY the benefit and the reasons can say why this
+  // journey beat another feasible one - the named loser, the number that
+  // separated them, and the checks behind each leg choice
+  const c = evaluatedCard();
+  const front = [c.recommendation.rationale.benefit]
+    .concat(c.recommendation.rationale.choices.map(x => x.says)).join(' ');
+  assert.ok(/the bus arriving 11:18/.test(front), 'no named alternative');
+  assert.ok(/20 minutes earlier/.test(front), 'no calculated difference');
+  assert.ok(/simulated delay/.test(front), 'no cause');
+  assert.ok(!/Ride for|Walk for|Arrive at 10:20/.test(front),
+    'navigation crept back onto the front of the card');
+  SCN.reset();
+});
+
 console.log('\nhiring: a car and a bike for the miles the network does not cover');
 
 // The point from the screenshot: 20 km north of Majestic, where nothing runs.

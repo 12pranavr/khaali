@@ -276,6 +276,7 @@ export function plan({ fromStop, toStop, at, pax = 1, policy = 'balanced', ledge
   const rival = scored.find(x => x !== winner && shape(x.c) !== shape(winner.c))
     || scored.find(x => x !== winner) || null;
   const reasons = reasonsFor(winner, rival, belowThreshold, scored.length);
+  const choices = choicesFor(winner, scored, trace);
 
   return {
     ...stamp,
@@ -284,6 +285,7 @@ export function plan({ fromStop, toStop, at, pax = 1, policy = 'balanced', ledge
       selectedChainId: winner.id,
       comparisonChainId: rival ? rival.id : null,
       reasons,
+      choices,
       policy, weights: w,
     },
     answer: {
@@ -316,6 +318,141 @@ export function plan({ fromStop, toStop, at, pax = 1, policy = 'balanced', ledge
     },
     disclosure: DISCLOSURE,
   };
+}
+
+/** DEMO|A|600 -> 600, 'A'. A synthetic id carries its own departure minute. */
+const depOfTrip = id => { const p = String(id || '').split('|'); return p.length > 2 ? +p[2] : null; };
+const routeOfTrip = id => { const p = String(id || '').split('|'); return p.length > 1 ? p[1] : null; };
+
+/**
+ * Why each choice inside the winning journey went the way it did - built from
+ * the rejections and the scores, never written afterwards to sound convincing.
+ *
+ * A journey is three decisions wearing one card: which vehicle for the first
+ * stretch, whether and where to leave it, and which onward departure to aim
+ * for. Each of those had real alternatives that were really rejected, and the
+ * evidence is in the trace: the earlier bus that was predicted full, the
+ * 10:32 metro that leaves before her walk lands, the through option that eats
+ * the road delay. If the trace holds no alternative for a choice, that choice
+ * gets no sentence - khaali does not narrate a comparison it never made.
+ */
+function choicesFor(winner, scored, rejections) {
+  const c = winner.c, rides = c.rides;
+  if (!rides.length) return [];
+  const first = rides[0];
+  const rName = id => (demonet.routeOf(id) || {}).name || id;
+  const found = [];
+
+  // WHY THIS FIRST DEPARTURE - only when an earlier one was rejected for room
+  const fullEarlier = rejections.filter(t => t.trip
+    && ['BOARDING_NOT_FEASIBLE', 'SPAN_OVER_PLANNING_LIMIT'].includes(t.code)
+    && routeOfTrip(t.trip) === first.routeId
+    && depOfTrip(t.trip) != null && depOfTrip(t.trip) < first.depMin)
+    .sort((a, b) => depOfTrip(b.trip) - depOfTrip(a.trip))[0];
+  if (fullEarlier) {
+    const altAt = hhmm(depOfTrip(fullEarlier.trip));
+    found.push({ about: 'FIRST_LEG', priority: 1,
+      question: 'Why the ' + hhmm(first.depMin) + ' ' + first.name + '?',
+      choice: first.name + ' at ' + hhmm(first.depMin),
+      alternative: rName(routeOfTrip(fullEarlier.trip)) + ' at ' + altAt,
+      evidence: fullEarlier.code === 'BOARDING_NOT_FEASIBLE'
+        ? 'the earlier departure is predicted to be at capacity by your stop'
+        : 'the earlier departure is predicted to fill past the planning limit on your stretch',
+      benefit: 'you are pointed at a departure with predicted room, not at one going past full',
+      says: 'The ' + altAt + ' is predicted to have insufficient boarding room for your party; '
+        + 'this departure passes the check.' });
+  }
+
+  if (c.transferCount > 0) {
+    const onward = rides[1];
+    const dest = rides[rides.length - 1].toStop;
+
+    // WHY LEAVE THE VEHICLE HERE - against actually staying on it
+    const through = scored.filter(x => x !== winner && x.c.transferCount === 0)
+      .sort((a, b) => a.s.total - b.s.total)[0];
+    if (through) {
+      const roadDiff = through.c.roadDelayMinutes - c.roadDelayMinutes;
+      const arrDiff = through.c.arriveMinute - c.arriveMinute;
+      const crowdDiff = through.c.crowdedRideMinutes - c.crowdedRideMinutes;
+      const bits = [];
+      if (roadDiff >= 5) bits.push('the road past ' + nameOf(first.toStop) + ' carries '
+        + roadDiff + ' minutes of simulated delay that this change avoids');
+      if (crowdDiff >= 3) bits.push('staying on rides ' + crowdDiff
+        + ' more minutes on stretches predicted to be crowded');
+      if (arrDiff > 0) bits.push('leaving here arrives ' + arrDiff + ' minutes sooner');
+      if (bits.length) found.push({ about: 'INTERCHANGE', priority: 1,
+        question: 'Why change at ' + nameOf(first.toStop) + '?',
+        choice: 'leave the ' + first.name + ' at ' + nameOf(first.toStop),
+        alternative: 'staying aboard to ' + nameOf(dest) + ', arriving ' + hhmm(through.c.arriveMinute),
+        evidence: bits[0],
+        benefit: arrDiff > 0 ? ('arrive ' + arrDiff + ' minutes sooner') : 'a shorter, easier run',
+        says: bits[0].charAt(0).toUpperCase() + bits[0].slice(1)
+          + (bits.length > 1 ? ('; ' + bits.slice(1).join('; ')) : '') + '.' });
+    }
+
+    // WHY THIS ONWARD SERVICE - against another service from the same change
+    const altMode = scored.filter(x => x !== winner && x.c.rides.length > 1
+      && x.c.rides[0].routeId === first.routeId
+      && x.c.rides[1] && x.c.rides[1].routeId !== onward.routeId)
+      .sort((a, b) => a.s.total - b.s.total)[0];
+    if (altMode) {
+      const rivalRide = altMode.c.rides[1];
+      const arrDiff = altMode.c.arriveMinute - c.arriveMinute;
+      if (arrDiff > 0) found.push({ about: 'ONWARD_MODE', priority: 3,
+        question: 'Why the ' + onward.name + ' and not the ' + rivalRide.name + '?',
+        choice: onward.name + ' at ' + hhmm(onward.depMin),
+        alternative: rivalRide.name + ' from the same interchange, arriving ' + hhmm(altMode.c.arriveMinute),
+        evidence: 'it reaches ' + nameOf(dest) + ' ' + arrDiff + ' minutes later',
+        benefit: 'the earlier arrival',
+        says: 'From the same interchange the ' + rivalRide.name + ' gets in at '
+          + hhmm(altMode.c.arriveMinute) + '; the ' + onward.name + ' gets in at '
+          + hhmm(c.arriveMinute) + '.' });
+    }
+
+    // WHY THIS ONWARD DEPARTURE - against the one that leaves before she can
+    const missed = rejections.filter(t => t.trip && t.code === 'TRANSFER_TOO_TIGHT'
+      && routeOfTrip(t.trip) === onward.routeId
+      && depOfTrip(t.trip) != null && depOfTrip(t.trip) < onward.depMin
+      && depOfTrip(t.trip) >= (first.arrMin || 0) - 5)
+      .sort((a, b) => depOfTrip(b.trip) - depOfTrip(a.trip))[0];
+    if (missed) {
+      const missedAt = hhmm(depOfTrip(missed.trip));
+      found.push({ about: 'ONWARD_DEPARTURE', priority: 2,
+        question: 'Why the ' + hhmm(onward.depMin) + ' departure?',
+        choice: onward.name + ' at ' + hhmm(onward.depMin),
+        alternative: 'the ' + missedAt,
+        evidence: 'the ' + missedAt + ' leaves before you can reach it after the walk',
+        benefit: 'a connection you can actually make',
+        says: 'The ' + missedAt + ' leaves before you can reach the platform; the '
+          + hhmm(onward.depMin) + ' connects'
+          + (onward.waitBefore > 0 ? (' with ' + onward.waitBefore + ' minutes in hand') : '') + '.' });
+    }
+  } else {
+    // WHY STAY ABOARD - against the best change on the table
+    const bestTr = scored.filter(x => x.c.transferCount > 0)
+      .sort((a, b) => a.s.total - b.s.total)[0];
+    if (bestTr) {
+      const arrDiff = bestTr.c.arriveMinute - c.arriveMinute;
+      found.push({ about: 'STAY', priority: 1,
+        question: 'Why not change?',
+        choice: 'stay aboard the ' + first.name,
+        alternative: bestTr.c.rides.map(r => r.name).join(' then ')
+          + ', arriving ' + hhmm(bestTr.c.arriveMinute),
+        evidence: arrDiff >= 0
+          ? ('the best change arrives ' + (arrDiff === 0 ? 'no sooner' : arrDiff + ' minutes later'))
+          : ('the change arrives ' + (-arrDiff) + ' minutes sooner but not by enough to pay for '
+            + 'the walk and second boarding'),
+        benefit: 'nothing to gain from a walk and a second boarding',
+        says: 'The best change on the table (' + bestTr.c.rides.map(r => r.name).join(' then ')
+          + ') arrives at ' + hhmm(bestTr.c.arriveMinute) + ' against ' + hhmm(c.arriveMinute)
+          + ' staying aboard.' });
+    }
+  }
+  // at most three, the crux first, then in journey order
+  return found.sort((a, b) => a.priority - b.priority).slice(0, 3)
+    .sort((a, b) => ['FIRST_LEG', 'INTERCHANGE', 'STAY', 'ONWARD_DEPARTURE', 'ONWARD_MODE']
+      .indexOf(a.about) - ['FIRST_LEG', 'INTERCHANGE', 'STAY', 'ONWARD_DEPARTURE', 'ONWARD_MODE']
+      .indexOf(b.about));
 }
 
 function kindOf(x) {
