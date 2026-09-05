@@ -358,6 +358,18 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
   const selNames = namesOf(chain), altNames = namesOf(alt);
   if (!selNames.length || !altNames.length) return null;
   const dest = chain.legs[chain.legs.length - 1].to;
+  /* Two departures of one service wear the same name, and "take the MEMU
+     instead of the MEMU" is not a sentence anybody can act on - when the names
+     collide, each side carries its departure time. */
+  let selectedLabel = selNames.join(' then ');
+  let alternativeLabel = altNames.join(' then ');
+  if (selectedLabel === alternativeLabel) {
+    const depOf = c => { const r = (c.legs || []).find(l => l.mode !== 'walk');
+      return r ? (r.dep || (r.depMin != null ? hhmm(r.depMin) : null)) : null; };
+    const a = depOf(chain), b = depOf(alt);
+    if (a) selectedLabel += ' (' + a + ')';
+    if (b) alternativeLabel += ' (' + b + ')';
+  }
 
   const timeDifferenceMinutes = (chain.totalMin != null && alt.totalMin != null)
     ? alt.totalMin - chain.totalMin : null;          // positive: this one is faster
@@ -377,9 +389,12 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     ? 'one more transfer' : transferDifference + ' more transfers');
   if (!differences.length) return null;              // nothing established, nothing said
 
-  // the sentence states what was won and owns what was lost
+  // ONE sentence on the card: the comparison named once, what was won, and
+  // what it cost. The itemised differences live behind See comparison only -
+  // a sentence and three bullets saying the same thing is the case argued
+  // twice, and the second telling adds doubt rather than weight.
   const gains = [], costs = [];
-  if (timeDifferenceMinutes > 0) gains.push('gets you to ' + dest + ' '
+  if (timeDifferenceMinutes > 0) gains.push('arrives '
     + fmtDur(timeDifferenceMinutes) + ' earlier');
   else if (timeDifferenceMinutes < 0) costs.push('arrives ' + fmtDur(timeDifferenceMinutes) + ' later');
   if (fareDifference < 0) gains.push('costs ₹' + (-fareDifference) + ' less');
@@ -390,8 +405,13 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     ? 'a transfer' : transferDifference + ' transfers'));
   const list = a => a.length === 1 ? a[0]
     : a.slice(0, -1).join(', ') + (a.length > 2 ? ',' : '') + ' and ' + a[a.length - 1];
-  const summaryReason = (gains.length ? ('It ' + list(gains)) : 'It holds its own')
-    + (costs.length ? ((gains.length ? ', though it ' : 'It ') + list(costs)) : '') + '.';
+  // a journey with nothing to brag about states its costs plainly - "holds
+  // its own" is only true when there is nothing on the other side either
+  const summaryReason = 'Compared with ' + alternativeLabel + ', this journey '
+    + (gains.length
+      ? (list(gains) + (costs.length ? (', though it ' + list(costs)) : ''))
+      : (costs.length ? list(costs) : 'holds its own'))
+    + '.';
 
   // what the simulated model says about the ride she would actually be on
   const capped = (chain.legs || []).filter(l => l.mode !== 'walk'
@@ -407,11 +427,10 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
   const single = chain.changes === 0 && selNames.length === 1;
   return {
     selectedChainId, alternativeChainId,
-    selectedLabel: selNames.join(' then '),
-    alternativeLabel: altNames.join(' then '),
-    headline: (single ? ('Stay on ' + selNames[0] + ' instead of taking ')
-      : ('Take ' + selNames.join(' then ') + ' instead of '))
-      + altNames.join(' then ') + '.',
+    selectedLabel, alternativeLabel,
+    headline: (single ? ('Stay on ' + selectedLabel + ' instead of taking ')
+      : ('Take ' + selectedLabel + ' instead of '))
+      + alternativeLabel + '.',
     summaryReason,
     differences,
     timeDifferenceMinutes, fareDifference, transferDifference,

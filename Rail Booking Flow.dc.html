@@ -1187,7 +1187,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--k-f0efeb)">
           <span style="flex:1;min-width:240px;font:500 13.5px/1.5 Archivo,sans-serif;color:var(--k-fg-6a6d75)">{{ r.whyLine }}</span>
-          <div onClick="{{ r.onToggle }}" style="flex:none;white-space:nowrap;cursor:pointer;border:1px solid var(--k-dedcd6);border-radius:10px;padding:10px 16px;font:700 13.5px/1 Archivo,sans-serif;color:var(--k-fg-14161a)">{{ r.stepLabel }}</div>
+          <div onClick="{{ r.onToggle }}" style="{{ r.stepBtnStyle }}">{{ r.stepLabel }}</div>
           <button onClick="{{ r.onChoose }}" style="{{ r.chooseStyle }}">{{ r.chooseLabel }}</button>
         </div>
 
@@ -8173,10 +8173,12 @@ class Component extends DCLogic {
            Every value is filled from card.mjs; a check that never ran has no
            field, so the card cannot describe it. */
         ...(()=>{
-          /* The server builds a card for EVERY chain, but only the
-             recommended row renders one for now - the per-row rollout waits
-             for approval, and the data is already on the wire when it comes. */
-          const K=isRec?((c.card)||(R.card||null)):null;
+          /* Approved and rolled out: any row whose card carries its OWN
+             comparison renders the block - never the winner's explanation
+             copied sideways. A row with nothing established renders the plain
+             card it always had. */
+          const K=(c.card&&c.card.recommendation&&c.card.recommendation.optionComparison)
+            ?c.card:(isRec?((c.card)||(R.card||null)):null);
           const off={display:'none'};
           if(!K)return {cardChip:'',cardChipStyle:off,cardHeadline:'',
             cardHeadlineStyle:off,cardWhyHead:'',cardWhyHeadStyle:off,
@@ -8187,7 +8189,8 @@ class Component extends DCLogic {
             cardCmpBtn:'',cardCmpBtnStyle:off,onCardCmp:()=>{},
             cardCmpStyle:off,cardCmpThis:'',cardCmpAlt:'',
             cardCmpChanges:'',cardCmpHow:'',cardDisclosure:'',
-            cardDisclosureStyle:off};
+            cardDisclosureStyle:off,
+            stepBtnStyle:{flex:'none',whiteSpace:'nowrap',cursor:'pointer',border:'1px solid var(--k-dedcd6)',borderRadius:10,padding:'10px 16px',font:"700 13.5px/1 Archivo,sans-serif",color:'var(--k-fg-14161a)'}};
           const rec=K.recommendation,J=K.journey;
           const evaluated=rec.status==='EVALUATED';
           const cmp=rec.comparison;
@@ -8224,10 +8227,9 @@ class Component extends DCLogic {
               ||(OC&&OC.summaryReason)||rec.summaryReason,
             cardWhyStyle:{marginTop:5,font:'700 13px/1.6 Archivo,sans-serif',
               color:'var(--k-fg-14161a)'},
-            cardReasons:(OC?[{
-              head:'COMPARED WITH '+String(OC.alternativeLabel).toUpperCase(),
-              text:OC.differences.map(d=>'\u2022'+' '+d).join(nl),
-            }]:((rec.rationale&&rec.rationale.choices)||[]).map(ch=>({
+            /* refinement one: the collapsed card carries the single
+               sentence; the itemised bullets live behind See comparison only */
+            cardReasons:(OC?[]:((rec.rationale&&rec.rationale.choices)||[]).map(ch=>({
               head:String(ch.question||'').toUpperCase(),
               text:ch.says,
             }))).map(x=>({...x,
@@ -8262,7 +8264,14 @@ class Component extends DCLogic {
               marginTop:12,marginRight:10,border:'1px solid var(--k-dedcd6)',
               borderRadius:10,padding:'9px 14px',
               font:'700 12.5px/1 Archivo,sans-serif',color:'var(--k-fg-14161a)'},
-            onCardSteps:()=>this.setState({pStepsOpen:S.pStepsOpen===ci?null:ci}),
+            /* One expansion control per card. There were two - "See journey
+               steps" on the card and "Hide the steps" at the bottom - so this
+               one now drives both the numbered steps and the map panel, and
+               the old button retires on rows that have it. */
+            stepBtnStyle:{display:'none'},
+            onCardSteps:()=>{const nx=S.pStepsOpen===ci?null:ci;
+              this.setState({pStepsOpen:nx,
+                pOpenIdx:nx!=null?ci:(S.pOpenIdx===ci?null:S.pOpenIdx)});},
             cardStepsListStyle:{display:S.pStepsOpen===ci?'flex':'none',
               marginTop:13,flexDirection:'column',gap:13},
             /* with a real comparison attached, the not-evaluated list is
@@ -8388,7 +8397,7 @@ class Component extends DCLogic {
            until she pays. The server says what the operation is - card.booking
            - and this uses that when it has it rather than guessing from the
            shape of the legs. */
-        chooseLabel:(((isRec&&c.card&&c.card.booking&&c.card.booking.actionLabel)
+        chooseLabel:(((c.card&&c.card.booking&&c.card.booking.actionLabel)
           ||(isRec&&R.card&&R.card.booking&&R.card.booking.actionLabel))
           ||(tl?'Hold the berth and continue'
             :(this.planTripOf(c).legs.length?'Start the trip pass':'Show me on the map'))),
@@ -8439,7 +8448,9 @@ class Component extends DCLogic {
             /* one disclosure per card: when the card contract is present its
                bottom line covers this, and saying it twice reads like nerves */
             unreserved:(cl&&cl.road)?cl.road.why:'',
-            unreservedStyle:{display:(cl&&cl.road&&!(isRec&&(c.card||R.card)))?'block':'none',marginTop:6,
+            unreservedStyle:{display:(cl&&cl.road
+              &&!(c.card&&c.card.recommendation&&c.card.recommendation.optionComparison)
+              &&!(isRec&&(c.card||R.card)))?'block':'none',marginTop:6,
               font:'600 11.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-8a4a12)'},
           };
         })(),

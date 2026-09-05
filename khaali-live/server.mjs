@@ -2466,11 +2466,18 @@ async function api(req, res, url) {
             after: (after >= 0 && after < 1440) ? after : 0,
             countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
             ledger: BUSCLAIMS, findSplit: null });
+          /* Each card's own yardstick. The recommended row measures itself
+             against the route she would have taken without khaali; every other
+             row measures itself against the recommended one - "take this
+             instead of that, and here is what it buys and what it costs". A
+             row that is worse on every axis says so; that is the point of it. */
+          const yardstick = (ch === pickedForCards) ? altForPicked
+            : (pickedForCards && pickedForCards !== ch ? pickedForCards : null);
           ch.card = card.build({ chain: ch, mp: null, railDecision: d2,
             searchAt: (after >= 0 && after < 1440) ? after : null,
             selectedChainId: decision.chainId(ch),
-            alternative: (ch === pickedForCards && altForPicked)
-              ? { chain: altForPicked, chainId: decision.chainId(altForPicked) } : null });
+            alternative: yardstick
+              ? { chain: yardstick, chainId: decision.chainId(yardstick) } : null });
         }
       } catch (e) { ch.card = null; }
     });
