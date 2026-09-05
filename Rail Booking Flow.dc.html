@@ -1124,6 +1124,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             <span style="{{ r.seatTint }}">{{ r.seatWord }}</span>
           </span>
         </div>
+        <div style="{{ r.unreservedStyle }}">{{ r.unreserved }}</div>
 
         <div style="display:flex;align-items:center;gap:14px">
           <div style="flex:1 1 auto;min-width:0">
@@ -8141,7 +8142,12 @@ class Component extends DCLogic {
           t:(MODE[l.mode]||MODE.walk).n,
           style:{font:'700 10.5px/1 Archivo,sans-serif',letterSpacing:'.04em',padding:'6px 9px',
             borderRadius:5,color:'#fff',background:(MODE[l.mode]||MODE.walk).c}})),
-        seatText:sk.t,seatWhy:c.seat.why,
+        /* Two sentences, because there are two claims. The berth is inventory
+           khaali allocates itself; the bus is a pass and a forecast. */
+        seatText:((c.seatClaim&&!c.seatClaim.journeyWide&&c.seatClaim.rail)
+          ?(sk.t+' on '+c.seatClaim.rail.leg):sk.t),
+        seatWhy:((c.seatClaim&&c.seatClaim.rail&&!c.seatClaim.journeyWide)
+          ?c.seatClaim.rail.why:c.seat.why),
         seatStyle:{display:'inline-flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:999,
           font:'700 12px/1 Archivo,sans-serif',color:sk.c,background:sk.bg},
         tags,
@@ -8217,12 +8223,32 @@ class Component extends DCLogic {
         recStyle:{display:isRec?'inline-block':'none',
           font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
           background:'var(--k-14161a)',color:'var(--k-fg-fff)',padding:'6px 10px',borderRadius:6},
-        seatWord:(sk.short==='Yours'?'SEAT YES':sk.short==='Likely'?'SEAT LIKELY'
-          :sk.short==='If lucky'?'SEAT IF LUCKY':sk.short==='Standing'?'STANDING':'SEAT UNKNOWN'),
-        seatTint:(()=>{const w=sk.short==='Yours'?'SEAT YES':sk.short==='Likely'?'SEAT LIKELY'
-          :sk.short==='If lucky'?'SEAT IF LUCKY':sk.short==='Standing'?'STANDING':'SEAT UNKNOWN';
-          const t=tint(w);return {font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
-            padding:'6px 10px',borderRadius:6,background:t.bg,color:t.fg};})(),
+        /* A berth khaali allocated and a seat on a bus are not the same claim,
+           and one badge may not speak for both. This said SEAT YES across a
+           journey whose reason was "77 berths are free on your stretch" - a
+           fact about a train, printed over an unreserved BMTC leg. When
+           anything unreserved is in the journey the badge names the train it
+           is actually about, and the pass says so on its own line. */
+        ...(()=>{
+          const cl=c.seatClaim||null;
+          const wide=!cl||cl.journeyWide;
+          const base=sk.short==='Yours'?'SEAT YES':sk.short==='Likely'?'SEAT LIKELY'
+            :sk.short==='If lucky'?'SEAT IF LUCKY':sk.short==='Standing'?'STANDING':'SEAT UNKNOWN';
+          const rail=cl&&cl.rail;
+          const railWord=rail?(rail.word==='yes'?'BERTH YES':rail.word==='likely'?'BERTH LIKELY'
+            :rail.word==='maybe'?'BERTH IF LUCKY':rail.word==='standing'?'NO BERTH':'BERTH UNKNOWN'):null;
+          const w=wide?base:(railWord||'SEE EACH LEG');
+          const t=tint(wide?base:(rail&&rail.word==='standing'?'STANDING'
+            :rail&&(rail.word==='yes'||rail.word==='likely')?'SEAT YES':'SEAT UNKNOWN'));
+          return {
+            seatWord:w+(wide?'':' \u00b7 TRAIN ONLY'),
+            seatTint:{font:"700 10.5px/1 'JetBrains Mono',monospace",letterSpacing:'.08em',
+              padding:'6px 10px',borderRadius:6,background:t.bg,color:t.fg},
+            unreserved:(cl&&cl.road)?cl.road.why:'',
+            unreservedStyle:{display:(cl&&cl.road)?'block':'none',marginTop:6,
+              font:'600 11.5px/1.55 Archivo,sans-serif',color:'var(--k-fg-8a4a12)'},
+          };
+        })(),
         // the two times, and the places under them
         depTime:hm12(c.dep),arrTime:hm12(c.arr),
         dots:ride.map(l=>({style:{width:9,height:9,borderRadius:999,flex:'none',display:'block',

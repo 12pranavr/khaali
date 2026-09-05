@@ -773,6 +773,48 @@ function metroLegOut(l, fromId) {
   return { ...l, seat: seatOdds({ mode: 'metro', load: l.crowdAlight ? l.crowdAlight.level : null }) };
 }
 
+/**
+ * Vehicles khaali does not reserve a place on. It sells a PASS for these - the
+ * right to board - and the next one comes. Whatever a model says about how
+ * likely a seat is, khaali has not held one.
+ */
+export const UNRESERVED = new Set(['bus', 'metro']);
+
+/**
+ * Two claims, never one.
+ *
+ * A berth is inventory khaali allocates itself and can say it holds. Boarding
+ * room on a bus is a forecast, and on the metro it is people walking through a
+ * gate. Collapsing them into one journey-wide "SEAT YES" is how a card ended up
+ * promising a seat for the whole trip on the strength of "77 berths are free on
+ * your stretch" - a fact about a train, printed over a journey containing an
+ * unreserved BMTC bus.
+ */
+export function seatClaimOf(legs) {
+  const rail = (legs || []).filter(l => l.mode === 'train' && l.seat && l.seat.rank != null);
+  const road = (legs || []).filter(l => UNRESERVED.has(l.mode));
+  const worstRail = rail.length ? rail.reduce((p, l) => l.seat.rank < p.seat.rank ? l : p) : null;
+  const kinds = [...new Set(road.map(l => l.mode))];
+  const wordOf = { bus: 'the bus', metro: 'the metro' };
+  return {
+    rail: worstRail ? {
+      word: worstRail.seat.word, why: worstRail.seat.why,
+      leg: worstRail.name || 'the train',
+      basis: 'berth inventory khaali allocates itself',
+    } : null,
+    road: road.length ? {
+      word: 'unreserved', modes: kinds,
+      basis: kinds.includes('bus')
+        ? 'predicted boarding room, from khaali\u2019s simulated conductor'
+        : 'BMRCL\u2019s own hourly station entries',
+      why: 'No seat is reserved on ' + kinds.map(k => wordOf[k]).join(' or ')
+        + '. khaali issues a pass, which is the right to board, not a place to sit.',
+    } : null,
+    // the only case where one word may speak for the whole journey
+    journeyWide: road.length === 0 && rail.length > 0,
+  };
+}
+
 /** What a row needs: the shape of it, the worst seat on it, and the words. */
 function summarise(c) {
   const legs = c.legs;
@@ -785,6 +827,7 @@ function summarise(c) {
     depText: hhmm(dayMin(c.dep)), arrText: hhmm(dayMin(c.arr)),
     seat: worst ? worst.seat : { word: 'unknown', why: '' },
     seatLeg: worst ? (worst.name || worst.mode) : null,
+    seatClaim: seatClaimOf(legs),
     simulated,
     changes: Math.max(0, modes.length - 1) };
 }
@@ -900,6 +943,27 @@ export function milesFor(from, to, after, kmv, opts = {}) {
   return kinds.map(k => mile(from, to, after, kmv, { ...opts, only: k })).filter(Boolean);
 }
 
+/**
+ * When she can actually board something at the far end of a hop.
+ *
+ * journeysAnywhere joins two planners: journeys() for the corridor, and mile()
+ * for whatever closes each end. Both were joined at the arrival minute, so a
+ * train landing at 12:33 was followed by a walk at 12:33 and a bus at 12:34 -
+ * the whole minute spent walking, nothing for getting off the train, out of the
+ * station, or to the door before it shuts. transfer.mjs was wired into the six
+ * joins INSIDE journeys() and this is the seventh, which is the one on the
+ * screen for every journey that ends at a place rather than a station.
+ *
+ * mile() adds its own walk on top of what this returns, so the terms do not
+ * double up: three minutes to get out, then the walk, then five to board.
+ */
+function readyAfter(legs, fallback) {
+  const last = (legs && legs.length) ? legs[legs.length - 1] : null;
+  if (!last || last.arrMin == null) return fallback;
+  const w = transfer.windowFor(last, transfer.edge({}));
+  return w.ok ? w.earliest : fallback;
+}
+
 /** Where an end actually is, whatever kind of end it is. */
 export function pointOfEnd(end) {
   if (!end) return null;
@@ -990,20 +1054,23 @@ export function journeysAnywhere(req) {
       const inner = journeys({ ...req,
         from: F ? { kind: F.kind, id: F.id } : from,
         to: T ? { kind: T.kind, id: T.id } : to,
-        after: first ? (req.after || 0) + first.min : (req.after || 0),
+        // arriving at the station is not boarding at it
+        after: first ? readyAfter(first.legs, (req.after || 0) + first.min) : (req.after || 0),
         by: req.by != null ? req.by - lastGuess : null });
       if (!inner.ok) return;
       inner.chains.forEach(c => {
         const legs = c.legs.slice();
         let dep = c.dep, arr = c.arr, fare = c.fare;
         if (first) { legs.unshift(...first.legs); dep = req.after || 0; fare += first.fare; }
-        const lasts = T ? milesFor({ name: T.name, lat: T.lat, lng: T.lng }, toPt, c.arr, T.km, toOpts) : [null];
+        // she is not on the pavement the minute the train stops
+        const ready = readyAfter(c.legs, c.arr);
+        const lasts = T ? milesFor({ name: T.name, lat: T.lat, lng: T.lng }, toPt, ready, T.km, toOpts) : [null];
         if (T && !lasts.length) return;
         lasts.forEach(last => {
           const legs2 = legs.slice();
           let arr2 = arr, fare2 = fare;
           if (last) {
-            legs2.push(...last.legs); arr2 = c.arr + last.min; fare2 = fare + last.fare;
+            legs2.push(...last.legs); arr2 = ready + last.min; fare2 = fare + last.fare;
             if (req.by != null && arr2 > req.by) return;
           }
           anyMile = true;
@@ -1011,10 +1078,21 @@ export function journeysAnywhere(req) {
           // the vehicle is part of the identity: a car and a bike over the same
           // ground are two choices, and must not collapse into one
           const ride = [first, last].filter(x => x && x.ride).map(x => x.ride.mode).join('+');
+          /* The seat was carried over from the inner corridor chain and never
+             recomputed, so the bus into Hebbala was invisible to it: a journey
+             with an unreserved BMTC leg wore the train's berth availability as
+             its own. Recount over every leg, and keep the two claims apart. */
+          const seated2 = legs2.filter(l => l.seat && l.seat.rank != null);
+          const worst2 = seated2.length
+            ? seated2.reduce((p, l) => l.seat.rank < p.seat.rank ? l : p) : null;
           out.push({ ...c, legs: legs2, dep, arr: arr2, fare: fare2, modes,
             kind: c.kind + (F ? '|' + F.id : '') + (T ? '|' + T.id : '') + (ride ? '|' + ride : ''),
             totalMin: ((arr2 - dep) + 1440) % 1440,
             depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr2)),
+            seat: worst2 ? worst2.seat : { word: 'unknown', why: '' },
+            seatLeg: worst2 ? (worst2.name || worst2.mode) : null,
+            seatClaim: seatClaimOf(legs2),
+            simulated: legs2.some(l => l.source === 'simulated'),
             changes: Math.max(0, modes.length - 1),
             via: { from: F ? { kind: F.kind, id: F.id, name: F.name, km: F.km } : null, to: T ? { kind: T.kind, id: T.id, name: T.name, km: T.km } : null } });
         });

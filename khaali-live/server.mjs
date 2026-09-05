@@ -48,6 +48,7 @@ import * as providers from './providers.mjs';
 import * as capacity from './capacity.mjs';
 import * as transfer from './transfer.mjs';
 import * as splitplan from './splitplan.mjs';
+import * as decision from './decision.mjs';
 import * as busledger from './busledger.mjs';
 import { BUSES } from './buses.mjs';
 import * as conductor from './conductor.mjs';
@@ -2237,27 +2238,6 @@ async function api(req, res, url) {
       // the way out, offered rather than described
       return send(res, 400, { ...r, error: msg, canHire: !hired && (r.reason === 'no-bus' || r.reason === 'to-too-far' || r.reason === 'from-too-far') });
     }
-    /* THE SPLIT. Ride each vehicle for the stretch it has room on.
-       Offered only when khaali can count the inventory and the count says no
-       train runs the whole way for this party - and then only as one more way
-       on the page, ranked by the same allocator as everything else. It consumes
-       nothing: planning a split leaves the early stretch exactly as it was. */
-    let splitNote = null;
-    if (fk === 'rail' && tk === 'rail' && modes.includes('bus') && modes.includes('train')) {
-      const fi = ST.findIndex(x => x.c === fid), ti = ST.findIndex(x => x.c === tid);
-      if (fi >= 0 && ti >= 0 && fi !== ti) {
-        try {
-          const sp = splitplan.findFor({ fromIdx: fi, toIdx: ti, date, pax,
-            after: (after >= 0 && after < 1440) ? after : 0,
-            countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
-            ledger: BUSCLAIMS, now: Date.now() });
-          const ch = splitplan.chainOf(sp, { fromIdx: fi, toIdx: ti, date });
-          if (ch) r.chains.unshift(ch);
-          // a silent code is silent: nothing was wrong, so nothing is said
-          splitNote = sp.silent ? null : { code: sp.code, offered: !!ch, says: sp.says || null };
-        } catch (e) { splitNote = { code: 'NO_TRIGGER', offered: false, says: null }; }
-      }
-    }
     // capacity, then allocation. Routing said what is possible; this decides
     // what to put first, and says why in codes a sentence can be made from.
     capacity.annotate(r.chains, { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()), trainCap: (no, fi, ti) => {
@@ -2298,6 +2278,45 @@ async function api(req, res, url) {
     // footnote only.
     const obvious = compare.obviousOf(a.chains, { after });
     const picked = a.chains[a.recommended] || a.chains[0];
+
+    /* THE DECISION.
+       Not a score. Whether khaali checked the train's accommodation for this
+       party over the span it actually carries her, what it concluded, and - if
+       the answer was no - which bus departure it chose instead and why the
+       others failed.
+
+       It runs on the recommended chain's RAIL LEG, so it works whether she is
+       going to a corridor station or to a bus stop in Hebbala. The old code
+       gated on both endpoints being stations and therefore never ran on the
+       journeys people search for. */
+    let decided = null, splitChain = null;
+    try {
+      const canSwap = modes.includes('bus') && modes.includes('train');
+      decided = decision.decide({
+        chain: picked, pax, date,
+        after: (after >= 0 && after < 1440) ? after : 0,
+        countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
+        ledger: BUSCLAIMS,
+        findSplit: canSwap ? (req2) => splitplan.findFor({ ...req2,
+          countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
+          keepTrace: true }) : null,
+      });
+      // A replacement that passes every check is offered as one more way, and
+      // ranked by the same allocator as everything else. It keeps whatever the
+      // journey did AFTER the rail leg - the walk and the bus into Hebbala are
+      // hers either way, and dropping them would answer a different question.
+      if (decided.kind === 'SWAP_PREFIX' && decided.split) {
+        const leg = decision.railLegOf(picked);
+        splitChain = splitplan.chainOf(decided.split,
+          { fromIdx: leg.fromIdx, toIdx: leg.toIdx, date, tail: picked });
+        if (splitChain) {
+          capacity.annotate([splitChain], { busLoad: busLoadFor(simNow().getHours()*60+simNow().getMinutes()) });
+          a.chains.push(splitChain);
+          decided.answer = { ...decided.answer, alternativeChainId: decision.chainId(splitChain) };
+        }
+      }
+    } catch (e) { decided = { kind: 'NO_FEASIBLE_CONNECTION', reasons: ['RAIL_INVENTORY_UNREADABLE'],
+      railCheck: null, chosenBusDeparture: null, answer: null, says: 'khaali could not complete the check.' }; }
     const fastestChain = a.chains.reduce((p, c) =>
       (c.arr - c.dep) < (p.arr - p.dep) ? c : p, a.chains[0]);
     const cmp = obvious && picked
@@ -2317,7 +2336,8 @@ async function api(req, res, url) {
       : null;
     const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
       recommended: a.recommended, reason: a.reason, compare: cmp,
-      split: splitNote,
+      decision: decided,
+      decisionLines: decision.lines(decided),
       explanation: allocate.sentence(a.reason) };
     if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);
     return send(res, 200, out);

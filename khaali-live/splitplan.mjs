@@ -112,8 +112,15 @@ export function findFor({ fromIdx, toIdx, date, pax = 1, after = 0,
 /**
  * The result, as a chain the existing renderer draws without being taught
  * anything new: a bus leg, a walk if there is one, and the train leg.
+ *
+ * `tail` is the journey the split came out of. Everything AFTER its rail leg -
+ * the walk out of Bengaluru Cantt, the BMTC bus to Hebbala, the last walk - is
+ * kept, because she is still going to Hebbala and a journey that stops at a
+ * railway station is an answer to a question nobody asked. The tail's times are
+ * shifted by however much later the new train arrives, and the connection into
+ * it is re-checked rather than assumed.
  */
-export function chainOf(result, { fromIdx, toIdx, date }) {
+export function chainOf(result, { fromIdx, toIdx, date, tail = null }) {
   if (!result || !result.ok) return null;
   const s = result.split, bus = s.replacement, k = s.boundaryIdx;
   const arrive = bus.arrMin;
@@ -142,12 +149,43 @@ export function chainOf(result, { fromIdx, toIdx, date }) {
     seat: journey.seatOdds({ mode: 'train', free: s.onwardConstraint.n }),
     source: 'timetable',
   });
+  // ---- the rest of her journey, kept and re-timed -------------------------
+  let arr = on.arrMin, tailFare = 0, tailNote = null;
+  if (tail && tail.legs) {
+    const cut = tail.legs.findIndex(l => l.mode === 'train' && l.toIdx === toIdx);
+    const rest = cut >= 0 ? tail.legs.slice(cut + 1) : [];
+    if (rest.length) {
+      const oldArr = tail.legs[cut].arrMin;
+      const shift = on.arrMin - oldArr;
+      // A shifted timetable is not a re-planned journey. If the onward leg runs
+      // to a headway khaali can re-time it honestly; if it is a fixed departure
+      // that has already gone, this chain is not offerable and says so.
+      const fixed = rest.find(l => l.mode !== 'walk' && !l.every && l.depMin != null
+        && (l.depMin + shift) !== l.depMin && shift > 0);
+      if (fixed && shift > 0) tailNote = 'ONWARD_NOT_REVALIDATED';
+      rest.forEach(l => {
+        const m = { ...l };
+        if (m.depMin != null) { m.depMin = l.depMin + shift; m.dep = hhmm(dayMin(m.depMin)); }
+        if (m.arrMin != null) { m.arrMin = l.arrMin + shift; m.arr = hhmm(dayMin(m.arrMin)); }
+        legs.push(m);
+        tailFare += (l.fare || 0);
+      });
+      arr = legs[legs.length - 1].arrMin;
+    }
+  }
   return {
     kind: 'split', legs,
-    dep: bus.depMin, arr: on.arrMin,
+    dep: bus.depMin, arr,
     fare: Math.max(6, Math.round(journey.km({ lat: bus.fromLat, lng: bus.fromLng },
       { lat: bus.toLat, lng: bus.toLng }) * 1.2 / 5) * 5)
-      + railFare('SL', Math.abs(ST[toIdx].km - ST[k].km)),
+      + railFare('SL', Math.abs(ST[toIdx].km - ST[k].km)) + tailFare,
+    totalMin: ((arr - bus.depMin) + 1440) % 1440,
+    depText: hhmm(dayMin(bus.depMin)), arrText: hhmm(dayMin(arr)),
+    modes: legs.filter(l => l.mode !== 'walk').map(l => l.mode),
+    changes: Math.max(0, legs.filter(l => l.mode !== 'walk').length - 1),
+    simulated: legs.some(l => l.source === 'simulated'),
+    seat: { word: 'unknown', why: '' },       // set honestly by the seat pass
+    tailNote,
     split: {
       boundaryIdx: k, boundary: ST[k].n, boundaryCode: ST[k].c,
       train: on.train, tripInstanceId: bus.tripInstanceId,
