@@ -134,7 +134,12 @@ h1.k-hp[style]{font-family:Archivo,Helvetica,Arial,sans-serif!important;font-wei
 .ki-fold{margin-left:2px;border:0;background:transparent;padding:4px 2px;cursor:pointer;
   display:flex;align-items:center;opacity:.55;transition:opacity .18s}
 .ki-fold:hover,.ki-fold:focus-visible{opacity:1;outline:none}
-@media (max-width:640px){.ki-wrap{top:var(--ki-top,150px)}.ki-card{border-radius:20px;padding:16px}}
+/* On a phone the isle's "centred under the header" landed on the page
+   heading itself. Un-dragged it docks to the bottom, where only scrolling
+   content passes; a dragged isle carries inline top, which wins. */
+@media (max-width:640px){
+  .ki-wrap:not([style*="top"]){top:auto;bottom:14px}
+  .ki-card{border-radius:20px;padding:16px}}
 /* The plan page: the question on the left, and it stays there. */
 .k-planshell{display:grid;grid-template-columns:396px minmax(0,1fr);gap:18px;align-items:start}
 .k-planside{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -177,6 +182,7 @@ body{background-image:repeating-linear-gradient(45deg, rgba(31,42,99,.018) 0 2px
 .k-postmark-in .pb{font:600 9px/1 'IBM Plex Mono',monospace;letter-spacing:.12em}
 .k-herotrack{position:absolute;left:12%;right:16%;top:46%;opacity:.55}
 @media (max-width:900px){.k-heroright{display:none!important}.k-hero{grid-template-columns:1fr!important}}
+@media (max-width:440px){.k-hero3{grid-template-columns:1fr!important}}
 
 /* ===== responsive layer ===== */
 html{-webkit-text-size-adjust:100%}
@@ -812,7 +818,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
     <div class="k-planside">
 
-      <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:6px;display:flex;gap:4px">
+      <div style="background:var(--k-fff);border:1px solid var(--k-e6e5e0);border-radius:20px;padding:6px;display:flex;gap:4px;flex-wrap:wrap">
         <button onClick="{{ pickPlan }}" style="{{ pPlanTab }}">Plan it for me</button>
         <button onClick="{{ pickBuild }}" style="{{ pBuildTab }}">Build my own</button>
         <button onClick="{{ pickMap }}" style="{{ pMapTab }}">Pick on the map</button>
@@ -1122,7 +1128,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
         <div style="{{ r.unreservedStyle }}">{{ r.unreserved }}</div>
 
         <div style="display:flex;align-items:flex-start;gap:16px">
-          <div style="display:flex;flex-direction:column;gap:2px;flex:none;min-width:0">
+          <div style="display:flex;flex-direction:column;gap:2px;flex:0 1 auto;min-width:0">
             <span style="font:700 clamp(24px,3vw,32px)/1 Archivo,sans-serif;letter-spacing:-.04em;color:var(--k-fg-14161a);white-space:nowrap">{{ r.depTime }}</span>
             <span style="font:600 13px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);overflow-wrap:anywhere">{{ r.fromName }}</span>
           </div>
@@ -1133,7 +1139,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
             </sc-for>
             <span style="height:0;border-top:2px dotted var(--k-dedcd6);flex:1;display:block"></span>
           </div>
-          <div style="display:flex;flex-direction:column;gap:2px;flex:none;align-items:flex-end;min-width:0">
+          <div style="display:flex;flex-direction:column;gap:2px;flex:0 1 auto;align-items:flex-end;min-width:0">
             <span style="font:700 clamp(24px,3vw,32px)/1 Archivo,sans-serif;letter-spacing:-.04em;color:var(--k-fg-14161a);white-space:nowrap">{{ r.arrTime }}</span>
             <span style="font:600 13px/1.35 Archivo,sans-serif;color:var(--k-fg-6a6d75);text-align:right;overflow-wrap:anywhere">{{ r.toName }}</span>
           </div>
@@ -2006,12 +2012,13 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
 
     <sc-for list="{{ coachBlocks }}" as="cb" hint-placeholder-count="6">
       <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
           <div style="flex:none;font:600 12px/1 Manrope,sans-serif;letter-spacing:.08em;color:var(--k-fg-40434a);text-transform:uppercase">₹{{ cb.price }} · {{ cb.label }} · Coach {{ cb.id }}</div>
           <div style="flex:1;height:1px;background:var(--k-e6e5e0)"></div>
           <div style="flex:none;font-size:12px;color:var(--k-fg-8a8a84)">{{ cb.summary }}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:7px;align-items:center">
+        <div style="overflow-x:auto;max-width:100%">
+        <div style="display:flex;flex-direction:column;gap:7px;align-items:center;width:max-content;min-width:100%;margin:0 auto">
           <sc-for list="{{ cb.bays }}" as="bay" hint-placeholder-count="9">
             <div style="display:flex;gap:9px;align-items:center">
               <div style="flex:none;width:24px;font:500 9.5px/1.2 'IBM Plex Mono',monospace;color:var(--k-fg-b8b8b2)">{{ bay.label }}</div>
@@ -2033,6 +2040,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
               </div>
             </div>
           </sc-for>
+        </div>
         </div>
       </div>
     </sc-for>
@@ -3263,12 +3271,12 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
   <div style="font:500 11px/1 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--k-fg-8a8a84);text-transform:uppercase;margin-bottom:14px">About this prototype</div>
   <h1 style="margin:0 0 14px;font:400 clamp(28px,4vw,44px)/1.1 'Instrument Serif',Georgia,serif">What is real, and what is not</h1>
   <p style="margin:0 0 36px;font-size:16.5px;line-height:1.6;color:var(--k-fg-6a6d75);max-width:34em">A prototype is only useful if you know which parts are true.</p>
-  <div style="border:1px solid var(--k-e6e5e0);border-radius:8px;overflow:hidden;background:var(--k-fff)">
-    <div style="display:grid;grid-template-columns:1.2fr 1.5fr .7fr;background:var(--k-101319);color:var(--k-fg-fff);font:600 11px/1 Manrope,sans-serif;letter-spacing:.06em;text-transform:uppercase">
+  <div style="border:1px solid var(--k-e6e5e0);border-radius:8px;overflow-x:auto;background:var(--k-fff)">
+    <div style="display:grid;grid-template-columns:1.2fr 1.5fr .7fr;min-width:460px;background:var(--k-101319);color:var(--k-fg-fff);font:600 11px/1 Manrope,sans-serif;letter-spacing:.06em;text-transform:uppercase">
       <div style="padding:14px 18px">Data</div><div style="padding:14px 18px">Where it came from</div><div style="padding:14px 18px">Status</div>
     </div>
     <sc-for list="{{ realRows }}" as="r" hint-placeholder-count="7">
-      <div style="display:grid;grid-template-columns:1.2fr 1.5fr .7fr;border-top:1px solid var(--k-f0efeb)">
+      <div style="display:grid;grid-template-columns:1.2fr 1.5fr .7fr;min-width:460px;border-top:1px solid var(--k-f0efeb)">
         <div style="padding:16px 18px;font-size:14px;font-weight:600">{{ r.what }}</div>
         <div style="padding:16px 18px;font-size:13.5px;color:var(--k-fg-6a6d75);line-height:1.5">{{ r.src }}</div>
         <div style="padding:16px 18px"><span style="{{ r.badge }}">{{ r.status }}</span></div>
@@ -8688,10 +8696,10 @@ class Component extends DCLogic {
               marginTop:3,background:'#1E7A4C'},
             badgeStyle:{display:'none'},notLast:false});
           return out;})(),
-        chooseStyle:{flex:'none',border:'none',
+        chooseStyle:{flex:'none',border:'none',maxWidth:'100%',
           background:isSel?'var(--k-1f3f8f)':'var(--k-14161a)',color:'var(--k-fg-fff)',
-          font:'700 14px/1 Archivo,sans-serif',padding:'12px 22px',borderRadius:11,
-          cursor:'pointer',whiteSpace:'nowrap'},
+          font:'700 14px/1.25 Archivo,sans-serif',padding:'12px 22px',borderRadius:11,
+          cursor:'pointer'},
       };
     });
 
