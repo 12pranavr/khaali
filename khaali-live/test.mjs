@@ -6046,6 +6046,63 @@ t('evidence names a source per mode ridden, and none for a mode not ridden', () 
     'the station-entries source implies onboard knowledge');
 });
 
+console.log('\nthe alternative’s role: one label, from its own ledger');
+
+t('the label is the ledger’s first supported gain, money before time', () => {
+  // cheaper but later: the money wins the label, the lateness goes in the sentence
+  const oc = CARD.optionComparisonOf(trainChain('A', 450, 577, 0.5, 90),
+    trainChain('B', 425, 565, 0.5, 120), {});
+  assert.strictEqual(oc.role, 'LOWER FARE');
+  assert.strictEqual(oc.chooseIf,
+    'Choose this option if saving ₹30 matters more than arriving 12 minutes later.');
+  // same fares, fewer changes
+  const ft = CARD.optionComparisonOf(
+    { ...trainChain('A', 450, 577, 0.5, 90), changes: 0 },
+    { ...trainChain('B', 425, 565, 0.5, 90), changes: 1 }, {});
+  assert.strictEqual(ft.role, 'FEWER TRANSFERS');
+  // same everything except arrival
+  const ea = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.5, 90),
+    trainChain('B', 450, 580, 0.5, 90), {});
+  assert.strictEqual(ea.role, 'ARRIVES EARLIER');
+  // only the calm differs, same basis
+  const cr = CARD.optionComparisonOf(trainChain('A', 425, 565, 0.40, 90),
+    trainChain('B', 425, 565, 0.80, 90), {});
+  assert.strictEqual(cr.role, 'CALMER RIDE');
+});
+
+t('a card worse on every axis wears no label and says its costs', () => {
+  const oc = CARD.optionComparisonOf(trainChain('A', 450, 590, 0.9, 130),
+    trainChain('B', 425, 565, 0.5, 90), {});
+  assert.strictEqual(oc.role, null);
+  assert.strictEqual(oc.chooseIf, null);
+  assert.ok(/arrives .* later/.test(oc.summaryReason), oc.summaryReason);
+});
+
+t('the winner keeps RECOMMENDED alone - no role label beside it', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725, role: 'RECOMMENDED',
+    alternative: { chain: trainChain('B', 800, 900, 0.5, 200) } });
+  assert.strictEqual(c.recommendation.roleLabel, null);
+  assert.strictEqual(c.recommendation.chooseIf, null);
+});
+
+t('an alternative card carries the role its own comparison earned', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725, role: 'ALTERNATIVE',
+    alternative: { chain: { ...railOnlyChain(), fare: 130, arr: 830 } } });
+  assert.ok(c.recommendation.roleLabel, 'a supported gain earned no label');
+  assert.strictEqual(c.recommendation.roleLabel, c.recommendation.optionComparison.role);
+  assert.ok(/^Choose this option /.test(c.recommendation.chooseIf), c.recommendation.chooseIf);
+});
+
+t('no comparison, no role - the label cannot outlive its evidence', () => {
+  const c = CARD.build({ chain: railOnlyChain(), railDecision: railOnlyDecision(),
+    searchAt: 725, role: 'ALTERNATIVE' });
+  assert.strictEqual(c.recommendation.optionComparison, null);
+  assert.strictEqual(c.recommendation.roleLabel, null);
+  assert.strictEqual(c.recommendation.chooseIf, null);
+});
+
 t('the same name twice gets its departure time, both ways home included', () => {
   const oc = CARD.optionComparisonOf(trainChain('MEMU', 600, 660, 0.5),
     trainChain('MEMU', 630, 690, 0.5), {});

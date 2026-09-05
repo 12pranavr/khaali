@@ -211,6 +211,11 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
     : (railCheck && railCheck.outcome) ? 'AVAILABILITY_ONLY' : 'NOT_EVALUATED';
 
   const cmp = evaluated ? comparisonOf(mp) : null;
+  const oc = (!evaluated && alternative && alternative.chain)
+    ? optionComparisonOf(chain, alternative.chain, {
+      selectedChainId,
+      alternativeChainId: alternative.chainId || null })
+    : null;
   return {
     /* The card's identity and standing, at the top where a consumer looks
        first: which chain this is, how much was actually established about it,
@@ -247,11 +252,13 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
          per-card comparison, computed rather than copied from a page-level
          panel that may have been about something else. Null whenever the
          differences could not actually be established. */
-      optionComparison: (!evaluated && alternative && alternative.chain)
-        ? optionComparisonOf(chain, alternative.chain, {
-          selectedChainId,
-          alternativeChainId: alternative.chainId || null })
-        : null,
+      optionComparison: oc,
+      /* Only the overall winner wears RECOMMENDED; an alternative card wears
+         the one thing its own ledger supports - LOWER FARE, FEWER TRANSFERS -
+         and a sentence saying whom it is for. The winner gets neither, and a
+         card whose comparison established no gain gets neither. */
+      roleLabel: (role === 'ALTERNATIVE' && oc) ? oc.role : null,
+      chooseIf: (role === 'ALTERNATIVE' && oc) ? oc.chooseIf : null,
       selectedChainId: (mp && mp.decision && mp.decision.selectedChainId) || chain.chainId || null,
       decisionKind: (mp && mp.decision && mp.decision.kind)
         || (railDecision && railDecision.kind) || null,
@@ -562,7 +569,40 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
   else if (transferDifference > 0) reasonCodes.push('MORE_TRANSFERS');
   if (crowdingDifference != null) reasonCodes.push(crowdingDifference > 0
     ? 'LESS_CROWDED' : 'MORE_CROWDED');
+
+  /* The card's ROLE against its yardstick, derived from the same ledger the
+     sentence came from so the label can never claim what the numbers did not.
+     Priority is fixed: money, then changes, then time, then calm - the order
+     a passenger weighing an alternative usually asks in. No established gain,
+     no label; a card worse on every axis wears none and says its costs. */
+  let role = null, roleGain = null;
+  if (fareDifference < 0) {
+    role = 'LOWER FARE'; roleGain = 'saving ₹' + (-fareDifference);
+  } else if (transferDifference < 0) {
+    role = 'FEWER TRANSFERS';
+    roleGain = -transferDifference === 1 ? 'avoiding a transfer'
+      : 'avoiding ' + (-transferDifference) + ' transfers';
+  } else if (timeDifferenceMinutes > 0) {
+    role = 'ARRIVES EARLIER';
+    roleGain = 'arriving ' + fmtDur(timeDifferenceMinutes) + ' earlier';
+  } else if (crowdingDifference != null && crowdingDifference > 0) {
+    role = 'CALMER RIDE'; roleGain = 'a calmer ride';
+  }
+  let roleCost = null;
+  if (timeDifferenceMinutes < 0 && role !== 'ARRIVES EARLIER')
+    roleCost = 'arriving ' + fmtDur(timeDifferenceMinutes) + ' later';
+  else if (fareDifference > 0) roleCost = 'paying ₹' + fareDifference + ' more';
+  else if (transferDifference > 0) roleCost = transferDifference === 1
+    ? 'an extra transfer' : transferDifference + ' extra transfers';
+  else if (crowdingDifference != null && crowdingDifference < 0) roleCost = 'a busier ride';
+  const chooseIf = role
+    ? (roleCost
+      ? 'Choose this option if ' + roleGain + ' matters more than ' + roleCost + '.'
+      : 'Choose this option for ' + roleGain + '.')
+    : null;
+
   return {
+    role, chooseIf,
     selectedChainId, alternativeChainId,
     selectedLabel, alternativeLabel,
     /* Infeasible candidates are removed before ranking and never enter the

@@ -1114,6 +1114,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <span style="font:700 16.5px/1.35 Archivo,sans-serif;letter-spacing:-.025em;color:var(--k-fg-14161a)">{{ r.via }}</span>
           <span style="margin-left:auto;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
             <span style="{{ r.fromSaarthiStyle }}">SAARTHI SHOWED YOU THIS</span>
+            <span style="{{ r.rolePillStyle }}">{{ r.rolePill }}</span>
             <span style="{{ r.recStyle }}">RECOMMENDED</span>
             <span style="{{ r.seatTint }}">{{ r.seatWord }}</span>
           </span>
@@ -1173,6 +1174,7 @@ input[data-demo="1"]{font:700 15px/1.3 'IBM Plex Mono',monospace!important;
           <div style="{{ r.cardHeadlineStyle }}">{{ r.cardHeadline }}</div>
           <div style="{{ r.cardWhyHeadStyle }}">{{ r.cardWhyHead }}</div>
           <div style="{{ r.cardWhyStyle }}">{{ r.cardWhy }}</div>
+          <div style="{{ r.cardChooseIfStyle }}">{{ r.cardChooseIf }}</div>
 
           <sc-for list="{{ r.cardReasons }}" as="cr" hint-placeholder-count="3">
             <div>
@@ -8229,7 +8231,8 @@ class Component extends DCLogic {
           const off={display:'none'};
           if(!K)return {cardChip:'',cardChipStyle:off,cardHeadline:'',
             cardHeadlineStyle:off,cardWhyHead:'',cardWhyHeadStyle:off,
-            cardWhy:'',cardWhyStyle:off,cardBreak:'',cardBreakStyle:off,
+            cardWhy:'',cardWhyStyle:off,cardChooseIf:'',cardChooseIfStyle:off,
+            cardBreak:'',cardBreakStyle:off,
             cardReasons:[],cardSteps:[],cardStepsStyle:off,
             cardStepsBtn:'',cardStepsBtnStyle:off,onCardSteps:()=>{},
             cardStepsListStyle:off,cardGaps:'',cardGapsStyle:off,
@@ -8279,6 +8282,10 @@ class Component extends DCLogic {
               ||(OC&&OC.summaryReason)||rec.summaryReason,
             cardWhyStyle:{marginTop:5,font:'500 14px/1.6 Archivo,sans-serif',
               color:'var(--k-fg-40434a)',maxWidth:'70ch'},
+            cardChooseIf:(!isRec&&rec.chooseIf)||'',
+            cardChooseIfStyle:(!isRec&&rec.chooseIf)?{marginTop:3,
+              font:'400 13px/1.55 Archivo,sans-serif',
+              color:'var(--k-fg-8a8a84)',maxWidth:'70ch'}:{display:'none'},
             /* refinement one: the collapsed card carries the single
                sentence; the itemised bullets live behind See comparison only */
             cardReasons:(OC?[]:((rec.rationale&&rec.rationale.choices)||[]).map(ch=>({
@@ -8517,6 +8524,15 @@ class Component extends DCLogic {
           font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
           background:'var(--k-14161a)',color:'var(--k-fg-fff)',
           padding:'6px 10px',borderRadius:6,whiteSpace:'nowrap'},
+        /* the alternative's role, from its own ledger on the server - the
+           frontend formats the label, it does not decide it */
+        rolePill:(!isRec&&c.card&&c.card.recommendation
+          &&c.card.recommendation.roleLabel)||'',
+        rolePillStyle:(!isRec&&c.card&&c.card.recommendation
+          &&c.card.recommendation.roleLabel)?{
+          font:"700 10px/1 'JetBrains Mono',monospace",letterSpacing:'.1em',
+          background:'var(--k-f1f1ee)',color:'var(--k-fg-40434a)',
+          padding:'6px 10px',borderRadius:6,whiteSpace:'nowrap'}:{display:'none'},
         /* A berth khaali allocated and a seat on a bus are not the same claim,
            and one badge may not speak for both. This said SEAT YES across a
            journey whose reason was "77 berths are free on your stretch" - a
