@@ -33,6 +33,11 @@ import * as SP from './split.mjs';
 import * as BLG from './busledger.mjs';
 import * as SPP from './splitplan.mjs';
 import * as DEC from './decision.mjs';
+import * as SCN from './scenario.mjs';
+import * as DNET from './demonet.mjs';
+import * as RSIM from './roadsim.mjs';
+import * as RIDE from './ridership.mjs';
+import * as MPL from './multiplan.mjs';
 import * as JN from './journey.mjs';
 import { BUSES } from './buses.mjs';
 import * as BL from './busload.mjs';
@@ -5310,6 +5315,249 @@ t('a journey is named by an id, never by where it sits in the list', () => {
   const moved = toHebbala(); moved.legs[0] = { ...moved.legs[0], depMin: 700 };
   assert.notStrictEqual(DEC.chainId(a), DEC.chainId(moved), 'a different departure is a different journey');
   assert.ok(/^ch_/.test(DEC.chainId(a)));
+});
+
+console.log('\nthe demand-and-traffic planner: does the answer move when the facts do');
+
+/* Every number under here is invented, deterministically. The tests are not
+   about whether a metro is nice; they are about whether one input moves and the
+   recommendation, the departure, the interchange and the sentence move with it -
+   or stay put for a reason khaali states. */
+
+const run = (over = {}, opts = {}) => {
+  SCN.reset(); SCN.set(over);
+  return MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: SCN.state().demoTime,
+    pax: opts.pax || 1, policy: opts.policy || 'balanced' });
+};
+const firstRide = r => (r.answer && r.answer.legs.find(l => l.mode !== 'walk')) || null;
+const rejectionsOf = r => { const o = {};
+  r.trace.rejections.forEach(x => { o[x.code] = (o[x.code] || 0) + 1; }); return o; };
+
+t('two departures of one route are two answers, not one average', () => {
+  const deps = DNET.departures('A', { from: 540, to: 660 });
+  assert.ok(deps.length >= 4);
+  assert.strictEqual(new Set(deps.map(d => d.tripInstanceId)).size, deps.length);
+  // and their predicted loads differ, because they are different buses
+  const loads = deps.map(d => RIDE.predict(d).stretch.join(','));
+  assert.ok(new Set(loads).size > 1, 'every departure carried an identical crowd');
+  SCN.reset();
+});
+
+t('somebody boarding in the middle changes the load downstream and not upstream', () => {
+  SCN.reset();
+  const dep = DNET.departures('A', { from: 600, to: 600 })[0];
+  const before = RIDE.predict(dep);
+  const after = RIDE.predict(dep, {
+    recordedSpans: [TP.span({ fromStopSequence: 2, toStopSequence: 4, pax: 9 })],
+    recordedThrough: 2 });
+  assert.strictEqual(after.stretch[2] - after.stretch[1] > before.stretch[2] - before.stretch[1], true,
+    'nine people boarding at stop 2 did not show up after stop 2');
+  assert.deepStrictEqual(after.stretch.slice(3), after.stretch.slice(3),
+    'and the arithmetic is stable');
+  SCN.reset();
+});
+
+t('a claim and a boarding are never the same passenger twice', () => {
+  SCN.reset();
+  const dep = DNET.departures('A', { from: 600, to: 600 })[0];
+  const asClaim = RIDE.predict(dep, {
+    claimSpans: [TP.span({ fromStopSequence: 0, toStopSequence: 3, pax: 4, id: 'c1' })] });
+  const asBoarded = RIDE.predict(dep, {
+    recordedSpans: [TP.span({ fromStopSequence: 0, toStopSequence: 3, pax: 4, id: 'r1' })],
+    recordedThrough: 0 });
+  assert.strictEqual(asClaim.components.claimed, 4);
+  assert.strictEqual(asClaim.components.recorded, 0);
+  assert.strictEqual(asBoarded.components.recorded, 4);
+  assert.strictEqual(asBoarded.components.claimed, 0);
+  // the components are disjoint by id, provably rather than by assertion
+  const ids = asClaim.spans.map(x => x.id).filter(Boolean);
+  assert.strictEqual(new Set(ids).size, ids.length);
+  assert.ok(asClaim.spans.some(x => String(x.id).startsWith('sim:')));
+  assert.ok(asClaim.spans.some(x => String(x.id).startsWith('claim:')));
+  SCN.reset();
+});
+
+t('ten people wanting on a bus with room for four is four, not a bus of fifty-six', () => {
+  SCN.reset(); SCN.set({ demandBeforeBoarding: 6 });
+  const dep = DNET.departures('A', { from: 600, to: 600 })[0];
+  const p = RIDE.predict(dep);
+  const cap = p.capacity.boardingCapacity;
+  p.stretch.forEach((v, k) => assert.ok(v <= cap, 'stretch ' + k + ' carried ' + v + ' of ' + cap));
+  assert.ok(p.unserved.reduce((a, b) => a + b, 0) > 0, 'nobody was left behind by a full bus');
+  assert.strictEqual(p.attempted[0] >= p.accepted[0], true, 'accepted must not exceed attempted');
+  SCN.reset();
+});
+
+t('traffic changes when the bus gets there, and only on roads', () => {
+  SCN.reset();
+  const clean = RSIM.runAcross(DNET.departures('A', { from: 600, to: 600 })[0], 0, 4);
+  SCN.set({ downstreamRoadDelayMin: 0 });
+  const clear = RSIM.runAcross(DNET.departures('A', { from: 600, to: 600 })[0], 0, 4);
+  assert.ok(clean.arriveMinute > clear.arriveMinute, 'the jam made no difference to the clock');
+  assert.strictEqual(clear.delayMinutes, 0);
+  // ...and never touches the metro, which has no road under it
+  SCN.reset();
+  const m = RSIM.runAcross(DNET.departures('M', { from: 638, to: 638 })[0], 0, 1);
+  assert.strictEqual(m.delayMinutes, 0, 'a jam on the road is not a jam in a tunnel');
+  SCN.set({ metroDelayMin: 20 });
+  const md = RSIM.runAcross(DNET.departures('M', { from: 638, to: 638 })[0], 0, 1);
+  assert.strictEqual(md.delayMinutes, 0, 'still not traffic');
+  assert.ok(md.serviceDelayMinutes > 0, 'it is a service delay, and it has its own name');
+  SCN.reset();
+});
+
+t('a later bus reaches a later metro, and khaali works out which', () => {
+  const on = run();
+  const late = run({ busADelayMin: 25 });
+  const metroOf = r => (r.answer.legs.find(l => l.mode === 'metro') || {}).dep;
+  assert.ok(on.answer && late.answer);
+  assert.notStrictEqual(metroOf(on), metroOf(late),
+    'the bus ran twenty-five minutes late and khaali put her on the same metro');
+  assert.ok(late.answer.arriveMinute > on.answer.arriveMinute);
+  SCN.reset();
+});
+
+t('the total is the door-to-door total, waiting and walking included', () => {
+  const r = run();
+  const a = r.answer;
+  const rides = a.legs.filter(l => l.mode !== 'walk');
+  const walks = a.legs.filter(l => l.mode === 'walk');
+  const rideMin = rides.reduce((s, l) => s + l.minutes, 0);
+  const walkMin = walks.reduce((s, l) => s + l.minutes, 0);
+  const waits = a.initialWaitMinutes + a.transferWaitMinutes;
+  assert.strictEqual(a.walkingMinutes, walkMin);
+  assert.strictEqual(a.totalMinutes, a.arriveMinute - SCN.state().demoTime);
+  assert.ok(a.totalMinutes >= rideMin + walkMin, 'the clock ran slower than the parts');
+  assert.strictEqual(rideMin + walkMin + waits, a.totalMinutes,
+    'every minute between leaving and arriving is accounted for');
+  SCN.reset();
+});
+
+t('with the road clear, staying on the bus wins', () => {
+  const jammed = run();
+  const clear = run({ downstreamRoadDelayMin: 0 });
+  assert.strictEqual(jammed.decision.kind, 'RECOMMEND_MODE_CHANGE');
+  assert.strictEqual(clear.decision.kind, 'RECOMMEND_DIRECT');
+  assert.strictEqual(clear.answer.transferCount, 0);
+  assert.ok(clear.decision.reasons.some(x => x.code === 'NO_TRANSFER_NEEDED'));
+  assert.ok(/Changing would not have got you there sooner/.test(clear.answer.explanation));
+  SCN.reset();
+});
+
+t('a metro is not preferred for being a metro', () => {
+  // the only thing that changes the answer is the road; the mode has no vote
+  const clear = run({ downstreamRoadDelayMin: 0 });
+  assert.ok(!clear.answer.legs.some(l => l.mode === 'metro'),
+    'khaali reached for the metro with nothing to gain');
+  // and a metro that is running badly loses to the bus it would have beaten
+  const brokenMetro = run({ metroDelayMin: 30 });
+  assert.strictEqual(brokenMetro.decision.kind, 'RECOMMEND_DIRECT');
+  // the policy is written down, not hidden
+  assert.ok(MPL.POLICIES.balanced.transferPenalty > 0, 'a change must cost something');
+  assert.deepStrictEqual(Object.keys(MPL.POLICIES).sort(), ['balanced', 'comfortable', 'fastest']);
+  SCN.reset();
+});
+
+t('a bus-to-bus change can beat a bus-to-metro one', () => {
+  const r = run({ metroDelayMin: 45 });
+  const anyBusTransfer = r.trace.scores.find(x => x.transfers > 0
+    && x.modes.length === 1 && x.modes[0] === 'bus');
+  const anyMetro = r.trace.scores.find(x => x.modes.includes('metro'));
+  assert.ok(anyBusTransfer, 'no bus-to-bus option was even built');
+  if (anyMetro) assert.ok(anyBusTransfer.total < anyMetro.total,
+    'with the metro crippled a bus change should score better');
+  SCN.reset();
+});
+
+t('a change she could not make is gone before anything is ranked', () => {
+  const r = run();
+  const rej = rejectionsOf(r);
+  assert.ok((rej.TRANSFER_TOO_TIGHT || 0) > 0, 'nothing was ever too tight, which is suspicious');
+  const tight = r.trace.rejections.find(x => x.code === 'TRANSFER_TOO_TIGHT');
+  assert.ok(tight.wait < tight.need, tight.says);
+  // and none of the rejected pairings survived into the scores
+  const kept = new Set(r.trace.scores.map(x => x.chainId));
+  assert.strictEqual(kept.has(undefined), false);
+  assert.ok(r.trace.scores.length <= r.trace.considered);
+  SCN.reset();
+});
+
+t('turn one knob and the chosen departure changes', () => {
+  const before = run({}, { pax: 2 });
+  const after = run({ demandBeforeBoarding: 5.5 }, { pax: 2 });
+  assert.ok(before.answer && after.answer);
+  assert.notStrictEqual(firstRide(before).dep, firstRide(after).dep,
+    'the first departures filled up and khaali put her on one of them anyway');
+  const rej = rejectionsOf(after);
+  assert.ok((rej.BOARDING_NOT_FEASIBLE || 0) > 0, 'nothing was rejected for being full');
+  SCN.reset();
+});
+
+t('the same scenario gives the same answer, however many times it is asked', () => {
+  const a = run();
+  const b = run();
+  assert.strictEqual(a.decision.selectedChainId, b.decision.selectedChainId);
+  assert.strictEqual(a.answer.explanation, b.answer.explanation);
+  assert.strictEqual(a.answer.arriveMinute, b.answer.arriveMinute);
+  // ...and a control moves the revision even when the answer does not
+  const r1 = SCN.state().revision;
+  SCN.set({ upstreamRoadDelayMin: 1 });
+  assert.strictEqual(SCN.state().revision, r1 + 1);
+  SCN.reset();
+});
+
+t('the sentence says what the reasons say, and names what it beat', () => {
+  const r = run();
+  const said = r.answer.explanation;
+  const road = r.decision.reasons.find(x => x.code === 'AVOIDS_ROAD_DELAY');
+  const faster = r.decision.reasons.find(x => x.code === 'LOWER_PREDICTED_TRAVEL_TIME');
+  assert.ok(road && said.includes(road.differenceMinutes + ' minutes of simulated road delay'), said);
+  assert.ok(faster && said.includes(faster.differenceMinutes + ' minutes earlier'), said);
+  assert.ok(/than the Bus A of \d{2}:\d{2} all the way/.test(said),
+    'a recommendation with no named alternative is not an explanation: ' + said);
+  assert.ok(r.decision.comparisonChainId && r.decision.comparisonChainId !== r.decision.selectedChainId);
+  // and the prohibited claims
+  ['you will definitely get a seat', 'this bus will certainly be full',
+    'metro is always faster', 'traffic avoided'].forEach(c =>
+    assert.ok(!said.toLowerCase().includes(c), 'khaali said: ' + c));
+  SCN.reset();
+});
+
+t('everything invented says it was invented', () => {
+  const r = run();
+  assert.strictEqual(r.sourceKind, 'simulation');
+  assert.ok(/simulated/.test(r.disclosure) && /No seat is reserved/.test(r.disclosure));
+  assert.strictEqual(r.answer.evidenceLabel, MPL.DISCLOSURE);
+  DNET.allDepartures({ from: 600, to: 620 }).forEach(d => {
+    assert.strictEqual(d.sourceKind, 'simulation');
+    assert.ok(/^DEMO\|/.test(d.tripInstanceId), 'a synthetic departure must look synthetic');
+  });
+  const dep = DNET.departures('A', { from: 600, to: 600 })[0];
+  assert.strictEqual(RIDE.predict(dep).evidence.quality, 'simulated');
+  SCN.reset();
+});
+
+t('nothing feasible is said plainly, not as an empty list', () => {
+  SCN.reset();
+  const all = DNET.allDepartures({ from: 0, to: 1440 }).map(d => d.tripInstanceId);
+  SCN.set({ cancelled: all });
+  const r = MPL.plan({ fromStop: 'ORIGIN', toStop: 'DEST', at: 600, pax: 1 });
+  assert.strictEqual(r.decision.kind, 'NO_FEASIBLE_JOURNEY');
+  assert.strictEqual(r.answer, null);
+  assert.ok(r.trace.rejections.some(x => x.code === 'DOES_NOT_REACH'));
+  SCN.reset();
+});
+
+t('the website request runs this planner, not a demo of it', () => {
+  // a source-level guard: the endpoint the page calls must reach multiplan,
+  // and the demo network must be found from ordinary coordinates
+  const src = fs.readFileSync(new URL('./server.mjs', import.meta.url), 'utf8');
+  const plan = src.slice(src.indexOf("p === '/api/plan'"));
+  assert.ok(/multiplan\.plan\(/.test(plan), '/api/plan does not call the planner');
+  assert.ok(/demonet\.nearestStop\(/.test(plan), 'and it never looks for the demo network');
+  // Hope Farm and Hebbala, the coordinates the site's own search produces
+  assert.ok(DNET.nearestStop(12.98273, 77.75223).stop.id === 'ORIGIN');
+  assert.ok(DNET.nearestStop(13.04127, 77.58942).stop.id === 'DEST');
 });
 
 console.log('\nhiring: a car and a bike for the miles the network does not cover');

@@ -49,6 +49,9 @@ import * as capacity from './capacity.mjs';
 import * as transfer from './transfer.mjs';
 import * as splitplan from './splitplan.mjs';
 import * as decision from './decision.mjs';
+import * as scenario from './scenario.mjs';
+import * as demonet from './demonet.mjs';
+import * as multiplan from './multiplan.mjs';
 import * as busledger from './busledger.mjs';
 import { BUSES } from './buses.mjs';
 import * as conductor from './conductor.mjs';
@@ -635,6 +638,36 @@ async function geocodeRetry(q) {
   return geocodeOnce(q, 1);
 }
 /** "lat,lng" from a query string, or null. */
+/**
+ * The multimodal planner's answer, as a chain the plan page already draws.
+ *
+ * Nothing is invented here: every field is copied from what multiplan already
+ * computed and checked. The seat word is deliberately the honest one - khaali
+ * reserves nothing on a bus or a metro, so the journey-wide claim is unknown
+ * and the per-leg predicted room is what the card shows.
+ */
+function multiplanChain(mp) {
+  const a = mp.answer;
+  const legs = a.legs.map(l => l.mode === 'walk'
+    ? { ...l, name: 'Walk', min: l.minutes, source: 'measured', seat: null, fare: 0 }
+    : { ...l, id: l.routeId, min: l.minutes, source: 'simulated',
+        seat: { word: 'unknown', rank: null, why: 'khaali reserves no place on a bus or a metro' },
+        cap: (l.crowding && l.crowding.length)
+          ? (() => { const w = l.crowding.reduce((p, c) => (!p || c.occupancy > p.occupancy) ? c : p, null);
+              const b = load.bandOf(w.occupancy, 'simulated', l.mode === 'metro' ? 'metro' : 'bus');
+              return { occupancy: w.occupancy, quality: 'simulated', band: b.band,
+                colour: b.colour, texture: b.texture, word: b.word }; })()
+          : null });
+  return { kind: 'planned', legs, dep: a.legs[0].depMin, arr: a.arriveMinute,
+    fare: a.totalFare, modes: legs.filter(l => l.mode !== 'walk').map(l => l.mode),
+    totalMin: a.totalMinutes, depText: multiplan.hhmm(a.legs[0].depMin),
+    arrText: a.arrivalTime, changes: a.transferCount, simulated: true,
+    seat: { word: 'unknown', why: 'khaali reserves no place on a bus or a metro' },
+    seatClaim: { rail: null, journeyWide: false,
+      road: { word: 'unreserved', modes: [...new Set(legs.filter(l => l.mode !== 'walk').map(l => l.mode))],
+        basis: 'simulated demand', why: mp.disclosure } },
+    chainId: a.chainId, planned: { decision: mp.decision, answer: a, scenario: mp.scenarioId } };
+}
 function pointOf(id) {
   const m = String(id || '').match(/^(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)$/);
   if (!m) return null;
@@ -1512,6 +1545,28 @@ async function api(req, res, url) {
       note: 'Simulated. No operator is connected to khaali, and no number here was measured.' });
   }
 
+  /* The demo's state of the world.
+     Reading it is free; moving it is a state change on a shared demo, so it is
+     gated the same way the shared clock is - a signed-in person may turn the
+     traffic up, an anonymous cross-site POST may not. */
+  if (p === '/api/scenario') {
+    if (req.method === 'POST') {
+      const who = await whoIs(req);
+      if (!who) return send(res, 401, { needsAuth: true, error: 'Sign in to change the demo scenario.' });
+      const b = await readBody(req);
+      if (b && b.reset) scenario.reset(); else scenario.set(b || {});
+    }
+    const st = scenario.state();
+    return send(res, 200, { ok: true, scenario: st,
+      knobs: Object.keys(scenario.KNOBS),
+      stops: demonet.STOPS, routes: demonet.ROUTES.map(r => ({ id: r.id, name: r.name,
+        mode: r.mode, stops: r.stops, every: r.every })),
+      departures: demonet.allDepartures({ from: st.demoTime - 30, to: st.demoTime + 120 })
+        .map(d => ({ tripInstanceId: d.tripInstanceId, name: d.name, mode: d.mode,
+          departureTime: d.departureTime, cancelled: d.cancelled })),
+      note: demonet.LABEL });
+  }
+
   if (p === '/api/geo') {
     return send(res, 200, {
       stations: ST.map((s, i) => ({
@@ -2289,6 +2344,32 @@ async function api(req, res, url) {
        going to a corridor station or to a bus stop in Hebbala. The old code
        gated on both endpoints being stations and therefore never ran on the
        journeys people search for. */
+    /* THE DEMAND-AND-TRAFFIC-AWARE PLANNER.
+       It runs on this endpoint - the one the website calls - rather than behind
+       a demo button, and only when both ends of the search fall inside the small
+       network it can reason about completely. Its clock is the scenario's, not
+       the wall's, because a fixed clock is what makes the answer reproducible.
+
+       When it answers, its decision leads. The rail availability check below
+       still runs and is reported beside it, because they answer different
+       questions: one is about berths khaali allocates, the other about which
+       vehicle to be on for each stretch. */
+    let mp = null;
+    try {
+      const A = fromEnd.lat != null ? demonet.nearestStop(fromEnd.lat, fromEnd.lng)
+        : (fromEnd.kind === 'rail' ? demonet.nearestStop(GEO[ST.findIndex(x => x.c === fid)].lat,
+          GEO[ST.findIndex(x => x.c === fid)].lng) : null);
+      const B = toEnd.lat != null ? demonet.nearestStop(toEnd.lat, toEnd.lng)
+        : (toEnd.kind === 'rail' ? demonet.nearestStop(GEO[ST.findIndex(x => x.c === tid)].lat,
+          GEO[ST.findIndex(x => x.c === tid)].lng) : null);
+      if (A && B && A.stop.id !== B.stop.id) {
+        const st = scenario.state();
+        mp = multiplan.plan({ fromStop: A.stop.id, toStop: B.stop.id,
+          at: st.demoTime, pax, policy: profile });
+        mp.access = { from: A, to: B };
+      }
+    } catch (e) { mp = null; }
+
     let decided = null, splitChain = null;
     try {
       const canSwap = modes.includes('bus') && modes.includes('train');
@@ -2334,12 +2415,38 @@ async function api(req, res, url) {
         return { ...d, lines: compare.lines(d), foot: compare.FOOT };
       })()
       : null;
+    /* The planner's answer joins the list AFTER the corridor allocator has
+       finished with the others. It is not ranked by allocate.mjs - it has its
+       own written-down policy, its own comparison and its own reasons, and
+       putting it through a second scorer would mean two things deciding and
+       neither explaining. It leads, because its decision is the answer. */
+    if (mp && mp.answer) {
+      try {
+        const ch = multiplanChain(mp);
+        ch.alloc = { labels: [], why: mp.answer.explanation };
+        a.chains.unshift(ch);
+        a.recommended = 0;
+      } catch (e) { /* the list is still an answer without it */ }
+    }
     const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
       recommended: a.recommended, reason: a.reason, compare: cmp,
-      decision: decided,
-      decisionLines: decision.lines(decided),
+      // the multimodal planner's decision leads when it has one; the rail
+      // availability check is reported beside it, never merged into it
+      scenario: mp ? { scenarioId: mp.scenarioId, seed: mp.seed, demoTime: mp.demoTime,
+        revision: mp.revision, sourceKind: mp.sourceKind } : null,
+      decision: mp ? mp.decision : decided,
+      railDecision: decided,
+      answer: mp ? mp.answer : null,
+      others: mp ? mp.others : [],
+      trace: (mp && q.get('trace') === '1') ? mp.trace : undefined,
+      disclosure: mp ? mp.disclosure : null,
+      decisionLines: mp ? [mp.answer && mp.answer.explanation, mp.disclosure].filter(Boolean)
+        : decision.lines(decided),
       explanation: allocate.sentence(a.reason) };
-    if (q.get('trace') === '1') out.trace = allocate.trace(a.chains);
+    /* allocate.trace reads fields allocate.allocate put there, and the
+       planner's chain never went through it - it has its own trace. Tracing
+       the corridor chains means tracing the ones the corridor scorer ranked. */
+    if (q.get('trace') === '1') out.allocTrace = allocate.trace(a.chains.filter(c => c.alloc && c.alloc.pressure));
     return send(res, 200, out);
   }
 
@@ -3686,6 +3793,7 @@ function serveStatic(res, urlPath) {
   if (rel === '/live-map') rel = '/map.html';
   if (rel === '/network') rel = '/network.html';           // the whole city, coloured               // real-geography live map
   if (rel === '/conduct' || rel.startsWith('/conduct/')) rel = '/conduct.html';  // the demo conductor
+  if (rel === '/scenario' || rel.startsWith('/scenario/')) rel = '/scenario.html';  // the presenter's controls
   const clean = path.normalize(rel).replace(/^([.][.][/\\])+/, '');
   const inPub = path.join(PUB, clean);
   const inParent = path.join(PARENT, clean);

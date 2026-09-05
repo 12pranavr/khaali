@@ -110,6 +110,14 @@ const isUnpublished = leg => scheduleKindOf(leg) !== 'fixed';
  * Off a service khaali declared outright, the full allowance.
  */
 export function requiredFor(inLeg) {
+  /* When the arriving leg carries its own uncertainty, spend that instead of
+     the heuristic. The headway rule is about not knowing WHEN THE BUS LEAVES,
+     and once she is aboard that question is settled - what is left is how far
+     the predicted arrival could be out, which a model that costed the traffic
+     can state directly. Using a whole headway there would refuse connections
+     nobody would think twice about. */
+  const own = Number(inLeg && inLeg.uncertaintyMinutes);
+  if (Number.isFinite(own) && own >= 0) return BUFFER.boarding + Math.round(own);
   const kind = scheduleKindOf(inLeg);
   if (kind === 'fixed') return BUFFER.boarding;
   const head = Number(inLeg && inLeg.every) || 0;

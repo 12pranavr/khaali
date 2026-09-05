@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>khaali · scenario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* A presenter drives this next to the passenger page and watches the answer
+     move. One control per row, the effect visible without scrolling. */
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0f13;color:#e8e9ee;font-family:Manrope,system-ui,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:18px 18px 48px;display:grid;
+    grid-template-columns:minmax(300px,1fr) minmax(320px,1.15fr);gap:16px;align-items:start}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr}}
+  .full{grid-column:1/-1}
+  .brand{font:800 18px/1 Manrope,sans-serif;letter-spacing:-.02em}
+  .brand span{color:#d8385a}
+  .brand small{display:block;font:600 9.5px/1.6 'IBM Plex Mono',monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c828f;margin-top:4px}
+  .card{background:#151922;border:1px solid #222836;border-radius:12px;padding:16px;margin-top:12px}
+  .lbl{font:700 9.5px/1 'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;
+    color:#7c828f;margin-bottom:12px;display:flex;justify-content:space-between;gap:10px}
+  .knob{padding:11px 0;border-top:1px solid #1c202a}
+  .knob:first-of-type{border-top:none}
+  .knob .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .knob .k{font:700 13px/1.4 Manrope,sans-serif}
+  .knob .v{font:700 13px/1 'IBM Plex Mono',monospace;color:#5bd48b}
+  .knob .d{font:500 11px/1.5 Manrope,sans-serif;color:#7c828f;margin-top:2px}
+  input[type=range]{width:100%;margin-top:8px;accent-color:#d8385a}
+  .answer{border-radius:12px;padding:18px;border:1px solid #1f5a38;background:#0f2b1b}
+  .answer.direct{border-color:#4a4a1f;background:#232113}
+  .answer.none{border-color:#5a1f2e;background:#2c1219}
+  .kind{font:800 20px/1.15 Manrope,sans-serif;letter-spacing:-.02em}
+  .arrive{font:700 12px/1 'IBM Plex Mono',monospace;color:#b9bfcc;margin-top:6px;letter-spacing:.06em}
+  .why{font:600 13px/1.65 Manrope,sans-serif;color:#dfe3ea;margin-top:12px}
+  .leg{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid #1c202a;
+    font:600 12.5px/1.4 Manrope,sans-serif}
+  .leg .t{flex:none;width:96px;font-family:'IBM Plex Mono',monospace;color:#7c828f;font-size:11px}
+  .pill{display:inline-block;font:700 8.5px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;
+    text-transform:uppercase;padding:4px 6px;border-radius:5px;background:#232838;color:#8d94a3;margin-left:6px}
+  .pill.sim{background:#2a2413;color:#e0a419}
+  .reasons{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+  .reason{font:700 9px/1 'IBM Plex Mono',monospace;letter-spacing:.09em;padding:5px 7px;
+    border-radius:5px;background:#1b2430;color:#8fb8d8}
+  button{border:none;border-radius:10px;padding:12px;cursor:pointer;
+    font:800 13px/1.2 Manrope,sans-serif;color:#fff;background:#d8385a;margin-top:10px;width:100%}
+  button.ghost{background:#232838;color:#b9bfcc}
+  .trips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .trip{font:600 10px/1 'IBM Plex Mono',monospace;padding:6px 7px;border-radius:5px;
+    background:#1c2130;color:#9aa2b1;cursor:pointer;border:1px solid #262d3d}
+  .trip.off{background:#3a1520;color:#f2a6b6;border-color:#5a1f2e;text-decoration:line-through}
+  .foot{font:500 11px/1.7 Manrope,sans-serif;color:#6b7280;border-top:1px solid #1c202a;padding-top:14px;margin-top:20px}
+  .foot b{color:#8d94a3}
+  .warn{font:600 12px/1.5 Manrope,sans-serif;color:#e0a419;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="full brand">khaali<span>.</span><small>scenario · demo data only</small></div>
+
+  <div>
+    <div class="card">
+      <div class="lbl"><span>Conditions</span><span id="rev"></span></div>
+      <div id="knobs"></div>
+      <button class="ghost" id="reset">Reset to the seeded scenario</button>
+      <div class="warn" id="warn"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl"><span>Services</span><span>tap to cancel</span></div>
+      <div class="trips" id="trips"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-top:12px;padding:0;border:none;background:none">
+      <div class="answer" id="answer">
+        <div class="kind">Loading</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="lbl"><span>What else was on the table</span></div>
+      <div id="others"></div>
+    </div>
+  </div>
+
+  <div class="full foot">
+    <b>Every number on this page is invented.</b> No operator feed, no traffic subscription and no
+    ticketing integration is connected to khaali. The departures are synthetic, the road delay is a
+    number somebody typed, and the passenger demand is a deterministic model &mdash; the same
+    scenario, seed and clock always produce the same answer, so a refresh never changes the
+    recommendation on its own.<br><br>
+    <b>khaali does not reserve a place on a bus or a metro.</b> The capacity checks are about whether
+    it is sensible to send somebody to a departure, not a promise that they will get on it.<br><br>
+    <b>The recommendation is not stored here.</b> These controls set conditions; the planner works out
+    the answer from them. Nothing in this panel says which vehicle should win.
+  </div>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var esc=function(s){return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+  var hhmm=function(m){if(m==null)return '--:--';var d=((m%1440)+1440)%1440;
+    return ('0'+Math.floor(d/60)).slice(-2)+':'+('0'+(d%60)).slice(-2);};
+
+  var KNOBS=[
+    {k:'downstreamRoadDelayMin',n:'Road delay after the interchange',min:0,max:90,step:5,
+     d:'Minutes of simulated traffic between K R Puram and Hebbala. The reason a through bus can lose to a change.'},
+    {k:'upstreamRoadDelayMin',n:'Road delay before the interchange',min:0,max:60,step:5,
+     d:'Makes the feeder late rather than the onward stretch slow.'},
+    {k:'demandBeforeBoarding',n:'Demand before she boards',min:0,max:6,step:0.5,
+     d:'A surge at the origin. It clears: filling the 10:00 leaves the 10:20 emptier.'},
+    {k:'demandAfterInterchange',n:'Demand after the interchange',min:0,max:6,step:0.5,
+     d:'Crowding on the stretch she would ride through, which is not the same as a jam.'},
+    {k:'busADelayMin',n:'Bus A running late',min:0,max:45,step:5,
+     d:'A late vehicle. It may miss the metro it was going to catch.'},
+    {k:'metroDelayMin',n:'Metro service delay',min:0,max:45,step:5,
+     d:'The trip takes longer. Not a road delay - there is no traffic in a tunnel.'},
+    {k:'walkExtraMin',n:'Extra walking at the interchange',min:0,max:20,step:1,
+     d:'Enough of it wipes out the benefit of changing at all.'}
+  ];
+
+  var S=null, DEPS=[], BUSY=false;
+
+  function drawKnobs(){
+    $('knobs').innerHTML=KNOBS.map(function(o){
+      var v=S[o.k];
+      return '<div class="knob"><div class="top"><span class="k">'+esc(o.n)+'</span>'
+        +'<span class="v" id="v_'+o.k+'">'+v+'</span></div>'
+        +'<div class="d">'+esc(o.d)+'</div>'
+        +'<input type="range" min="'+o.min+'" max="'+o.max+'" step="'+o.step+'" value="'+v+'" data-k="'+o.k+'">'
+        +'</div>';
+    }).join('');
+    [].forEach.call($('knobs').querySelectorAll('input'),function(el){
+      el.oninput=function(){ $('v_'+el.dataset.k).textContent=el.value; };
+      el.onchange=function(){ var b={}; b[el.dataset.k]=parseFloat(el.value); push(b); };
+    });
+    $('rev').textContent='rev '+S.revision+' · seed '+S.seed+' · '+hhmm(S.demoTime);
+  }
+
+  function drawTrips(){
+    $('trips').innerHTML=DEPS.map(function(d){
+      return '<span class="trip'+(d.cancelled?' off':'')+'" data-id="'+esc(d.tripInstanceId)+'">'
+        +esc(d.name)+' '+hhmm(d.departureTime)+'</span>';
+    }).join('');
+    [].forEach.call($('trips').querySelectorAll('.trip'),function(el){
+      el.onclick=function(){
+        var id=el.dataset.id;
+        var list=(S.cancelled||[]).slice();
+        var i=list.indexOf(id);
+        if(i>=0) list.splice(i,1); else list.push(id);
+        push({cancelled:list});
+      };
+    });
+  }
+
+  function drawAnswer(j){
+    var d=j.decision||{}, a=j.answer;
+    var el=$('answer');
+    el.className='answer'+(d.kind==='RECOMMEND_DIRECT'?' direct':(a?'':' none'));
+    if(!a){
+      el.innerHTML='<div class="kind">No feasible journey</div>'
+        +'<div class="why">Nothing khaali checked could get her there under these conditions.</div>';
+      $('others').innerHTML=''; return;
+    }
+    var legs=a.legs.map(function(l){
+      return '<div class="leg"><span class="t">'+esc(l.dep)+' &rarr; '+esc(l.arr)+'</span>'
+        +'<span>'+esc(l.name||'Walk')+' &middot; '+esc(l.from)+' to '+esc(l.to)
+        +(l.delayMinutes?('<span class="pill sim">+'+l.delayMinutes+' traffic</span>'):'')
+        +(l.serviceDelayMinutes?('<span class="pill sim">+'+l.serviceDelayMinutes+' service</span>'):'')
+        +'</span></div>';
+    }).join('');
+    el.innerHTML='<div class="kind">'+esc(String(d.kind||'').replace(/_/g,' ').toLowerCase()
+        .replace(/^./,function(c){return c.toUpperCase();}))+'</div>'
+      +'<div class="arrive">ARRIVES '+esc(a.arrivalTime)+' &middot; '+a.totalMinutes+' MIN &middot; '
+        +a.transferCount+' CHANGE'+(a.transferCount===1?'':'S')+' &middot; ₹'+a.totalFare+'</div>'
+      +'<div class="why">'+esc(a.explanation)+'</div>'
+      +'<div class="reasons">'+(d.reasons||[]).map(function(r){
+          return '<span class="reason">'+esc(r.code)
+            +(r.differenceMinutes!=null?(' '+r.differenceMinutes+'m'):'')+'</span>';}).join('')+'</div>'
+      +'<div style="margin-top:12px">'+legs+'</div>';
+    $('others').innerHTML=(j.others||[]).map(function(o){
+      return '<div class="leg"><span class="t">'+esc(o.arrivalTime)+'</span><span>'
+        +esc(o.modes.join(' + '))+' &middot; '+o.totalMinutes+' min &middot; '+o.transferCount
+        +' change'+(o.transferCount===1?'':'s')+' &middot; score '+o.score+'</span></div>';
+    }).join('')||'<div class="leg"><span>Nothing else was feasible.</span></div>';
+  }
+
+  var URL='/api/plan?fromKind=place&fromId=12.98273,77.75223&fromName=Hope%20Farm'
+    +'&toKind=place&toId=13.04127,77.58942&toName=Hebbala&pax=1&profile=balanced';
+
+  function replan(){
+    fetch(URL).then(function(r){return r.json();}).then(function(j){
+      if(j&&j.decision) drawAnswer(j);
+    }).catch(function(){});
+  }
+
+  function load(){
+    fetch('/api/scenario').then(function(r){return r.json();}).then(function(j){
+      if(!j||!j.ok)return;
+      S=j.scenario; DEPS=j.departures||[];
+      drawKnobs(); drawTrips(); replan();
+    }).catch(function(){});
+  }
+
+  function push(body){
+    if(BUSY)return; BUSY=true; $('warn').textContent='';
+    fetch('/api/scenario',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify(body)})
+      .then(function(r){ if(r.status===401){ $('warn').textContent=
+          'Sign in on the main site to change the scenario. Anyone may read it.'; return null; }
+        return r.json(); })
+      .then(function(j){ BUSY=false; if(!j||!j.ok)return;
+        S=j.scenario; DEPS=j.departures||[]; drawKnobs(); drawTrips(); replan(); })
+      .catch(function(){ BUSY=false; });
+  }
+
+  $('reset').onclick=function(){ push({reset:true}); };
+  load();
+})();
+</script>
+</body>
+</html>
