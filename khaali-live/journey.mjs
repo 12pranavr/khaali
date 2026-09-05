@@ -1033,6 +1033,10 @@ export function journeysAnywhere(req) {
         depText: hhmm(dayMin(dep)), arrText: hhmm(dayMin(arr)),
         changes: Math.max(0, modes.length - 1),
         seat: seated.length ? seated.reduce((p, l) => l.seat.rank < p.seat.rank ? l : p).seat : { word: 'unknown', why: '' },
+        // the one-bus journey never carried a seat claim, so the card's badge
+        // fell back to guessing from boarding position - "SEAT IF LUCKY" on a
+        // vehicle khaali holds nothing on
+        seatClaim: seatClaimOf(m.legs),
         simulated: m.legs.some(l => l.source === 'simulated'),
         via: { from: null, to: null },
       });

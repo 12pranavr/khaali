@@ -2440,6 +2440,40 @@ async function api(req, res, url) {
         a.recommended = 0;
       } catch (e) { /* the list is still an answer without it */ }
     }
+    /* EVERY card carries its own explanation, not just the one khaali picked.
+       A row the reader is weighing deserves the same honesty as the winner:
+       what was checked on THIS journey, what was not, and what a click on it
+       actually does. The planned chain keeps the full evaluated rationale; the
+       rest each get their own rail check, because that is what was actually
+       established about them - and nothing more is claimed. */
+    /* The one specific alternative this card is measured against: the route
+       she would have taken without khaali when that is a different journey,
+       otherwise the next journey in the ranking. Same search, same party, same
+       constraints - the comparison is computed inside card.mjs from the two
+       itineraries, never copied off a page-level panel. Only the recommended
+       row gets it for now; the rollout to every card waits for approval. */
+    const pickedForCards = a.chains[a.recommended] || a.chains[0];
+    const altForPicked = (obvious && obvious.chain && obvious.chain !== pickedForCards)
+      ? obvious.chain : a.chains.find(x => x !== pickedForCards) || null;
+    a.chains.forEach(ch => {
+      try {
+        if (ch.kind === 'planned' && mp && mp.answer) {
+          ch.card = card.build({ chain: ch, mp, railDecision: null,
+            searchAt: mp.demoTime,
+            scenario: { scenarioId: mp.scenarioId, revision: mp.revision } });
+        } else {
+          const d2 = decision.decide({ chain: ch, pax, date,
+            after: (after >= 0 && after < 1440) ? after : 0,
+            countsFor: (no, d, cls, f, t) => store.countsFor(String(no), d, cls, f, t),
+            ledger: BUSCLAIMS, findSplit: null });
+          ch.card = card.build({ chain: ch, mp: null, railDecision: d2,
+            searchAt: (after >= 0 && after < 1440) ? after : null,
+            selectedChainId: decision.chainId(ch),
+            alternative: (ch === pickedForCards && altForPicked)
+              ? { chain: altForPicked, chainId: decision.chainId(altForPicked) } : null });
+        }
+      } catch (e) { ch.card = null; }
+    });
     const out = { ok: true, chains: a.chains, date, modes, profile, tried: r.tried || null,
       recommended: a.recommended, reason: a.reason, compare: cmp,
       // the multimodal planner's decision leads when it has one; the rail

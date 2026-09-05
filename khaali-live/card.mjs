@@ -199,7 +199,8 @@ function availabilityOf(l, railCheck) {
  * and the status decides what the card is allowed to say.
  */
 export function build({ chain, mp = null, railDecision = null, searchAt = null,
-                        scenario = null, bookingStatus = 'NONE' } = {}) {
+                        scenario = null, bookingStatus = 'NONE',
+                        alternative = null, selectedChainId = null } = {}) {
   if (!chain || !chain.legs || !chain.legs.length) return null;
   const legs = chain.legs;
   const t = timing(legs, searchAt);
@@ -232,6 +233,15 @@ export function build({ chain, mp = null, railDecision = null, searchAt = null,
         benefit: benefitFor(cmp, t, legs, mp),
         choices: (mp.decision.choices || []).slice(0, 3),
       } : null,
+      /* This card against ONE named alternative from the same search - the
+         per-card comparison, computed rather than copied from a page-level
+         panel that may have been about something else. Null whenever the
+         differences could not actually be established. */
+      optionComparison: (!evaluated && alternative && alternative.chain)
+        ? optionComparisonOf(chain, alternative.chain, {
+          selectedChainId,
+          alternativeChainId: alternative.chainId || null })
+        : null,
       selectedChainId: (mp && mp.decision && mp.decision.selectedChainId) || chain.chainId || null,
       decisionKind: (mp && mp.decision && mp.decision.kind)
         || (railDecision && railDecision.kind) || null,
@@ -316,6 +326,105 @@ function comparisonOf(mp) {
     reasons: d.reasons,
     question: questionFor(d, faster, road, crowd, below),
     answer: answerFor(d, mp, faster, road, crowd, below),
+  };
+}
+
+/** 110 -> "1 hour 50 minutes". A card is read aloud, not parsed. */
+const fmtDur = (m) => {
+  const n = Math.abs(Math.round(m));
+  if (n < 60) return mins(n);
+  const h = Math.floor(n / 60), r = n % 60;
+  return h + (h === 1 ? ' hour' : ' hours') + (r ? (' ' + mins(r)) : '');
+};
+
+/**
+ * This card against ONE named alternative from the same search.
+ *
+ * The page used to carry a panel at the top claiming the pick was cheaper and
+ * less crowded while the card underneath said demand was never evaluated - two
+ * evaluators, one screen, contradicting each other. This is the fix, not a
+ * relocation: the numbers are computed HERE, from the two journeys as planned
+ * for this exact search - same origin, destination, party and constraints -
+ * and only differences that were actually established become sentences. Time,
+ * fare and transfers are hard numbers off the itineraries. Bus load is the
+ * simulated demand model and says so. Road traffic was not evaluated on this
+ * path, so no sentence claims it.
+ */
+export function optionComparisonOf(chain, alt, { selectedChainId = null,
+                                                 alternativeChainId = null } = {}) {
+  if (!chain || !alt || !alt.legs) return null;
+  const namesOf = c => (c.legs || []).filter(l => l.mode !== 'walk')
+    .map(l => l.name || l.line || MODE_WORD[l.mode] || l.mode);
+  const selNames = namesOf(chain), altNames = namesOf(alt);
+  if (!selNames.length || !altNames.length) return null;
+  const dest = chain.legs[chain.legs.length - 1].to;
+
+  const timeDifferenceMinutes = (chain.totalMin != null && alt.totalMin != null)
+    ? alt.totalMin - chain.totalMin : null;          // positive: this one is faster
+  const fareDifference = (chain.fare != null && alt.fare != null)
+    ? chain.fare - alt.fare : null;                  // negative: this one is cheaper
+  const transferDifference = (chain.changes != null && alt.changes != null)
+    ? chain.changes - alt.changes : null;            // negative: fewer changes
+
+  const differences = [];
+  if (timeDifferenceMinutes > 0) differences.push(fmtDur(timeDifferenceMinutes) + ' faster');
+  else if (timeDifferenceMinutes < 0) differences.push(fmtDur(timeDifferenceMinutes) + ' slower');
+  if (fareDifference < 0) differences.push('₹' + (-fareDifference) + ' cheaper');
+  else if (fareDifference > 0) differences.push('₹' + fareDifference + ' more');
+  if (transferDifference < 0) differences.push(-transferDifference === 1
+    ? 'one fewer transfer' : (-transferDifference) + ' fewer transfers');
+  else if (transferDifference > 0) differences.push(transferDifference === 1
+    ? 'one more transfer' : transferDifference + ' more transfers');
+  if (!differences.length) return null;              // nothing established, nothing said
+
+  // the sentence states what was won and owns what was lost
+  const gains = [], costs = [];
+  if (timeDifferenceMinutes > 0) gains.push('gets you to ' + dest + ' '
+    + fmtDur(timeDifferenceMinutes) + ' earlier');
+  else if (timeDifferenceMinutes < 0) costs.push('arrives ' + fmtDur(timeDifferenceMinutes) + ' later');
+  if (fareDifference < 0) gains.push('costs ₹' + (-fareDifference) + ' less');
+  else if (fareDifference > 0) costs.push('costs ₹' + fareDifference + ' more');
+  if (transferDifference < 0) gains.push(-transferDifference === 1
+    ? 'avoids a transfer' : ('avoids ' + (-transferDifference) + ' transfers'));
+  else if (transferDifference > 0) costs.push('adds ' + (transferDifference === 1
+    ? 'a transfer' : transferDifference + ' transfers'));
+  const list = a => a.length === 1 ? a[0]
+    : a.slice(0, -1).join(', ') + (a.length > 2 ? ',' : '') + ' and ' + a[a.length - 1];
+  const summaryReason = (gains.length ? ('It ' + list(gains)) : 'It holds its own')
+    + (costs.length ? ((gains.length ? ', though it ' : 'It ') + list(costs)) : '') + '.';
+
+  // what the simulated model says about the ride she would actually be on
+  const capped = (chain.legs || []).filter(l => l.mode !== 'walk'
+    && l.cap && l.cap.occupancy != null);
+  const worst = capped.length
+    ? capped.reduce((p, l) => l.cap.occupancy > p.cap.occupancy ? l : p) : null;
+  const demandEvidence = worst ? {
+    occupancy: worst.cap.occupancy, quality: worst.cap.quality || 'simulated',
+    says: 'Predicted bus load: ' + Math.round(worst.cap.occupancy * 100)
+      + '% at the busiest point of your ride.',
+  } : null;
+
+  const single = chain.changes === 0 && selNames.length === 1;
+  return {
+    selectedChainId, alternativeChainId,
+    selectedLabel: selNames.join(' then '),
+    alternativeLabel: altNames.join(' then '),
+    headline: (single ? ('Stay on ' + selNames[0] + ' instead of taking ')
+      : ('Take ' + selNames.join(' then ') + ' instead of '))
+      + altNames.join(' then ') + '.',
+    summaryReason,
+    differences,
+    timeDifferenceMinutes, fareDifference, transferDifference,
+    demandEvidence,
+    trafficEvidence: 'not evaluated',
+    disclosure: (demandEvidence ? 'Bus demand is simulated; ' : '')
+      + 'road traffic is not evaluated. No bus seat is reserved.',
+    thisArrive: chain.arrText || null, thisTotalMinutes: chain.totalMin,
+    alternativeArrive: alt.arrText || null, alternativeTotalMinutes: alt.totalMin,
+    howEstimated: 'Times, fares and transfers computed from the two journeys as planned '
+      + 'for this exact search - same origin, destination, party size and constraints. '
+      + 'The bus load is khaali’s simulated demand model, not a measurement; '
+      + 'road traffic was not evaluated on this route.',
   };
 }
 
