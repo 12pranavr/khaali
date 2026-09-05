@@ -16,8 +16,9 @@
 import { ST } from './data.mjs';
 import { GEO } from './geo.mjs';
 import { toMin, hhmm } from './engine.mjs';
-import { LINE, STOPS, HEADWAYS, FARE, ENTRANCES, STREET_TO_PLATFORM_MIN } from './metro.mjs';
-import { BUSES, BUS_FARE_PER_KM, BUS_MIN_FARE } from './buses.mjs';
+import { LINE, STOPS, HEADWAYS, FARE, ENTRANCES, STREET_TO_PLATFORM_MIN,
+  fareFor as metroFareFor } from './metro.mjs';
+import { BUSES, BUS_FARE_PER_KM, BUS_MIN_FARE, busFareFor } from './buses.mjs';
 import { TRAINS } from './data.mjs';
 import { serves, sMin, fare as railFare } from './engine.mjs';
 import * as hire from './hire.mjs';
@@ -238,7 +239,11 @@ export function plan({ arriveAt, needs = [], from = null, to = null, toIdx = nul
   return {
     ok: true, legs,
     arrive: ride.alight, arriveText: hhmm(ride.alight % 1440),
-    fare: { qr: FARE.qr, smartcard: peak ? FARE.smartcard.peak : FARE.smartcard.offpeak, peak },
+    /* Priced for the stations she rides between, not the length of the
+       line. This charged the end-to-end fare for a two-station hop. */
+    fare: (() => { const q = metroFareFor(km(ride.from, ride.to));
+      const disc = r => Math.max(1, Math.round((q * r) / 2) * 2);
+      return { qr: q, smartcard: peak ? disc(0.95) : disc(0.90), peak }; })(),
     totalMin: ride.alight - arriveAt,
     namesake: walking ? { km: b.namesakeKm, name: STOPS.find(s => /Whitefield/.test(s.n)).n } : null,
     line: explain({ b, ent, walkMin, nm, ride, alightCrowd, walking, startStop }),
@@ -296,7 +301,8 @@ export function priceTripLegs(legs) {
     if (mode === 'metro') {
       const i = stopIdx(String((l && l.fromId) || '')), j = stopIdx(String((l && l.toId) || ''));
       if (i < 0 || j < 0 || i === j) return { ok: false, error: 'khaali does not know that metro leg.' };
-      out.push({ mode: 'metro', name: LINE.name, from: STOPS[i].n, to: STOPS[j].n, fare: FARE.qr });
+      out.push({ mode: 'metro', name: LINE.name, from: STOPS[i].n, to: STOPS[j].n,
+        fare: metroFareFor(km(STOPS[i], STOPS[j])) });
     } else if (mode === 'bus') {
       const known = BUSES.find(b => b.id === String((l && l.id) || ''));
       if (known && known.op !== 'BMTC') {
@@ -872,7 +878,7 @@ export function journeys({ from, to, after = 0, by = null, modes = MODES, needs 
 
 function busFare(b) {
   const d = km({ lat: b.fromLat, lng: b.fromLng }, { lat: b.toLat, lng: b.toLng });
-  return Math.max(BUS_MIN_FARE, Math.round(d * BUS_FARE_PER_KM / 5) * 5);
+  return busFareFor(d);
 }
 function busLegOut(b, nb, arrive) {
   return { mode: 'bus', id: b.id, name: b.op + ' ' + b.id, from: b.from, to: b.to,

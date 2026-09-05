@@ -29,6 +29,35 @@ export const LAST = '22:45';
 /** Whitefield -> Majestic, rupees, by how you pay. Peak is 08-12 and 16-21. */
 export const FARE = { qr: 80, token: 80, smartcard: { peak: 76, offpeak: 72 } };
 
+/**
+ * What a metro ride costs, by how far it goes.
+ *
+ * FARE above is the END-TO-END fare, and khaali was charging it for every
+ * ride on the line - eighty rupees to go two stations, which is not what the
+ * gate takes. BMRCL prices in distance bands, so khaali does too. The bands
+ * are calibrated so Whitefield to Majestic still comes to the published
+ * eighty; the short hops are the ones that were wrong.
+ *
+ * Track kilometres, not the line between the platforms: a metro curves, but
+ * far less than a road does.
+ */
+export const RAIL_FACTOR = 1.2;
+/* The top bands are wide because BMRCL's are: the only published fare khaali
+   actually holds is that this corridor costs 80 rupees, and a ride one station
+   shorter is not a different price. The bands are made to reproduce that. */
+export const FARE_BANDS = [
+  [2, 10], [4, 15], [6, 20], [8, 25], [12, 30],
+  [15, 40], [18, 50], [21, 60], [22, 70], [32, 80],
+];
+export const FARE_MAX = 90;
+
+/** `straightKm` is the line between two stations; the band is on track km. */
+export function fareFor(straightKm) {
+  const track = Math.max(0, straightKm) * RAIL_FACTOR;
+  for (const [upTo, rupees] of FARE_BANDS) if (track <= upTo) return rupees;
+  return FARE_MAX;
+}
+
 /** Street entrances, and whether each has a lift. Minutes from street to platform. */
 export const ENTRANCES = {"WHTM":[{"id":"WHTM_A","n":"Entrance A","lat":12.99504,"lng":77.75784,"lift":true},{"id":"WHTM_B","n":"Entrance B","lat":12.99593,"lng":77.75808,"lift":false}],"KDGD":[{"id":"KDGD_A","n":"Entrance A","lat":12.9858,"lng":77.74714,"lift":true},{"id":"KDGD_B","n":"Entrance B","lat":12.98546,"lng":77.74702,"lift":true}],"KGWA":[{"id":"KGWA_E","n":"Entrance","lat":12.97585,"lng":77.57121,"lift":true},{"id":"KGWA_A","n":"Entrance A","lat":12.97573,"lng":77.5712,"lift":true},{"id":"KGWA_B","n":"Entrance B","lat":12.97419,"lng":77.57304,"lift":true},{"id":"KGWA_C","n":"Entrance C","lat":12.97463,"lng":77.57291,"lift":true},{"id":"KGWA_D","n":"Entrance D","lat":12.9761,"lng":77.57315,"lift":false}]};
 export const STREET_TO_PLATFORM_MIN = {"WHTM":1,"KDGD":1,"KGWA":2};

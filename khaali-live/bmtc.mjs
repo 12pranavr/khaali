@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { seatOdds } from './journey.mjs';
+import { busFareFor } from './buses.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 let DATA = null;
@@ -117,9 +118,10 @@ export function stopsNear(lat, lng, within = 0.6) {
   return out.sort((a, b) => a.km - b.km);
 }
 
-/** Fare, BMTC ordinary: a stage system, but ~₹1.2 a km with a ₹6 floor is
-    what people pay in practice. */
-export const fareFor = k => Math.max(6, Math.round(k * 1.2 / 5) * 5);
+/** Fare, BMTC ordinary: a stage system, priced on the road distance rather
+    than the line between the stops. The table lives in buses.mjs so the two
+    places khaali prices a bus cannot drift apart. */
+export const fareFor = k => busFareFor(k);
 
 /**
  * Direct buses from near one point to near another, leaving after a minute.

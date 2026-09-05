@@ -24,3 +24,35 @@ export const BUSES = [{"id":"KBS-1K","op":"BMTC","from":"Hope Farm","to":"Kempeg
     carry for these routes. So the map draws the two ends and says it is a bus. */
 export const BUS_FARE_PER_KM = 1.2;
 export const BUS_MIN_FARE = 6;
+
+/**
+ * What the ride actually costs, in rupees.
+ *
+ * This used to be 1.2 rupees a straight-line kilometre with a six-rupee floor,
+ * and it was wrong twice over. A bus does not fly: the road between two stops
+ * is about a third longer than the line between them, so the distance was
+ * understated before the rate was even applied. And BMTC does not charge by
+ * the kilometre at all - it charges by stage, and the stages climb far faster
+ * than 1.2 a kilometre. Hebbal to Majestic came out at ten rupees. Nobody has
+ * ridden that bus for ten rupees in a long time.
+ *
+ * The numbers below are the published stage fares rounded to what a passenger
+ * actually hands over, not a formula pretending to be one. They remain an
+ * estimate - khaali does not have BMTC's fare table - and the About page says
+ * so along with everything else khaali invents.
+ */
+export const ROAD_FACTOR = 1.35;          // straight line -> road, Bengaluru
+
+/** BMTC ordinary, by stage. Each entry is [up to N road km, rupees]. */
+export const BUS_STAGES = [
+  [2, 6], [4, 11], [6, 16], [9, 21], [12, 26], [16, 31], [22, 36], [25, 41],
+];
+
+/** Beyond the city stages it is an intercity coach, and priced like one. */
+export const COACH_PER_KM = 1.6;
+
+export function busFareFor(straightKm) {
+  const road = Math.max(0, straightKm) * ROAD_FACTOR;
+  for (const [upTo, rupees] of BUS_STAGES) if (road <= upTo) return rupees;
+  return Math.max(41, Math.round(road * COACH_PER_KM / 5) * 5);
+}
