@@ -350,6 +350,12 @@ const fmtDur = (m) => {
  * simulated demand model and says so. Road traffic was not evaluated on this
  * path, so no sentence claims it.
  */
+/* What each mode's load percentage is actually a percentage OF. Only figures
+   sharing a basis may be numerically compared; there are deliberately no
+   cross-basis pairs today - adding one requires defining the common measure. */
+const CROWD_BASIS = { train: 'berth-inventory', bus: 'onboard-load', metro: 'station-entries' };
+const COMPARABLE_PAIRS = new Set();   // 'basisA|basisB', both directions, when ever defined
+
 export function optionComparisonOf(chain, alt, { selectedChainId = null,
                                                  alternativeChainId = null } = {}) {
   if (!chain || !alt || !alt.legs) return null;
@@ -405,8 +411,20 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     return L.length ? L.reduce((p, l) => l.cap.occupancy > p.cap.occupancy ? l : p) : null;
   };
   const selW = worstOcc(chain), altW = worstOcc(alt);
+  /* Two load percentages are only a comparison when they measure the same
+     thing. A train's number is booked berth inventory, a bus's is projected
+     onboard load, the metro's is hourly ENTRIES at a station - a percentage of
+     that station's own busiest hour, which says nothing about who is inside a
+     carriage. "38% vs 81%" across those bases is arithmetic on apples and
+     stations. When the bases differ, the evidence is described on each side
+     separately and no "less crowded" verdict is issued. */
+  const basisOf = l => CROWD_BASIS[l.mode] || l.mode;
+  const crowdSideOf = l => l ? { mode: l.mode, basis: basisOf(l),
+    occupancy: l.cap.occupancy, quality: l.cap.quality || 'simulated' } : null;
+  const crowdingComparable = !!(selW && altW && (basisOf(selW) === basisOf(altW)
+    || COMPARABLE_PAIRS.has(basisOf(selW) + '|' + basisOf(altW))));
   let crowdingDifference = null;
-  if (selW && altW) {
+  if (crowdingComparable) {
     const d = altW.cap.occupancy - selW.cap.occupancy;   // positive: this one is calmer
     if (Math.abs(d) >= 0.08) {
       crowdingDifference = Math.round(d * 100);
@@ -415,6 +433,12 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
       else differences.push('more crowded: ' + a + '% at its busiest against ' + b + '%');
     }
   }
+  const crowdingComparison = (selW || altW) ? {
+    selected: crowdSideOf(selW), alternative: crowdSideOf(altW),
+    comparable: crowdingComparable,
+    note: crowdingComparable ? null
+      : 'These figures measure different things and are not compared.',
+  } : null;
   if (!differences.length) return null;              // nothing established, nothing said
 
   // ONE sentence on the card: the comparison named once, what was won, and
@@ -465,14 +489,22 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     predicted: 'from BMRCL’s hourly station entries',
     simulated: 'khaali’s simulated demand model',
   };
-  const LOAD_WORD = { train: 'Train occupancy', metro: 'Metro load', bus: 'Predicted bus load' };
+  const LOAD_WORD = { train: 'Train occupancy', metro: 'Metro station crowding', bus: 'Predicted bus load' };
+  /* The sentence must say what its percentage is a percentage OF. The metro
+     figure is hourly ENTRIES at a station against that station's own peak - it
+     was reading "at the busiest point of your ride", which is onboard language
+     for a number that has never seen the inside of a carriage. */
   const demandEvidence = worst ? {
-    mode: worst.mode,
+    mode: worst.mode, basis: CROWD_BASIS[worst.mode] || worst.mode,
     occupancy: worst.cap.occupancy, quality: worst.cap.quality || 'simulated',
     says: (LOAD_WORD[worst.mode] || 'Load') + ': '
       + Math.round(worst.cap.occupancy * 100)
-      + '% at the busiest point of your ride — '
-      + (SRC[worst.cap.quality] || 'khaali’s model') + '.',
+      + (worst.mode === 'metro'
+        ? '% of that station’s busiest hour — '
+          + (SRC[worst.cap.quality] || 'khaali’s model')
+          + '. Onboard crowding is unknown.'
+        : '% at the busiest point of your ride — '
+          + (SRC[worst.cap.quality] || 'khaali’s model') + '.'),
   } : null;
 
   // the disclosure owns exactly what this journey leaves unknown, no more
@@ -506,7 +538,7 @@ export function optionComparisonOf(chain, alt, { selectedChainId = null,
     summaryReason,
     differences,
     timeDifferenceMinutes, fareDifference, transferDifference,
-    crowdingDifference,
+    crowdingDifference, crowdingComparable, crowdingComparison,
     demandEvidence,
     trafficEvidence: onRoad ? 'not evaluated' : 'no road legs',
     disclosure,

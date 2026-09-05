@@ -5928,6 +5928,63 @@ t('crowding is compared when both sides carry a load, as two percentages', () =>
   assert.strictEqual(near.crowdingDifference, null, 'three points is not a claim');
 });
 
+const metroChain = (dep, arr, level, fare = 30) => ({
+  kind: 'metro', dep, arr, fare, changes: 0,
+  totalMin: arr - dep, arrText: 'x',
+  legs: [{ mode: 'metro', id: 'PURPLE', name: 'Purple Line', from: 'KGWA', to: 'WFD',
+    depMin: dep, arrMin: arr, min: arr - dep, source: 'timetable',
+    cap: { occupancy: level, quality: 'predicted' } }],
+});
+const busOnlyChain = (name, dep, arr, occ, fare = 20) => ({
+  kind: 'bus', dep, arr, fare, changes: 0,
+  totalMin: arr - dep, arrText: 'x',
+  legs: [{ mode: 'bus', id: name, name, from: 'Hebbala', to: 'Hope Farm',
+    depMin: dep, arrMin: arr, min: arr - dep, source: 'timetable',
+    cap: { occupancy: occ, quality: 'simulated' } }],
+});
+
+t('berths and station entries are not the same percentage, so no verdict', () => {
+  // a train's 93% is booked berth inventory; the metro's 40% is entries at a
+  // station against its own peak hour - arithmetic across them is not crowding
+  const oc = CARD.optionComparisonOf(trainChain('A EXP', 425, 565, 0.93),
+    metroChain(450, 580, 0.40), {});
+  assert.ok(oc, 'time and fare still differ, the comparison itself survives');
+  assert.strictEqual(oc.crowdingDifference, null, 'a cross-basis verdict was issued');
+  assert.strictEqual(oc.crowdingComparable, false);
+  assert.ok(!/crowded/.test(oc.summaryReason), oc.summaryReason);
+  assert.ok(!oc.differences.some(d => /crowded/.test(d)), 'a crowding bullet slipped through');
+  assert.ok(/different things/.test(oc.crowdingComparison.note), 'the refusal goes unexplained');
+});
+
+t('the evidence still appears on both sides, described, not compared', () => {
+  const oc = CARD.optionComparisonOf(trainChain('A EXP', 425, 565, 0.93),
+    metroChain(450, 580, 0.40), {});
+  assert.strictEqual(oc.crowdingComparison.selected.basis, 'berth-inventory');
+  assert.strictEqual(oc.crowdingComparison.alternative.basis, 'station-entries');
+  assert.strictEqual(oc.crowdingComparison.selected.occupancy, 0.93);
+  assert.strictEqual(oc.crowdingComparison.alternative.quality, 'predicted');
+});
+
+t('two buses share a basis, and their loads are still compared', () => {
+  const oc = CARD.optionComparisonOf(busOnlyChain('506-A', 600, 660, 0.38),
+    busOnlyChain('289-GS', 610, 680, 0.81), {});
+  assert.strictEqual(oc.crowdingDifference, 43);
+  assert.strictEqual(oc.crowdingComparable, true);
+  assert.ok(/less crowded \(38% at its busiest against 81%\)/.test(oc.summaryReason),
+    oc.summaryReason);
+});
+
+t('a metro figure names the station, not the inside of a carriage', () => {
+  const oc = CARD.optionComparisonOf(metroChain(450, 560, 0.62),
+    trainChain('B PASS', 450, 580, 0.82), {});
+  const says = oc.demandEvidence.says;
+  assert.ok(/^Metro station crowding: 62%/.test(says), says);
+  assert.ok(/busiest hour/.test(says), says);
+  assert.ok(/Onboard crowding is unknown\./.test(says), says);
+  assert.ok(!/at the busiest point of your ride/.test(says),
+    'onboard language on a station-entries number');
+});
+
 t('the same name twice gets its departure time, both ways home included', () => {
   const oc = CARD.optionComparisonOf(trainChain('MEMU', 600, 660, 0.5),
     trainChain('MEMU', 630, 690, 0.5), {});
