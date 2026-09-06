@@ -1134,6 +1134,20 @@ export function journeysAnywhere(req) {
   const fromOpts = { ...mileOpts, maxHireKm: capOf(Fs) };
   const toOpts = { ...mileOpts, maxHireKm: capOf(Ts) };
   const out = []; const tried = { from: [], to: [] }; let anyMile = false;
+  /* An access leg is still a leg she has to ride.
+     "Train only" ruled out the bus, and khaali put her on one anyway to reach
+     the station - the restriction held for the middle of the journey and
+     quietly lapsed for the miles at each end, which is exactly where a mode
+     she refused would surprise her. A walk is always allowed; it is not one
+     of the things she can rule out. */
+  const rideable = m => {
+    if (!m) return false;
+    if (m.walk) return true;
+    if (m.bus) return wants('bus');
+    if (m.ride) return hireKinds.includes(m.ride.mode);
+    return true;
+  };
+
 
   // Sometimes the whole journey IS one bus. Every journey used to be routed
   // through a railway or a metro station and then closed at each end, so
@@ -1172,7 +1186,7 @@ export function journeysAnywhere(req) {
   }
 
   Fs.forEach(F => {
-    const firsts = F ? milesFor(fromPt, F, req.after || 0, F.km, fromOpts) : [null];
+    const firsts = F ? milesFor(fromPt, F, req.after || 0, F.km, fromOpts).filter(rideable) : [null];
     if (F) tried.from.push({ ...F, reached: !!firsts.length, by: byOf(firsts[0]) });
     if (F && !firsts.length) return;
     firsts.forEach(first => {
@@ -1196,7 +1210,7 @@ export function journeysAnywhere(req) {
         if (first) { legs.unshift(...first.legs); dep = req.after || 0; fare += first.fare; }
         // she is not on the pavement the minute the train stops
         const ready = readyAfter(c.legs, c.arr);
-        const lasts = T ? milesFor({ name: T.name, lat: T.lat, lng: T.lng }, toPt, ready, T.km, toOpts) : [null];
+        const lasts = T ? milesFor({ name: T.name, lat: T.lat, lng: T.lng }, toPt, ready, T.km, toOpts).filter(rideable) : [null];
         if (T && !lasts.length) return;
         lasts.forEach(last => {
           const legs2 = legs.slice();
@@ -1235,7 +1249,15 @@ export function journeysAnywhere(req) {
   Ts.forEach(T => { if (T) { const m = mile({ name: T.name, lat: T.lat, lng: T.lng }, toPt, req.after || 0, T.km, toOpts); tried.to.push({ ...T, reached: !!m, by: byOf(m) }); } });
   // with something hired on the table, "no bus runs there" is no longer the
   // reason nothing was found - so say which wall was actually hit
-  if (!out.length && (Fs[0] || Ts[0])) return { ok: false, reason: hireKinds.length ? 'no-way' : 'no-bus', tried };
+  /* Why there is nothing, said accurately. When she has narrowed the modes,
+     "no direct BMTC bus" is the wrong sentence twice over: there may well be
+     one, and she is the reason it was not used. Name the restriction instead,
+     so the fix she needs - turn a mode back on - is the thing she is told. */
+  const chose = (req.modes || MODES).filter(m => MODES.includes(m));
+  const narrowed = chose.length > 0 && chose.length < MODES.length;
+  if (!out.length && (Fs[0] || Ts[0]))
+    return { ok: false, tried, modesTried: chose,
+      reason: narrowed ? 'modes-only' : (hireKinds.length ? 'no-way' : 'no-bus') };
   // the same shape through the same stations at the same times is one choice
   const seen = new Set();
   const uniq = out.filter(c => { const k = c.kind + '|' + c.dep + '|' + c.arr; if (seen.has(k)) return false; seen.add(k); return true; })

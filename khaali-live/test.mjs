@@ -527,7 +527,15 @@ t('measured end to end: a browsing person clears, a silent burst is challenged',
 
 
 console.log('\npersistence: memory decides, the journal remembers');
-const jDate = '2026-09-25';
+/* Far enough out that the seeded occupancy still leaves a free berth to
+   hold. Pinned to a literal date, this fixture aged: khaali fills a train up
+   as its departure approaches, so once the real clock reached September the
+   3A cabin on 16022 was 168 taken, 24 partial, nothing free - and two tests
+   started failing on a product that was working exactly as designed. */
+const jDate = (() => {
+  const d = new Date(Date.now() + 120 * 864e5);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+})();
 t('a confirmed booking is recorded with its exact leg masks', () => {
   const recs = [];
   S.onRecord(r => recs.push(r));
@@ -849,7 +857,9 @@ t('chosen berths are capped at a share of the coach', () => {
 t('charting seats the pool on real berths, journals it, and a restart keeps it', () => {
   S.reset();
   const recs = []; S.onRecord(r => recs.push(r));
-  const d = '2026-10-01';
+  // far out, so the train is still empty enough to seat a family together -
+  // this was a literal date, and it aged into a full train and a split cabin
+  const d = jDate;
   const h1 = S.hold({ train: '16021', date: d, cls: 'SL', from: 5, to: 13, pax: 2, who: 'fam', mode: 'any' });
   const h2 = S.hold({ train: '16021', date: d, cls: 'SL', from: 0, to: 5, pax: 1, who: 'solo', mode: 'any' });
   assert.ok(h1.ok && h2.ok);
@@ -7139,6 +7149,31 @@ t('a journey across the city can be one bus, with no station in it', async () =>
   assert.ok(c.fare > 0 && c.fare < 60);
   assert.ok(c.totalMin > 0 && c.totalMin < 180);
   assert.ok(c.seat && c.seat.word, 'it still answers the seat question');
+});
+
+t('a mode she ruled out does not come back as the way to reach the station', () => {
+  /* The restriction held for the middle of the journey and lapsed for the
+     miles at each end: asked for trains only from a place with no walkable
+     station, khaali put her on a BMTC bus to reach one - and echoed
+     modes:['train'] back while doing it. */
+  const HEBBAL = { kind: 'place', lat: 13.04127, lng: 77.58942, name: 'Hebbala' };
+  const r = JY.journeysAnywhere({ from: HEBBAL, to: { kind: 'metro', id: 'KGWA' },
+    after: 720, modes: ['train'] });
+  (r.chains || []).forEach(c => {
+    const rode = c.legs.filter(l => l.mode !== 'walk').map(l => l.mode);
+    rode.forEach(m => assert.strictEqual(m, 'train',
+      'she ruled out ' + m + ' and was given one anyway: ' + rode.join('+')));
+  });
+});
+
+t('narrowing the modes to nothing says so, and does not blame the buses', () => {
+  const HEBBAL = { kind: 'place', lat: 13.04127, lng: 77.58942, name: 'Hebbala' };
+  const r = JY.journeysAnywhere({ from: HEBBAL, to: { kind: 'metro', id: 'KGWA' },
+    after: 720, modes: ['train'] });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.reason, 'modes-only',
+    'the reason named the buses when she was the one who turned them off');
+  assert.deepStrictEqual(r.modesTried, ['train']);
 });
 
 t('a direct bus is never offered to someone who ruled buses out', () => {

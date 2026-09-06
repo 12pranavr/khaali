@@ -7224,6 +7224,14 @@ class Component extends DCLogic {
     const on=this.planModes().filter(m=>this.HIRE.includes(m));
     return on.length===2?'both':(on[0]||null);
   }
+  /* A filter tap corrects an answer that is already on screen. With nothing
+     searched yet there is nothing to correct, so this stays quiet until she
+     has asked once. Coalesced, because taps come in threes. */
+  planRefilter(){
+    if(!this.state.pRes)return;
+    clearTimeout(this._refilter);
+    this._refilter=setTimeout(()=>this.planSearch(),120);
+  }
   async planSearch(){
     const S=this.state;
     const F=this.planPlace(S.pFromK||'rail',S.pFromId||'BWT');
@@ -8739,13 +8747,13 @@ class Component extends DCLogic {
           const set=new Set(this.state.pModes||NET);
           // read at tap time, not at render time
           if(ks.some(x=>set.has(x)))ks.forEach(x=>set.delete(x));else ks.forEach(x=>set.add(x));
-          this.setState({pModes:[...set]});},
+          this.setState({pModes:[...set]});this.planRefilter();},
           style:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
             font:'700 13px/1 Archivo,sans-serif',
             border:'1px solid '+(on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-dedcd6)'),
             background:on?(hire?'#0f8a7e':'var(--k-d8385a)'):'var(--k-fff)',
             color:on?'#fff':'var(--k-fg-40434a)'}};}),
-      pAllModes:()=>this.setState({pModes:[...NET]}),
+      pAllModes:()=>{this.setState({pModes:[...NET]});this.planRefilter();},
       pAllStyle:{cursor:'pointer',padding:'9px 15px',borderRadius:999,
         font:'700 13px/1 Archivo,sans-serif',
         border:'1px solid '+(allNet?'var(--k-14161a)':'var(--k-dedcd6)'),
@@ -8819,7 +8827,7 @@ class Component extends DCLogic {
       // how to rank: the passenger's own weighting of time, money and comfort
       pProfileChips:[['balanced','Balanced'],['fastest','Fastest'],['cheapest','Cheapest'],['comfortable','Comfortable'],['network','Network-smart']].map(([k,l])=>{
         const on=(S.pProfile||'balanced')===k;
-        return {l,onClick:()=>this.setState({pProfile:k}),
+        return {l,onClick:()=>{this.setState({pProfile:k});this.planRefilter();},
           style:{cursor:'pointer',padding:'8px 13px',borderRadius:999,
             font:'700 12.5px/1 Archivo,sans-serif',
             border:'1px solid '+(on?'var(--k-14161a)':'var(--k-dedcd6)'),

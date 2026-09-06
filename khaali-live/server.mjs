@@ -2351,6 +2351,10 @@ async function api(req, res, url) {
         ? (hired
           ? 'That place is more than ' + journey.HIRE_REACH_MAX_KM + ' km from any station or stop khaali knows, which is further than it will send a car.'
           : 'That place is more than ' + journey.REACH_MAX_KM + ' km from any station or stop khaali knows.')
+        : r.reason === 'modes-only'
+          ? 'khaali found no way there using only '
+            + (r.modesTried || []).join(' or ')
+            + '. Turn another mode on and it will look again.'
         : r.reason === 'no-bus'
           ? 'khaali found no direct BMTC bus between ' + near + ' and that place. It will not guess at an auto — but it can call a car or a bike if you turn one on.'
           : r.reason === 'no-way'
